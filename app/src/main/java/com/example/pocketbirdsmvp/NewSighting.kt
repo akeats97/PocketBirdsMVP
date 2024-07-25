@@ -21,7 +21,7 @@ import com.example.pocketbirdsmvp.ui.theme.PocketBirdsMVPTheme
 import com.example.pocketbirdsmvp.ui.theme.loraFontFamily
 
 @Composable
-fun NewSighting(){
+fun NewSighting(viewModel: BirdViewModel){
     var dateText by remember { mutableStateOf("") }
     var birdNameText by remember { mutableStateOf("") }
 
@@ -50,7 +50,7 @@ fun NewSighting(){
 
         Button(
             onClick = {
-                submitSighting(birdNameText, dateText)
+                viewModel.submitSighting(birdNameText, dateText)
                 birdNameText = ""
                 dateText = ""
             },
@@ -63,8 +63,4 @@ fun NewSighting(){
         }
 
     }
-}
-
-fun submitSighting(birdName: String, date: String){
-    //save this data somewhere
 }

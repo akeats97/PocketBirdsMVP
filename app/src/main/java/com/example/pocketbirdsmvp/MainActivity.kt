@@ -4,16 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -23,14 +20,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -38,19 +32,25 @@ import androidx.navigation.compose.rememberNavController
 import com.example.pocketbirdsmvp.ui.theme.PocketBirdsMVPTheme
 import com.example.pocketbirdsmvp.ui.theme.loraFontFamily
 
+
 class MainActivity : ComponentActivity() {
+    //create the view model that we will use to access the data. To do this we use a Factory and a Repository for reasons I'm not quite sure yet
+    private val viewModel: BirdViewModel by viewModels {
+        BirdViewModelFactory(BirdRepository(applicationContext))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             PocketBirdsMVPTheme {
-                BirdApp()
+                BirdApp(viewModel = viewModel)
             }
         }
     }
 }
 
-enum class BirdScreens(){
+enum class BirdScreens  {
     FieldJournal,
     NewSighting,
     BirdDex
@@ -58,7 +58,7 @@ enum class BirdScreens(){
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BirdApp(modifier: Modifier = Modifier, navController: NavHostController = rememberNavController()){
+fun BirdApp(navController: NavHostController = rememberNavController(), viewModel: BirdViewModel){
     Scaffold(
         topBar = {
                  TopAppBar(
@@ -114,10 +114,10 @@ fun BirdApp(modifier: Modifier = Modifier, navController: NavHostController = re
                 .padding(innerPadding)
         ){
             composable(route = BirdScreens.FieldJournal.name){
-                FieldJournal()
+                FieldJournal(navController, viewModel)
             }
             composable(route = BirdScreens.NewSighting.name){
-                NewSighting() //these need to be changed from just going to the next screen, to actually displaying what we want them to display
+                NewSighting(viewModel)
             }
             composable(route = BirdScreens.BirdDex.name){
                 BirdDex()
@@ -132,6 +132,5 @@ fun BirdApp(modifier: Modifier = Modifier, navController: NavHostController = re
 @Composable
 fun GreetingPreview() {
     PocketBirdsMVPTheme {
-        FieldJournal()
     }
 }
