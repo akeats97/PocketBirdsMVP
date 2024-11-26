@@ -54,6 +54,7 @@ dependencies {
 
     implementation("androidx.activity:activity-ktx:1.9.1")
     implementation(libs.androidx.room.common)
+    implementation(libs.androidx.fragment.ktx)
 
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
@@ -81,4 +82,7 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    implementation("androidx.compose.material:material-icons-core:1.5.4")
+    implementation("androidx.compose.material:material-icons-extended:1.5.4")
 }
