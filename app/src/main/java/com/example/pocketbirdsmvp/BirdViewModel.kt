@@ -13,7 +13,7 @@ class BirdViewModel(private val repository: BirdRepository) : ViewModel() {
     val allSightings: StateFlow<List<BirdSighting>> = repository.allSightings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun submitSighting(birdName: String, date: String, location: String) {
+    fun submitSighting(birdName: String, date: Long, location: String) {
         viewModelScope.launch {
             repository.insertBirdSighting(birdName, date, location)
         }

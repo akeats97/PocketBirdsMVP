@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [BirdSighting::class], version = 2)
+@Database(entities = [BirdSighting::class], version = 2) //increment this version any time you make an update to the database schema! or if the data is not important, wipe the data on the phone using ADB from command prompt
 abstract class BirdDatabase : RoomDatabase() {
     abstract fun birdSightingDao(): BirdSightingDao
 

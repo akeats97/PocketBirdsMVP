@@ -12,7 +12,7 @@ class BirdRepository(context: Context) {
     private val birdSightingDao: BirdSightingDao = BirdDatabase.getDatabase(context).birdSightingDao()
     val allSightings: Flow<List<BirdSighting>> = birdSightingDao.getAllSightings()
 
-    suspend fun insertBirdSighting(birdName: String, date: String, location: String) {
+    suspend fun insertBirdSighting(birdName: String, date: Long, location: String) {
         val sighting = BirdSighting(birdName = birdName, date = date, location = location)
         birdSightingDao.insert(sighting)
     }

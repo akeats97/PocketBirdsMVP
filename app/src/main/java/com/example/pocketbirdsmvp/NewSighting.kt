@@ -221,7 +221,7 @@ fun NewSighting(viewModel: BirdViewModel) {
 
                         viewModel.submitSighting(
                             birdName = birdName,
-                            date = formattedDate,
+                            date = selectedDate.time,
                             location = location // Include location in submission
                         )
 

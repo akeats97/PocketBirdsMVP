@@ -25,11 +25,16 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import java.text.SimpleDateFormat
+import java.util.Date
 
 @Composable
 fun FieldJournal(navController: NavHostController = rememberNavController(), viewModel: BirdViewModel){
     //collect the sightings
     val sightings by viewModel.allSightings.collectAsState()
+    //sort sightings in descending order
+    val sortedSightings = sightings.sortedByDescending { it.date }
+
 
     Column(
         modifier = Modifier
@@ -76,7 +81,10 @@ fun SightingItem(sighting: BirdSighting) {
         ) {
             Column {
                 Text(text = sighting.birdName, style = MaterialTheme.typography.titleMedium)
-                Text(text = sighting.date, style = MaterialTheme.typography.bodyMedium)
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd") // Or any format you prefer
+                val formattedDate = dateFormat.format(Date(sighting.date))
+                Text(text = formattedDate, style = MaterialTheme.typography.bodyMedium)
+                Text(text = "Location: ${sighting.location}", style = MaterialTheme.typography.bodyMedium)
             }
             // You can add an icon or more details here if needed
         }
