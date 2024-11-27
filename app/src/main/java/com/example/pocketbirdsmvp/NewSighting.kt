@@ -19,6 +19,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import android.content.Context
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,6 +27,7 @@ fun NewSighting(viewModel: BirdViewModel) {
     var birdName by remember { mutableStateOf("") }
     var isExpanded by remember { mutableStateOf(false) }
     var selectedDate by remember { mutableStateOf(Date()) }
+    var location by remember { mutableStateOf("") } // New state for location
     var isNameError by remember { mutableStateOf(false) }
     var showSuccessSnackbar by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -33,19 +35,7 @@ fun NewSighting(viewModel: BirdViewModel) {
     val keyboardController = LocalSoftwareKeyboardController.current
 
     // List of North American birds (you would replace this with your full 2000-bird list)
-    val northAmericanBirds = listOf(
-        "American Robin",
-        "Blue Jay",
-        "Northern Cardinal",
-        "Bald Eagle",
-        "American Crow",
-        "Red-tailed Hawk",
-        "American Goldfinch",
-        "Downy Woodpecker",
-        "Mallard Duck",
-        "Canada Goose"
-        // ... your full list of 2000 birds
-    )
+    val northAmericanBirds = loadBirdNames(context)
 
     // Filtered list of birds based on input with improved matching
     val filteredBirds = remember(birdName) {
@@ -70,10 +60,7 @@ fun NewSighting(viewModel: BirdViewModel) {
         }
     }
 
-    // Date Formatter
     val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-
-    // Date Picker Setup
     val calendar = Calendar.getInstance()
     val datePickerDialog = DatePickerDialog(
         context,
@@ -174,7 +161,7 @@ fun NewSighting(viewModel: BirdViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Date Input with TextField styling
+            // Date Input
             TextField(
                 value = dateFormatter.format(selectedDate),
                 onValueChange = { /* Not editable directly */ },
@@ -205,35 +192,50 @@ fun NewSighting(viewModel: BirdViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Submit Button with Validation
+            // New Location Input
+            TextField(
+                value = location,
+                onValueChange = { location = it },
+                label = { Text("Location (Optional)", color = Color.White) },
+                colors = TextFieldDefaults.colors(
+                    cursorColor = Color.White,
+                    focusedContainerColor = Color.DarkGray,
+                    unfocusedContainerColor = Color.DarkGray,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedLabelColor = Color.White,
+                    unfocusedLabelColor = Color.Gray
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Submit Button
             Button(
                 onClick = {
-                    // Validate before submitting
                     if (birdName.isNotBlank()) {
-                        // Hide keyboard
                         keyboardController?.hide()
 
-                        // Convert date to string format your repository expects
                         val formattedDate = dateFormatter.format(selectedDate)
 
                         viewModel.submitSighting(
                             birdName = birdName,
-                            date = formattedDate
+                            date = formattedDate,
+                            location = location // Include location in submission
                         )
 
-                        // Show success snackbar
                         showSuccessSnackbar = true
-
-                        // Reset form
                         birdName = ""
                         selectedDate = Date()
+                        location = "" // Reset location field
                     } else {
                         isNameError = true
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFD700), // Golden yellow color
-                    contentColor = Color.Black, // Black text
+                    containerColor = Color(0xFFFFD700),
+                    contentColor = Color.Black,
                     disabledContainerColor = Color.Gray,
                     disabledContentColor = Color.Black
                 ),
@@ -244,7 +246,6 @@ fun NewSighting(viewModel: BirdViewModel) {
             }
         }
 
-        // Launch the Snackbar when showSuccessSnackbar is true
         LaunchedEffect(showSuccessSnackbar) {
             if (showSuccessSnackbar) {
                 snackbarHostState.showSnackbar(
@@ -255,4 +256,9 @@ fun NewSighting(viewModel: BirdViewModel) {
             }
         }
     }
+}
+
+fun loadBirdNames(context: Context): List<String> {
+    val inputStream = context.assets.open("birdnames.csv")
+    return inputStream.bufferedReader().use { it.readLines() }
 }
