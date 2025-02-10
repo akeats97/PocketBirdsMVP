@@ -13,4 +13,11 @@ interface BirdSightingDao {
     @Query("SELECT * FROM bird_sightings ORDER BY date DESC")
     fun getAllSightings(): Flow<List<BirdSighting>>
 
+    @Query("""
+     SELECT bird_name, COUNT(*) as sighting_count 
+     FROM bird_sightings 
+     GROUP BY bird_name
+    """)
+    fun getBirdSightingCounts(): Flow<List<BirdSightingCount>>
+
 }

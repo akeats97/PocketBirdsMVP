@@ -1,14 +1,11 @@
 package com.example.pocketbirdsmvp
 /*
-
 NOTES ON RUNNING - If getting DB error or migration error and data on device does not matter then do these steps:
 1. While app is installed on device and device is plugged into computer open command prompt
 2. cd C:\Users\akeats97\AppData\Local\Android\Sdk\platform-tools
 3. adb shell pm clear com.example.pocketbirdsmvp
 
 This will wipe all local memory of the last db and create a new one!
-
-
  */
 
 
@@ -133,7 +130,7 @@ fun BirdApp(navController: NavHostController = rememberNavController(), viewMode
                 NewSighting(viewModel)
             }
             composable(route = BirdScreens.BirdDex.name){
-                BirdDex()
+                BirdDex(viewModel)
             }
         }
 

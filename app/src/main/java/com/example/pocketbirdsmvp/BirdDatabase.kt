@@ -16,13 +16,29 @@ abstract class BirdDatabase : RoomDatabase() {
         private var INSTANCE: BirdDatabase? = null
 
         // Define the migration from version 1 to 2
+        /*
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                // Use the correct table name: bird_sightings
-                database.execSQL("ALTER TABLE bird_sightings ADD COLUMN location TEXT")
+                // Check if the column exists before adding it
+                val cursor = database.query("PRAGMA table_info(bird_sightings)")
+                var columnExists = false
+
+                while (cursor.moveToNext()) {
+                    val columnIndex = cursor.getColumnIndex("location")
+                    if (columnIndex >= 0) { // Ensure column index is valid
+                        columnExists = true
+                        break
+                    }
+                }
+                cursor.close()
+
+                // Only add the column if it doesn't exist
+                if (!columnExists) {
+                    database.execSQL("ALTER TABLE bird_sightings ADD COLUMN location TEXT DEFAULT 'undefined'")
+                }
             }
         }
-
+         */
         fun getDatabase(context: Context): BirdDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -30,7 +46,8 @@ abstract class BirdDatabase : RoomDatabase() {
                     BirdDatabase::class.java,
                     "bird_database"
                 )
-                    .addMigrations(MIGRATION_1_2)  // Add the migration to the builder
+                 //   .addMigrations(MIGRATION_1_2)  // Add the migration to the builder
+                    .fallbackToDestructiveMigration()  // Wipes the database if schema changes
                     .build()
                 INSTANCE = instance
                 instance
