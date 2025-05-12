@@ -9,8 +9,8 @@ import FriendSightingsProvider from './context/FriendSightingsContext';
 import { SightingsProvider } from './context/SightingsContext';
 
 export {
-    // Catch any errors thrown by the Layout component.
-    ErrorBoundary
+  // Catch any errors thrown by the Layout component.
+  ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
@@ -53,6 +53,12 @@ function RootLayoutNav() {
           <SafeAreaView style={{ flex: 1 }}>
             <Stack>
               <Stack.Screen 
+                name="index" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
                 name="(tabs)" 
                 options={{ 
                   headerShown: true,
@@ -73,6 +79,12 @@ function RootLayoutNav() {
                     fontWeight: '600',
                   },
                 }} 
+              />
+              <Stack.Screen
+                name="login"
+                options={{
+                  headerShown: false,
+                }}
               />
             </Stack>
           </SafeAreaView>
