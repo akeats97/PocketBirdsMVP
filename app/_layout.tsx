@@ -69,23 +69,6 @@ function RootLayoutNav() {
                   },
                 }} 
               />
-              <Stack.Screen 
-                name="modal" 
-                options={{ 
-                  presentation: 'modal',
-                  title: 'Pocket Birds v0.5',
-                  headerTitleStyle: {
-                    fontSize: 20,
-                    fontWeight: '600',
-                  },
-                }} 
-              />
-              <Stack.Screen
-                name="login"
-                options={{
-                  headerShown: false,
-                }}
-              />
             </Stack>
           </SafeAreaView>
         </FriendSightingsProvider>
