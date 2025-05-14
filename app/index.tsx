@@ -1,15 +1,85 @@
 import { Stack, useRouter } from 'expo-router';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { auth } from '../config/firebaseConfig';
+
+
 
 export default function Index() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   
-  const handleLogin = () => {
-    // Just navigate to main app without real auth for now
-    router.replace('/(tabs)');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      // Navigate to main app on success
+      router.replace('/(tabs)');
+    } catch (error) {
+      console.log('Login error:', error);
+      // For demo purposes, still let users through
+      Alert.alert(
+        'Authentication Failed', 
+        'Invalid email or password. For demo purposes, you will still be logged in.',
+        [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateAccount = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+    
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      console.log('User signed up:', userCredential.user);
+      /*
+      await createUserWithEmailAndPassword(auth, email, password);
+      Alert.alert(
+        'Success', 
+        'Account created successfully!', 
+        [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+      );*/
+    } catch (error: any) {
+      console.log('Signup error:', error);
+      
+      let errorMessage = 'Failed to create account';
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'This email is already in use';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak';
+      }
+      
+      Alert.alert(
+        'Account Creation Failed', 
+        `${errorMessage}.`
+      );
+
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -20,30 +90,42 @@ export default function Index() {
       <Text style={styles.subtitle}>Your pocket birding companion</Text>
       
       <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+      <TextInput
+        style={styles.input}
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        editable={!isLoading}
+      />
+   
+      <TextInput
+        style={styles.input}
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        editable={!isLoading}
+      />
       </View>
       
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+      <TouchableOpacity 
+        style={[styles.button, isLoading && { opacity: 0.7 }]} 
+        onPress={handleLogin}
+        disabled={isLoading}
+      >
+        <Text style={styles.buttonText}>{isLoading ? 'Processing...' : 'Login'}</Text>
       </TouchableOpacity>
       
-      <TouchableOpacity style={styles.createAccountContainer} onPress={handleLogin}>
-        <Text style={styles.createAccountText}>Create Account</Text>
+      <TouchableOpacity 
+        style={styles.createAccountContainer} 
+        onPress={handleCreateAccount}
+        disabled={isLoading}
+      >
+        <Text style={[styles.createAccountText, isLoading && { opacity: 0.7 }]}>
+          Create Account
+        </Text>
       </TouchableOpacity>
     </View>
   );

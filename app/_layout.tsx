@@ -8,6 +8,10 @@ import { SafeAreaView } from 'react-native';
 import FriendSightingsProvider from './context/FriendSightingsContext';
 import { SightingsProvider } from './context/SightingsContext';
 
+console.log('ROOT LAYOUT: Firebase imported'); //just for bug testing
+
+
+
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary
@@ -37,6 +41,12 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
+
+    // Add a useEffect to ensure Firebase is initialized
+    useEffect(() => {
+      console.log('Firebase Auth initialized');
+      // You can add any Firebase-specific initialization logic here
+    }, []);
 
   if (!loaded) {
     return null;
