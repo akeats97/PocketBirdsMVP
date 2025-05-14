@@ -11,6 +11,7 @@ export default function Index() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoginMode, setIsLoginMode] = useState(true);
   
   const handleLogin = async () => {
     if (!email || !password) {
@@ -53,13 +54,11 @@ export default function Index() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       console.log('User signed up:', userCredential.user);
-      /*
-      await createUserWithEmailAndPassword(auth, email, password);
       Alert.alert(
         'Success', 
-        'Account created successfully!', 
-        [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
-      );*/
+        'Account created successfully! You can now log in.', 
+        [{ text: 'OK', onPress: () => setIsLoginMode(true) }]
+      );
     } catch (error: any) {
       console.log('Signup error:', error);
       
@@ -80,6 +79,10 @@ export default function Index() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const toggleMode = () => {
+    setIsLoginMode(!isLoginMode);
   };
 
   return (
@@ -112,19 +115,21 @@ export default function Index() {
       
       <TouchableOpacity 
         style={[styles.button, isLoading && { opacity: 0.7 }]} 
-        onPress={handleLogin}
+        onPress={isLoginMode ? handleLogin : handleCreateAccount}
         disabled={isLoading}
       >
-        <Text style={styles.buttonText}>{isLoading ? 'Processing...' : 'Login'}</Text>
+        <Text style={styles.buttonText}>
+          {isLoading ? 'Processing...' : (isLoginMode ? 'Login' : 'Create Account')}
+        </Text>
       </TouchableOpacity>
       
       <TouchableOpacity 
         style={styles.createAccountContainer} 
-        onPress={handleCreateAccount}
+        onPress={toggleMode}
         disabled={isLoading}
       >
         <Text style={[styles.createAccountText, isLoading && { opacity: 0.7 }]}>
-          Create Account
+          {isLoginMode ? 'Create Account' : 'Back to Login'}
         </Text>
       </TouchableOpacity>
     </View>
