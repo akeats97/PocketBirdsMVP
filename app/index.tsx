@@ -29,11 +29,8 @@ export default function Index() {
       router.replace('/(tabs)');
     } catch (error) {
       console.log('Login error:', error);
-      // For demo purposes, still let users through
       Alert.alert(
-        'Authentication Failed', 
-        'Invalid email or password. For demo purposes, you will still be logged in.',
-        [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+        'nice try guy, go again'
       );
     } finally {
       setIsLoading(false);
@@ -42,29 +39,29 @@ export default function Index() {
 
   const handleCreateAccount = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter email and password');
+      Alert.alert('Error', 'i think you forgot something?');
       return;
     }
     
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert('Error', 'way too short! people are going to steal your birds! make it at least 6 long');
       return;
     }
 
     if (!isLoginMode && !username) {
-      Alert.alert('Error', 'Please enter a username');
+      Alert.alert('Error', 'but what should we call you?');
       return;
     }
     
     // Basic username validation
     if (!isLoginMode) {
       if (username.length < 3) {
-        Alert.alert('Error', 'Username must be at least 3 characters long');
+        Alert.alert('Error', 'scrabble house rules, no 2 letter words');
         return;
       }
       
       if (username.includes(' ')) {
-        Alert.alert('Error', 'Username cannot contain spaces');
+        Alert.alert('Error', 'we love space, but not in your username');
         return;
       }
     }
@@ -77,7 +74,7 @@ export default function Index() {
         const usernameDoc = await getDoc(doc(db, "usernames", username));
         if (usernameDoc.exists()) {
           setIsLoading(false);
-          Alert.alert('Error', 'This username is already taken. Please choose another one.');
+          Alert.alert('Error', 'turns out you\'re not very original ... try a new name');
           return;
         }
       }
@@ -103,7 +100,7 @@ export default function Index() {
           console.log('Username saved successfully');
           Alert.alert(
             'Success', 
-            'Account created successfully! You can now log in.', 
+            'account created successfully! it\'s time to spot some birbs!', 
             [{ text: 'OK', onPress: () => setIsLoginMode(true) }]
           );
         } catch (firestoreError) {
@@ -117,7 +114,7 @@ export default function Index() {
       } else {
         Alert.alert(
           'Success', 
-          'Account created successfully! You can now log in.', 
+          'account created successfully! it\'s time to spot some birbs!', 
           [{ text: 'OK', onPress: () => setIsLoginMode(true) }]
         );
       }
@@ -128,11 +125,11 @@ export default function Index() {
       
       let errorMessage = 'Failed to create account';
       if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email is already in use';
+        errorMessage = 'hmmm, do you have a twin with the same email? because that email already exists';
       } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address';
+        errorMessage = 'are you sure that\'s a real email?';
       } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak';
+        errorMessage = 'your password game is weak, make it 6+ long please';
       }
       
       Alert.alert(
@@ -154,7 +151,7 @@ export default function Index() {
       <Stack.Screen options={{ headerShown: false }} />
       
       <Text style={styles.title}>PocketBirds</Text>
-      <Text style={styles.subtitle}>Your pocket birding companion</Text>
+      <Text style={styles.subtitle}>please don't put birds in your pockets</Text>
       
       <View style={styles.inputContainer}>
       {!isLoginMode && (
