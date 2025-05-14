@@ -1,8 +1,9 @@
 import { Stack, useRouter } from 'expo-router';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { auth } from '../config/firebaseConfig';
+import { auth, db } from '../config/firebaseConfig';
 
 
 
@@ -10,6 +11,7 @@ export default function Index() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
   
@@ -48,17 +50,79 @@ export default function Index() {
       Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
+
+    if (!isLoginMode && !username) {
+      Alert.alert('Error', 'Please enter a username');
+      return;
+    }
+    
+    // Basic username validation
+    if (!isLoginMode) {
+      if (username.length < 3) {
+        Alert.alert('Error', 'Username must be at least 3 characters long');
+        return;
+      }
+      
+      if (username.includes(' ')) {
+        Alert.alert('Error', 'Username cannot contain spaces');
+        return;
+      }
+    }
     
     setIsLoading(true);
     
     try {
+      // Check if username is already taken
+      if (!isLoginMode) {
+        const usernameDoc = await getDoc(doc(db, "usernames", username));
+        if (usernameDoc.exists()) {
+          setIsLoading(false);
+          Alert.alert('Error', 'This username is already taken. Please choose another one.');
+          return;
+        }
+      }
+      
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      console.log('User signed up:', userCredential.user);
-      Alert.alert(
-        'Success', 
-        'Account created successfully! You can now log in.', 
-        [{ text: 'OK', onPress: () => setIsLoginMode(true) }]
-      );
+      const user = userCredential.user;
+      
+      // If in registration mode, save username to Firestore
+      if (!isLoginMode) {
+        try {
+          // Create a user document with the username
+          await setDoc(doc(db, "users", user.uid), {
+            username: username,
+            email: email,
+            createdAt: new Date()
+          });
+          
+          // Also create an entry in the usernames collection for uniqueness check
+          await setDoc(doc(db, "usernames", username), {
+            uid: user.uid
+          });
+          
+          console.log('Username saved successfully');
+          Alert.alert(
+            'Success', 
+            'Account created successfully! You can now log in.', 
+            [{ text: 'OK', onPress: () => setIsLoginMode(true) }]
+          );
+        } catch (firestoreError) {
+          console.error('Error saving username:', firestoreError);
+          Alert.alert(
+            'Account Created', 
+            'Your account was created but there was an issue saving your username. Please try updating your profile later.',
+            [{ text: 'OK', onPress: () => setIsLoginMode(true) }]
+          );
+        }
+      } else {
+        Alert.alert(
+          'Success', 
+          'Account created successfully! You can now log in.', 
+          [{ text: 'OK', onPress: () => setIsLoginMode(true) }]
+        );
+      }
+      
+      console.log('User signed up:', user);
     } catch (error: any) {
       console.log('Signup error:', error);
       
@@ -93,6 +157,17 @@ export default function Index() {
       <Text style={styles.subtitle}>Your pocket birding companion</Text>
       
       <View style={styles.inputContainer}>
+      {!isLoginMode && (
+        <TextInput
+          style={styles.input}
+          placeholder="Username"
+          value={username}
+          onChangeText={setUsername}
+          autoCapitalize="none"
+          editable={!isLoading}
+        />
+      )}
+      
       <TextInput
         style={styles.input}
         placeholder="Email"
