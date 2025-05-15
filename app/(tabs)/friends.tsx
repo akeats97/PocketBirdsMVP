@@ -1,23 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
 import { useFriendSightings } from '../context/FriendSightingsContext';
+import { UserProfile, followUser, isFollowing, searchUsers, unfollowUser } from '../services/userService';
 
-// Define search result user type
-interface SearchResultUser {
-  id: string;
-  username: string;
+// Define search result user type with following status
+interface SearchResultUser extends UserProfile {
+  isFollowing?: boolean;
 }
 
 export default function FriendsScreen() {
-  const { friendSightings, friends, filterByFriend } = useFriendSightings();
+  const { friendSightings, friends, filterByFriend, isLoadingFriends, refreshFriends } = useFriendSightings();
   const [searchQuery, setSearchQuery] = useState('');
   const [showFriendsList, setShowFriendsList] = useState(false);
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
   const [modalSearchQuery, setModalSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResultUser[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Filter friends based on search query
   const filteredFriends = useMemo(() => {
@@ -40,36 +42,98 @@ export default function FriendsScreen() {
     setIsSearchModalVisible(false);
     setModalSearchQuery('');
     setSearchResults([]);
+    
+    // Refresh friends list when modal closes to show any new follows
+    refreshFriends();
   };
 
-  const handleSearchUsers = (text: string) => {
+  const handleSearchUsers = async (text: string) => {
     setModalSearchQuery(text);
     
-    // Mock search functionality for now
     if (text.length >= 2) {
       setIsSearching(true);
-      // Simulate API call delay
-      setTimeout(() => {
-        const mockResults: SearchResultUser[] = [
-          { id: '1', username: 'birdwatcher42' },
-          { id: '2', username: 'eagleeye' },
-          { id: '3', username: 'crowspotter' },
-        ].filter(user => 
-          user.username.toLowerCase().includes(text.toLowerCase())
+      console.log(`Starting search for username: "${text}"`);
+      try {
+        // Get users that match the search query
+        const results = await searchUsers(text);
+        console.log(`Search returned ${results.length} results`, results);
+        
+        // Check following status for each user
+        const resultsWithFollowing = await Promise.all(
+          results.map(async (user) => {
+            const following = await isFollowing(user.uid);
+            console.log(`User ${user.username} follow status: ${following ? 'Following' : 'Not following'}`);
+            return {
+              ...user,
+              isFollowing: following
+            };
+          })
         );
-        setSearchResults(mockResults);
+        
+        setSearchResults(resultsWithFollowing);
+      } catch (error) {
+        console.error('Error searching users:', error);
+        Alert.alert('Error', 'Failed to search for users. Please try again.');
+      } finally {
         setIsSearching(false);
-      }, 500);
+      }
     } else {
+      console.log('Search query too short, clearing results');
       setSearchResults([]);
     }
   };
 
-  const handleFollowUser = (userId: string, username: string) => {
-    // This will be implemented in the next step
-    console.log(`Follow user: ${userId} (${username})`);
-    // For now, just close the modal as if action succeeded
-    closeSearchModal();
+  const handleFollowAction = async (user: SearchResultUser) => {
+    if (actionInProgress === user.uid) return;
+    
+    setActionInProgress(user.uid);
+    try {
+      if (user.isFollowing) {
+        // Unfollow the user
+        await unfollowUser(user.uid);
+        
+        // Update local state
+        setSearchResults(prev => 
+          prev.map(u => 
+            u.uid === user.uid 
+              ? { ...u, isFollowing: false } 
+              : u
+          )
+        );
+      } else {
+        // Follow the user
+        await followUser(user.uid);
+        
+        // Update local state
+        setSearchResults(prev => 
+          prev.map(u => 
+            u.uid === user.uid 
+              ? { ...u, isFollowing: true } 
+              : u
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error following/unfollowing user:', error);
+      Alert.alert(
+        'Error', 
+        `Failed to ${user.isFollowing ? 'unfollow' : 'follow'} user. Please try again.`
+      );
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+  
+  // Handle pull-to-refresh
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshFriends();
+    } catch (error) {
+      console.error('Error refreshing friends:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   return (
@@ -114,35 +178,61 @@ export default function FriendsScreen() {
       {/* Friends List (shown when searching) */}
       {showFriendsList && (
         <View style={styles.friendsListContainer}>
-          <FlatList
-            data={filteredFriends}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity 
-                style={styles.friendItem}
-                onPress={() => {
-                  setSearchQuery(item.name);
-                  setShowFriendsList(false);
-                }}
-              >
-                <Ionicons name="person-circle-outline" size={24} color="#4A90E2" />
-                <Text style={styles.friendName}>{item.name}</Text>
-              </TouchableOpacity>
-            )}
-            ListEmptyComponent={
-              <Text style={styles.emptyText}>No friends found</Text>
-            }
-          />
+          {isLoadingFriends ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#4A90E2" />
+              <Text style={styles.loadingText}>Loading friends...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredFriends}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={styles.friendItem}
+                  onPress={() => {
+                    setSearchQuery(item.name);
+                    setShowFriendsList(false);
+                  }}
+                >
+                  <Ionicons name="person-circle-outline" size={24} color="#4A90E2" />
+                  <Text style={styles.friendName}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>
+                  {searchQuery ? "No friends match your search" : "You're not following anyone yet"}
+                </Text>
+              }
+            />
+          )}
         </View>
       )}
       
       {/* Friend Sightings Feed */}
-      {filteredSightings.length === 0 ? (
+      {isLoadingFriends && !isRefreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4A90E2" />
+          <Text style={styles.loadingText}>Loading friend activity...</Text>
+        </View>
+      ) : filteredSightings.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateText}>No sightings found</Text>
           <Text style={styles.emptyStateSubtext}>
-            {searchQuery ? `No sightings from "${searchQuery}"` : "Your friends haven't shared any sightings yet"}
+            {searchQuery 
+              ? `No sightings from "${searchQuery}"` 
+              : friends.length > 0 
+                ? "Your friends haven't shared any sightings yet"
+                : "Follow some friends to see their sightings here"}
           </Text>
+          {friends.length === 0 && (
+            <TouchableOpacity 
+              style={styles.findFriendsButton}
+              onPress={openSearchModal}
+            >
+              <Text style={styles.findFriendsButtonText}>Find Friends</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <FlatList
@@ -150,6 +240,8 @@ export default function FriendsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <FriendSightingCard sighting={item} />}
           contentContainerStyle={styles.listContent}
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
         />
       )}
 
@@ -203,7 +295,7 @@ export default function FriendsScreen() {
                 {modalSearchQuery.length > 0 ? (
                   <FlatList
                     data={searchResults}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(item) => item.uid}
                     renderItem={({ item }) => (
                       <View style={styles.searchResultItem}>
                         <View style={styles.userInfo}>
@@ -211,10 +303,20 @@ export default function FriendsScreen() {
                           <Text style={styles.username}>{item.username}</Text>
                         </View>
                         <TouchableOpacity
-                          style={styles.followButton}
-                          onPress={() => handleFollowUser(item.id, item.username)}
+                          style={[
+                            styles.followButton,
+                            item.isFollowing && styles.followingButton
+                          ]}
+                          onPress={() => handleFollowAction(item)}
+                          disabled={actionInProgress === item.uid}
                         >
-                          <Text style={styles.followButtonText}>Follow</Text>
+                          {actionInProgress === item.uid ? (
+                            <ActivityIndicator size="small" color="white" />
+                          ) : (
+                            <Text style={styles.followButtonText}>
+                              {item.isFollowing ? 'Following' : 'Follow'}
+                            </Text>
+                          )}
                         </TouchableOpacity>
                       </View>
                     )}
@@ -271,6 +373,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  addFriendText: {
+    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#4A90E2',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -340,12 +448,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
+    marginBottom: 24,
   },
-  addFriendText: {
-    marginLeft: 4,
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#4A90E2',
+  findFriendsButton: {
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginTop: 8,
+  },
+  findFriendsButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#666',
   },
   
   // Modal styles
@@ -416,19 +540,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  followingButton: {
+    backgroundColor: '#6BB06E', // Green color for following state
   },
   followButtonText: {
     color: 'white',
     fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    color: '#666',
   },
   searchPromptContainer: {
     flex: 1,

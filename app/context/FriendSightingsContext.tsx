@@ -1,7 +1,11 @@
-import React, { createContext, useContext, useState } from 'react';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
+import { auth, db } from '../../config/firebaseConfig';
+import { UserProfile, getFollowing } from '../services/userService';
 import { FriendSighting } from '../types';
 
-// Mock friend sightings for demonstration
+// Still keeping these for initial state/fallback
 const initialFriendSightings: FriendSighting[] = [
   {
     id: 'fs-1',
@@ -59,26 +63,142 @@ const initialFriendSightings: FriendSighting[] = [
   },
 ];
 
-// Mock friends list
-export const mockFriends = [
-  { id: 'f-1', name: 'Emma Wilson' },
-  { id: 'f-2', name: 'Marcus Johnson' },
-  { id: 'f-3', name: 'Sara Chen' },
-  { id: 'f-4', name: 'James Rodriguez' },
-  { id: 'f-5', name: 'Alex Taylor' },
-];
-
 interface FriendSightingsContextType {
   friendSightings: FriendSighting[];
   friends: { id: string; name: string }[];
   filterByFriend: (friendName: string) => FriendSighting[];
+  isLoadingFriends: boolean;
+  refreshFriends: () => Promise<void>;
 }
 
 const FriendSightingsContext = createContext<FriendSightingsContextType | undefined>(undefined);
 
 function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
-  const [friendSightings] = useState<FriendSighting[]>(initialFriendSightings);
-  const [friends] = useState(mockFriends);
+  const [friendSightings, setFriendSightings] = useState<FriendSighting[]>(initialFriendSightings);
+  const [friends, setFriends] = useState<{ id: string; name: string }[]>([]);
+  const [isLoadingFriends, setIsLoadingFriends] = useState(true);
+  
+  // Fetch following users and their sightings
+  const fetchFollowing = async () => {
+    if (!auth.currentUser) {
+      setIsLoadingFriends(false);
+      return;
+    }
+    
+    setIsLoadingFriends(true);
+    try {
+      // Get list of users the current user is following
+      const followingUsers = await getFollowing();
+      
+      // Convert to the format expected by the UI
+      const friendsList = followingUsers.map(user => ({
+        id: user.uid,
+        name: user.username
+      }));
+      
+      setFriends(friendsList);
+      
+      // If we have friends, fetch their sightings
+      if (followingUsers.length > 0) {
+        fetchFriendSightings(followingUsers);
+      } else {
+        setFriendSightings([]);
+      }
+    } catch (error) {
+      console.error('Error fetching following:', error);
+      Alert.alert(
+        'Error', 
+        'Failed to load friends. Please check your connection and try again.'
+      );
+    } finally {
+      setIsLoadingFriends(false);
+    }
+  };
+  
+  // Fetch sightings from friends
+  const fetchFriendSightings = async (followingUsers: UserProfile[]) => {
+    try {
+      // Get all user IDs we're following
+      const userIds = followingUsers.map(user => user.uid);
+      
+      // Create a username lookup map for later use
+      const usernameMap = followingUsers.reduce((map, user) => {
+        map[user.uid] = user.username;
+        return map;
+      }, {} as Record<string, string>);
+      
+      // Query sightings where the user is one of the people we follow
+      const sightingsQuery = query(
+        collection(db, 'sightings'),
+        where('userId', 'in', userIds)
+      );
+      
+      // Set up a real-time listener for sightings
+      const unsubscribe = onSnapshot(
+        sightingsQuery,
+        (snapshot) => {
+          const sightings: FriendSighting[] = [];
+          
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const userId = data.userId;
+            
+            if (usernameMap[userId]) {
+              sightings.push({
+                id: doc.id,
+                birdName: data.birdName,
+                location: data.location,
+                date: data.date.toDate(),
+                notes: data.notes,
+                friendName: usernameMap[userId],
+                // Add other fields as needed
+              });
+            }
+          });
+          
+          // If no friend sightings found yet but we have friends, use empty array
+          // instead of mock data
+          if (sightings.length === 0 && followingUsers.length > 0) {
+            setFriendSightings([]);
+          } else {
+            setFriendSightings(sightings);
+          }
+        },
+        (error) => {
+          console.error('Error fetching sightings:', error);
+          // If there's an error, we'll use mock data for now
+          // In production, you should handle this error properly
+          setFriendSightings(initialFriendSightings);
+        }
+      );
+      
+      // Clean up the listener when the component unmounts
+      return () => unsubscribe();
+    } catch (error) {
+      console.error('Error setting up sightings listener:', error);
+    }
+  };
+  
+  // Listen for auth state changes
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(user => {
+      if (user) {
+        fetchFollowing();
+      } else {
+        // If not logged in, use mock data
+        setFriends([]);
+        setFriendSightings([]);
+        setIsLoadingFriends(false);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, []);
+  
+  // Function to manually refresh friends list
+  const refreshFriends = async () => {
+    await fetchFollowing();
+  };
 
   const filterByFriend = (friendName: string): FriendSighting[] => {
     if (!friendName) return friendSightings;
@@ -88,7 +208,15 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <FriendSightingsContext.Provider value={{ friendSightings, friends, filterByFriend }}>
+    <FriendSightingsContext.Provider 
+      value={{ 
+        friendSightings, 
+        friends, 
+        filterByFriend,
+        isLoadingFriends,
+        refreshFriends
+      }}
+    >
       {children}
     </FriendSightingsContext.Provider>
   );
