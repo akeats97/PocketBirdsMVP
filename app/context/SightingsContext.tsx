@@ -99,4 +99,7 @@ export function useSightings() {
     throw new Error('useSightings must be used within a SightingsProvider');
   }
   return context;
-} 
+}
+
+// Adding a default export to fix the warning
+export default SightingsProvider; 

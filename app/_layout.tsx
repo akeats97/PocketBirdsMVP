@@ -5,11 +5,16 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
 import { SafeAreaView } from 'react-native';
+import FriendSightingsProvider from './context/FriendSightingsContext';
 import { SightingsProvider } from './context/SightingsContext';
 
+console.log('ROOT LAYOUT: Firebase imported'); //just for bug testing
+
+
+
 export {
-    // Catch any errors thrown by the Layout component.
-    ErrorBoundary
+  // Catch any errors thrown by the Layout component.
+  ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
@@ -37,6 +42,12 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
+    // Add a useEffect to ensure Firebase is initialized
+    useEffect(() => {
+      console.log('Firebase Auth initialized');
+      // You can add any Firebase-specific initialization logic here
+    }, []);
+
   if (!loaded) {
     return null;
   }
@@ -48,32 +59,29 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={DefaultTheme}>
       <SightingsProvider>
-        <SafeAreaView style={{ flex: 1 }}>
-          <Stack>
-            <Stack.Screen 
-              name="(tabs)" 
-              options={{ 
-                headerShown: true,
-                title: 'Pocket Birds v0.5',
-                headerTitleStyle: {
-                  fontSize: 20,
-                  fontWeight: '600',
-                },
-              }} 
-            />
-            <Stack.Screen 
-              name="modal" 
-              options={{ 
-                presentation: 'modal',
-                title: 'Pocket Birds v0.5',
-                headerTitleStyle: {
-                  fontSize: 20,
-                  fontWeight: '600',
-                },
-              }} 
-            />
-          </Stack>
-        </SafeAreaView>
+        <FriendSightingsProvider>
+          <SafeAreaView style={{ flex: 1 }}>
+            <Stack>
+              <Stack.Screen 
+                name="index" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
+                name="(tabs)" 
+                options={{ 
+                  headerShown: true,
+                  title: 'Pocket Birds v0.5',
+                  headerTitleStyle: {
+                    fontSize: 20,
+                    fontWeight: '600',
+                  },
+                }} 
+              />
+            </Stack>
+          </SafeAreaView>
+        </FriendSightingsProvider>
       </SightingsProvider>
     </ThemeProvider>
   );

@@ -45,6 +45,14 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Ionicons name="book-outline" size={24} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="friends"
+        options={{
+          title: 'Friends',
+          tabBarShowLabel: true,
+          tabBarIcon: ({ color }) => <Ionicons name="people-outline" size={24} color={color} />,
+        }}
+      />
     </Tabs>
   );
 }
