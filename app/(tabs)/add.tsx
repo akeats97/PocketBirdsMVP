@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Image, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { birdNames } from '../../constants/birdNames';
 import { useSightings } from '../context/SightingsContext';
+import { pickImage, uploadPhoto } from '../services/photoService';
 
 export default function AddSightingScreen() {
   const navigation = useNavigation();
@@ -17,6 +18,7 @@ export default function AddSightingScreen() {
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const textInputRef = useRef<TextInput>(null);
 
   // Update location when lastLocation changes
@@ -43,7 +45,18 @@ export default function AddSightingScreen() {
     Keyboard.dismiss();
   };
 
-  const handleSave = () => {
+  const handleSelectPhoto = async () => {
+    try {
+      const result = await pickImage();
+      if (!result.canceled) {
+        setPhotoUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to select photo');
+    }
+  };
+
+  const handleSave = async () => {
     if (!selectedBird) {
       Alert.alert('Error', 'Please select a bird');
       return;
@@ -53,17 +66,32 @@ export default function AddSightingScreen() {
       return;
     }
 
+    let photoUrl;
+
+    if (photoUri) {
+      try {
+        photoUrl = await uploadPhoto(photoUri, Date.now().toString());
+      } catch (error) {
+        Alert.alert('Error', 'Failed to upload photo');
+        return;
+      }
+    }
+
     addSighting({
       birdName: selectedBird,
       location,
       date,
       notes: notes || undefined,
+      photoUrl,
+      photoPath: photoUri || undefined,
     });
 
+    // Reset form
     setSelectedBird('');
     setSearchQuery('');
     setNotes('');
     setDate(new Date());
+    setPhotoUri(null);
 
     setShowSuccess(true);
     setTimeout(() => {
@@ -75,6 +103,24 @@ export default function AddSightingScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Add Sighting</Text>
       <View style={styles.form}>
+        {/* Photo Selection */}
+        <TouchableOpacity 
+          style={styles.photoButton} 
+          onPress={handleSelectPhoto}
+        >
+          {photoUri ? (
+            <Image 
+              source={{ uri: photoUri }} 
+              style={styles.photoPreview}
+            />
+          ) : (
+            <View style={styles.photoPlaceholder}>
+              <Ionicons name="camera" size={32} color="#666" />
+              <Text style={styles.photoPlaceholderText}>Add Photo</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Bird Name</Text>
           <TextInput
@@ -271,5 +317,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     marginLeft: 8,
+  },
+  photoButton: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  photoPreview: {
+    width: '100%',
+    height: '100%',
+  },
+  photoPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  photoPlaceholderText: {
+    marginTop: 8,
+    color: '#666',
+    fontSize: 16,
   },
 }); 

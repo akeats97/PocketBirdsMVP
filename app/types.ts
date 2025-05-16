@@ -6,6 +6,8 @@ export interface Sighting {
   notes?: string;
   syncStatus: 'synced' | 'pending' | 'error';
   lastModified: Date;
+  photoUrl?: string;  // URL to the photo in Firebase Storage
+  photoPath?: string; // Local path to the photo before upload
 }
 
 export interface FriendSighting extends Sighting {
