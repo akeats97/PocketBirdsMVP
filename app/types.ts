@@ -4,6 +4,8 @@ export interface Sighting {
   location: string;
   date: Date;
   notes?: string;
+  syncStatus: 'synced' | 'pending' | 'error';
+  lastModified: Date;
 }
 
 export interface FriendSighting extends Sighting {

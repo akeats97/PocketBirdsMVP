@@ -1,11 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { addSightingToFirebase, getUserSightingsFromFirebase } from '../services/sightingService';
 import { Sighting } from '../types';
 
 interface SightingsContextType {
   sightings: Sighting[];
   lastLocation: string;
-  addSighting: (sighting: Omit<Sighting, 'id'>) => void;
+  addSighting: (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => void;
+  syncSightings: () => Promise<void>;
 }
 
 const SightingsContext = createContext<SightingsContextType | undefined>(undefined);
@@ -26,10 +29,12 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
         const storedLocation = await AsyncStorage.getItem(LOCATION_KEY);
         
         if (storedSightings !== null) {
-          // Need to parse the dates back to Date objects
+          // Need to parse the dates back to Date objects and add sync status if missing
           const parsedSightings = JSON.parse(storedSightings).map((sighting: any) => ({
             ...sighting,
-            date: new Date(sighting.date)
+            date: new Date(sighting.date),
+            lastModified: new Date(sighting.lastModified || sighting.date),
+            syncStatus: sighting.syncStatus || 'pending'
           }));
           setSightings(parsedSightings);
         }
@@ -77,17 +82,92 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [lastLocation, isLoading]);
 
-  const addSighting = (sighting: Omit<Sighting, 'id'>) => {
+  // Monitor network status and sync when online
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
+      if (state.isConnected) {
+        syncSightings();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [sightings]);
+
+  const addSighting = (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => {
     const newSighting: Sighting = {
       ...sighting,
-      id: Date.now().toString(), // Simple way to generate unique IDs
+      id: Date.now().toString(),
+      syncStatus: 'pending',
+      lastModified: new Date()
     };
-    setSightings(prev => [newSighting, ...prev]); // Add new sighting at the beginning
-    setLastLocation(sighting.location); // Store the last used location
+    setSightings(prev => [newSighting, ...prev]);
+    setLastLocation(sighting.location);
+  };
+
+  const syncSightings = async () => {
+    try {
+      // Get all pending sightings
+      const pendingSightings = sightings.filter(s => s.syncStatus === 'pending');
+      
+      if (pendingSightings.length === 0) {
+        return;
+      }
+
+      // Try to sync each pending sighting
+      for (const sighting of pendingSightings) {
+        try {
+          await addSightingToFirebase(sighting);
+          
+          // Update local state to mark as synced
+          setSightings(prev => 
+            prev.map(s => 
+              s.id === sighting.id 
+                ? { ...s, syncStatus: 'synced' }
+                : s
+            )
+          );
+        } catch (error) {
+          console.error(`Failed to sync sighting ${sighting.id}:`, error);
+          
+          // Mark as error in local state
+          setSightings(prev => 
+            prev.map(s => 
+              s.id === sighting.id 
+                ? { ...s, syncStatus: 'error' }
+                : s
+            )
+          );
+        }
+      }
+
+      // After syncing pending sightings, fetch latest from Firebase
+      const firebaseSightings = await getUserSightingsFromFirebase();
+      
+      // Merge Firebase sightings with local sightings
+      // Keep local pending/error sightings, but update synced ones
+      setSightings(prev => {
+        const localPending = prev.filter(s => s.syncStatus !== 'synced');
+        const merged = [...localPending];
+        
+        // Add Firebase sightings, avoiding duplicates
+        firebaseSightings.forEach(fbSighting => {
+          const existingIndex = merged.findIndex(s => s.id === fbSighting.id);
+          if (existingIndex === -1) {
+            merged.push(fbSighting);
+          }
+        });
+        
+        return merged;
+      });
+    } catch (error) {
+      console.error('Error during sync:', error);
+    }
   };
 
   return (
-    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting }}>
+    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, syncSightings }}>
       {children}
     </SightingsContext.Provider>
   );
@@ -101,5 +181,4 @@ export function useSightings() {
   return context;
 }
 
-// Adding a default export to fix the warning
 export default SightingsProvider; 
