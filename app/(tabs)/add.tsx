@@ -103,24 +103,6 @@ export default function AddSightingScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Add Sighting</Text>
       <View style={styles.form}>
-        {/* Photo Selection */}
-        <TouchableOpacity 
-          style={styles.photoButton} 
-          onPress={handleSelectPhoto}
-        >
-          {photoUri ? (
-            <Image 
-              source={{ uri: photoUri }} 
-              style={styles.photoPreview}
-            />
-          ) : (
-            <View style={styles.photoPlaceholder}>
-              <Ionicons name="camera" size={32} color="#666" />
-              <Text style={styles.photoPlaceholderText}>Add Photo</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Bird Name</Text>
           <TextInput
@@ -188,6 +170,26 @@ export default function AddSightingScreen() {
         </View>
 
         <View style={styles.inputContainer}>
+          <Text style={styles.label}>Photo</Text>
+          <TouchableOpacity 
+            style={[styles.photoButton, { height: photoUri ? 200 : 80 }]} 
+            onPress={handleSelectPhoto}
+          >
+            {photoUri ? (
+              <Image 
+                source={{ uri: photoUri }} 
+                style={styles.photoPreview}
+              />
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <Ionicons name="camera" size={24} color="#666" />
+                <Text style={styles.photoPlaceholderText}>Add Photo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.inputContainer}>
           <Text style={styles.label}>Notes</Text>
           <TextInput
             style={[styles.input, styles.notesInput]}
@@ -196,7 +198,7 @@ export default function AddSightingScreen() {
             placeholder="Add any additional notes..."
             placeholderTextColor="#999"
             multiline
-            numberOfLines={4}
+            numberOfLines={2}
           />
         </View>
 
@@ -247,7 +249,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   notesInput: {
-    height: 100,
+    height: 60,
     textAlignVertical: 'top',
   },
   suggestionsContainer: {
@@ -320,7 +322,6 @@ const styles = StyleSheet.create({
   },
   photoButton: {
     width: '100%',
-    height: 200,
     backgroundColor: '#f5f5f5',
     borderRadius: 12,
     marginBottom: 16,
@@ -337,8 +338,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   photoPlaceholderText: {
-    marginTop: 8,
+    marginTop: 4,
     color: '#666',
-    fontSize: 16,
+    fontSize: 14,
   },
 }); 
