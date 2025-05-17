@@ -166,22 +166,24 @@ export default function Index() {
       )}
       
       <TextInput
-        style={styles.input}
+        style={[styles.input, { color: '#333' }]}
         placeholder="Email"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
         editable={!isLoading}
+        placeholderTextColor="#999"
       />
    
       <TextInput
-        style={styles.input}
+        style={[styles.input, { color: '#333' }]}
         placeholder="Password"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
         editable={!isLoading}
+        placeholderTextColor="#999"
       />
       </View>
       
