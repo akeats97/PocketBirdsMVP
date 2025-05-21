@@ -4,7 +4,7 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { SafeAreaView } from 'react-native';
+import { SafeAreaView, StatusBar } from 'react-native';
 import { auth } from '../config/firebaseConfig';
 import FriendSightingsProvider from './context/FriendSightingsContext';
 import { SightingsProvider } from './context/SightingsContext';
@@ -55,6 +55,11 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={theme}>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="#ffffff"
+        translucent={true}
+      />
       <SafeAreaView style={{ flex: 1 }}>
         <Stack>
           <Stack.Screen 
