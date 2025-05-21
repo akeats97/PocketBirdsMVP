@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, Image, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { birdNames } from '../../constants/birdNames';
 import { useSightings } from '../context/SightingsContext';
 import { pickImage, uploadPhoto } from '../services/photoService';
@@ -20,6 +20,60 @@ export default function AddSightingScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const textInputRef = useRef<TextInput>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const notesInputRef = useRef<TextInput>(null);
+  const locationInputRef = useRef<TextInput>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // Handle keyboard appearance
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        // Find the currently focused input
+        const focusedInput = Platform.select({
+          ios: textInputRef.current?.isFocused() ? textInputRef.current :
+               notesInputRef.current?.isFocused() ? notesInputRef.current :
+               locationInputRef.current?.isFocused() ? locationInputRef.current : null,
+          android: textInputRef.current?.isFocused() ? textInputRef.current :
+                  notesInputRef.current?.isFocused() ? notesInputRef.current :
+                  locationInputRef.current?.isFocused() ? locationInputRef.current : null
+        });
+
+        if (focusedInput) {
+          // Add a small delay to ensure the keyboard is fully shown
+          setTimeout(() => {
+            focusedInput.measure((x, y, width, height, pageX, pageY) => {
+              const screenHeight = Dimensions.get('window').height;
+              const inputBottom = pageY + height;
+              const keyboardTop = screenHeight - e.endCoordinates.height;
+              
+              if (inputBottom > keyboardTop) {
+                const scrollToY = pageY - (keyboardTop - inputBottom) - 100;
+                scrollViewRef.current?.scrollTo({
+                  y: Math.max(0, scrollToY),
+                  animated: true
+                });
+              }
+            });
+          }, 100);
+        }
+      }
+    );
+
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, []);
 
   // Update location when lastLocation changes
   useEffect(() => {
@@ -30,8 +84,7 @@ export default function AddSightingScreen() {
   useEffect(() => {
     if (searchQuery.length > 0 && searchQuery !== selectedBird) {
       const filtered = birdNames
-        .filter(name => name.toLowerCase().includes(searchQuery.toLowerCase()))
-        .slice(0, 5);
+        .filter(name => name.toLowerCase().includes(searchQuery.toLowerCase()));
       setSuggestions(filtered);
     } else {
       setSuggestions([]);
@@ -99,121 +152,157 @@ export default function AddSightingScreen() {
     }, 2000);
   };
 
+  const handleOutsidePress = () => {
+    if (suggestions.length > 0) {
+      setSuggestions([]);
+    }
+    Keyboard.dismiss();
+  };
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Add Sighting</Text>
-      <View style={styles.form}>
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Bird Name</Text>
-          <TextInput
-            ref={textInputRef}
-            style={styles.input}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search for a bird..."
-            placeholderTextColor="#999"
-          />
-          {suggestions.length > 0 && (
-            <FlatList
-              data={suggestions}
-              keyExtractor={(item) => item}
-              renderItem={({ item }) => (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.suggestionButton,
-                    pressed && { backgroundColor: '#f0f0f0' }
-                  ]}
-                  onPress={() => handleBirdSelect(item)}
-                >
-                  <Text style={styles.suggestionButtonText}>{item}</Text>
-                </Pressable>
-              )}
-              keyboardShouldPersistTaps="always"
-            />
-          )}
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Date</Text>
-          <Pressable 
-            style={styles.dateButton}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Text style={styles.dateButtonText}>{date.toLocaleDateString()}</Text>
-            <Ionicons name="calendar" size={20} color="#666" />
-          </Pressable>
-          {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={(event, selectedDate) => {
-                setShowDatePicker(false);
-                if (selectedDate) {
-                  setDate(selectedDate);
-                }
-              }}
-              maximumDate={new Date()}
-            />
-          )}
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Location</Text>
-          <TextInput
-            style={styles.input}
-            value={location}
-            onChangeText={setLocation}
-            placeholder="Where did you see it?"
-            placeholderTextColor="#999"
-          />
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Photo</Text>
-          <TouchableOpacity 
-            style={[styles.photoButton, { height: photoUri ? 200 : 80 }]} 
-            onPress={handleSelectPhoto}
-          >
-            {photoUri ? (
-              <Image 
-                source={{ uri: photoUri }} 
-                style={styles.photoPreview}
-              />
-            ) : (
-              <View style={styles.photoPlaceholder}>
-                <Ionicons name="camera" size={24} color="#666" />
-                <Text style={styles.photoPlaceholderText}>Add Photo</Text>
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+    >
+      <Pressable 
+        style={{ flex: 1 }} 
+        onPress={handleOutsidePress}
+        android_disableSound={true}
+      >
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.container}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 }
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.innerContainer}>
+            <Text style={styles.title}>Add Sighting</Text>
+            <View style={styles.form}>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Bird Name</Text>
+                <TextInput
+                  ref={textInputRef}
+                  style={styles.input}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search for a bird..."
+                  placeholderTextColor="#999"
+                  onBlur={() => setSuggestions([])}
+                />
+                {suggestions.length > 0 && (
+                  <View style={styles.suggestionsContainer}>
+                    <ScrollView 
+                      style={styles.suggestionsScrollView}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled={true}
+                    >
+                      {suggestions.map((item) => (
+                        <Pressable
+                          key={item}
+                          style={({ pressed }) => [
+                            styles.suggestionButton,
+                            pressed && { backgroundColor: '#f0f0f0' }
+                          ]}
+                          onPress={() => handleBirdSelect(item)}
+                        >
+                          <Text style={styles.suggestionButtonText}>{item}</Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
-            )}
-          </TouchableOpacity>
-        </View>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Notes</Text>
-          <TextInput
-            style={[styles.input, styles.notesInput]}
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Add any additional notes..."
-            placeholderTextColor="#999"
-            multiline
-            numberOfLines={2}
-          />
-        </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Date</Text>
+                <Pressable 
+                  style={styles.dateButton}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Text style={styles.dateButtonText}>{date.toLocaleDateString()}</Text>
+                  <Ionicons name="calendar" size={20} color="#666" />
+                </Pressable>
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={date}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(event, selectedDate) => {
+                      setShowDatePicker(false);
+                      if (selectedDate) {
+                        setDate(selectedDate);
+                      }
+                    }}
+                    maximumDate={new Date()}
+                  />
+                )}
+              </View>
 
-        <Pressable style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Sighting</Text>
-        </Pressable>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Location</Text>
+                <TextInput
+                  ref={locationInputRef}
+                  style={styles.input}
+                  value={location}
+                  onChangeText={setLocation}
+                  placeholder="Where did you see it?"
+                  placeholderTextColor="#999"
+                />
+              </View>
 
-        {showSuccess && (
-          <View style={styles.successMessage}>
-            <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-            <Text style={styles.successText}>Sighting logged successfully!</Text>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Photo</Text>
+                <TouchableOpacity 
+                  style={[styles.photoButton, { height: photoUri ? 200 : 80 }]} 
+                  onPress={handleSelectPhoto}
+                >
+                  {photoUri ? (
+                    <Image 
+                      source={{ uri: photoUri }} 
+                      style={styles.photoPreview}
+                    />
+                  ) : (
+                    <View style={styles.photoPlaceholder}>
+                      <Ionicons name="camera" size={24} color="#666" />
+                      <Text style={styles.photoPlaceholderText}>Add Photo</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Notes</Text>
+                <TextInput
+                  ref={notesInputRef}
+                  style={[styles.input, styles.notesInput]}
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Add any additional notes..."
+                  placeholderTextColor="#999"
+                  multiline
+                  numberOfLines={2}
+                />
+              </View>
+
+              <Pressable style={styles.saveButton} onPress={handleSave}>
+                <Text style={styles.saveButtonText}>Save Sighting</Text>
+              </Pressable>
+
+              {showSuccess && (
+                <View style={styles.successMessage}>
+                  <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                  <Text style={styles.successText}>Sighting logged successfully!</Text>
+                </View>
+              )}
+            </View>
           </View>
-        )}
-      </View>
-    </View>
+        </ScrollView>
+      </Pressable>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -221,24 +310,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  innerContainer: {
     padding: 20,
+    paddingBottom: 40, // Add extra padding at the bottom
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 15,
+    marginBottom: 20,
   },
   form: {
-    padding: 16,
+    gap: 16,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 8,
   },
   label: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
+    fontWeight: '600',
     marginBottom: 8,
+    color: '#333',
   },
   input: {
     borderWidth: 1,
@@ -246,10 +341,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: '#333',
+    backgroundColor: '#fff',
   },
   notesInput: {
-    height: 60,
+    height: 80, // Made taller for better usability
     textAlignVertical: 'top',
   },
   suggestionsContainer: {
@@ -260,7 +355,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 8,
+    borderRadius: 12,
     marginTop: 4,
     zIndex: 9999,
     elevation: 5,
@@ -268,6 +363,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
+    maxHeight: 200,
+    overflow: 'hidden',
+  },
+  suggestionsScrollView: {
+    maxHeight: 200,
   },
   suggestionButton: {
     width: '100%',
@@ -309,16 +409,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E8F5E9',
-    padding: 12,
-    borderRadius: 8,
+    gap: 8,
     marginTop: 16,
+    padding: 12,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 8,
   },
   successText: {
     color: '#2E7D32',
     fontSize: 16,
     fontWeight: '500',
-    marginLeft: 8,
   },
   photoButton: {
     width: '100%',

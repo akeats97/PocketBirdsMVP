@@ -99,4 +99,12 @@ export async function updateSightingInFirebase(sighting: Sighting): Promise<void
     console.error('Error updating sighting in Firebase:', error);
     throw error;
   }
-} 
+}
+
+const sightingService = {
+  addSightingToFirebase,
+  getUserSightingsFromFirebase,
+  updateSightingInFirebase
+};
+
+export default sightingService; 

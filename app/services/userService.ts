@@ -203,4 +203,42 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
     console.error('Error getting current user profile:', error);
     return null;
   }
-} 
+}
+
+export interface User {
+  uid: string;
+  username: string;
+  email: string;
+}
+
+// Get a user by their username
+export async function getUserByUsername(username: string): Promise<User | null> {
+  try {
+    const usernameDoc = await getDoc(doc(db, "usernames", username));
+    if (!usernameDoc.exists()) {
+      return null;
+    }
+    
+    const userDoc = await getDoc(doc(db, "users", usernameDoc.data().uid));
+    if (!userDoc.exists()) {
+      return null;
+    }
+    
+    const data = userDoc.data();
+    return {
+      uid: userDoc.id,
+      username: data.username,
+      email: data.email
+    };
+  } catch (error) {
+    console.error('Error getting user by username:', error);
+    return null;
+  }
+}
+
+const userService = {
+  getUserByUsername,
+  getFollowing
+};
+
+export default userService; 

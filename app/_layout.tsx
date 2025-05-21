@@ -1,10 +1,11 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
 import { SafeAreaView } from 'react-native';
+import { auth } from '../config/firebaseConfig';
 import FriendSightingsProvider from './context/FriendSightingsContext';
 import { SightingsProvider } from './context/SightingsContext';
 
@@ -24,6 +25,55 @@ export const unstable_settings = {
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+
+const theme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: '#4A90E2',
+  },
+};
+
+function RootLayoutNav() {
+  const router = useRouter();
+
+  // Listen for auth state changes
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        // User is signed in, navigate to add tab
+        router.replace('/(tabs)/add');
+      } else {
+        // User is signed out, navigate to login
+        router.replace('/');
+      }
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, []);
+
+  return (
+    <ThemeProvider value={theme}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <Stack>
+          <Stack.Screen 
+            name="(tabs)" 
+            options={{ 
+              headerShown: true,
+              title: 'Pocket Birds v0.5',
+              headerTitleStyle: {
+                fontSize: 20,
+                fontWeight: '600',
+              },
+            }} 
+          />
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+        </Stack>
+      </SafeAreaView>
+    </ThemeProvider>
+  );
+}
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -52,37 +102,11 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
   return (
-    <ThemeProvider value={DefaultTheme}>
-      <SightingsProvider>
-        <FriendSightingsProvider>
-          <SafeAreaView style={{ flex: 1 }}>
-            <Stack>
-              <Stack.Screen 
-                name="index" 
-                options={{ 
-                  headerShown: false,
-                }} 
-              />
-              <Stack.Screen 
-                name="(tabs)" 
-                options={{ 
-                  headerShown: true,
-                  title: 'Pocket Birds v0.5',
-                  headerTitleStyle: {
-                    fontSize: 20,
-                    fontWeight: '600',
-                  },
-                }} 
-              />
-            </Stack>
-          </SafeAreaView>
-        </FriendSightingsProvider>
-      </SightingsProvider>
-    </ThemeProvider>
+    <SightingsProvider>
+      <FriendSightingsProvider>
+        <RootLayoutNav />
+      </FriendSightingsProvider>
+    </SightingsProvider>
   );
 }
