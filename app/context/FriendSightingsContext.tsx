@@ -14,6 +14,8 @@ const initialFriendSightings: FriendSighting[] = [
     date: new Date('2023-06-15'),
     notes: 'Spotted early morning near the lake',
     friendName: 'Emma Wilson',
+    syncStatus: 'synced',
+    lastModified: new Date('2023-06-15'),
   },
   {
     id: 'fs-2',
@@ -22,6 +24,8 @@ const initialFriendSightings: FriendSighting[] = [
     date: new Date('2023-06-12'),
     notes: 'Very vocal, making quite a racket!',
     friendName: 'Marcus Johnson',
+    syncStatus: 'synced',
+    lastModified: new Date('2023-06-12'),
   },
   {
     id: 'fs-3',
@@ -29,6 +33,8 @@ const initialFriendSightings: FriendSighting[] = [
     location: 'Golden Gate Park, SF',
     date: new Date('2023-06-10'),
     friendName: 'Sara Chen',
+    syncStatus: 'synced',
+    lastModified: new Date('2023-06-10'),
   },
   {
     id: 'fs-4',
@@ -37,6 +43,8 @@ const initialFriendSightings: FriendSighting[] = [
     date: new Date('2023-06-08'),
     notes: 'Soaring high above the valley',
     friendName: 'James Rodriguez',
+    syncStatus: 'synced',
+    lastModified: new Date('2023-06-08'),
   },
   {
     id: 'fs-5',
@@ -45,6 +53,8 @@ const initialFriendSightings: FriendSighting[] = [
     date: new Date('2023-06-05'),
     notes: 'Wading in shallow water',
     friendName: 'Emma Wilson',
+    syncStatus: 'synced',
+    lastModified: new Date('2023-06-05'),
   },
   {
     id: 'fs-6',
@@ -52,6 +62,8 @@ const initialFriendSightings: FriendSighting[] = [
     location: 'Yosemite National Park',
     date: new Date('2023-06-03'),
     friendName: 'Alex Taylor',
+    syncStatus: 'synced',
+    lastModified: new Date('2023-06-03'),
   },
   {
     id: 'fs-7',
@@ -60,6 +72,8 @@ const initialFriendSightings: FriendSighting[] = [
     date: new Date('2023-05-30'),
     notes: 'Bright yellow plumage, feeding on thistle',
     friendName: 'Marcus Johnson',
+    syncStatus: 'synced',
+    lastModified: new Date('2023-05-30'),
   },
 ];
 
@@ -151,10 +165,15 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
                 date: data.date.toDate(),
                 notes: data.notes,
                 friendName: usernameMap[userId],
+                syncStatus: 'synced' as const,
+                lastModified: data.lastModified ? data.lastModified.toDate() : data.date.toDate(),
                 // Add other fields as needed
               });
             }
           });
+          
+          // Sort sightings by date, newest first
+          sightings.sort((a, b) => b.date.getTime() - a.date.getTime());
           
           // If no friend sightings found yet but we have friends, use empty array
           // instead of mock data
@@ -202,9 +221,11 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
 
   const filterByFriend = (friendName: string): FriendSighting[] => {
     if (!friendName) return friendSightings;
-    return friendSightings.filter(sighting => 
+    const filtered = friendSightings.filter(sighting => 
       sighting.friendName.toLowerCase().includes(friendName.toLowerCase())
     );
+    // Sort filtered results by date, newest first
+    return filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
   };
 
   return (
