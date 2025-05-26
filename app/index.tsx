@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -143,6 +143,32 @@ export default function Index() {
     setIsLoginMode(!isLoginMode);
   };
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address first');
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert(
+        'Password Reset Email Sent',
+        'Check your email for instructions to reset your password'
+      );
+    } catch (error: any) {
+      console.log('Password reset error:', error);
+      
+      let errorMessage = 'Failed to send password reset email';
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email address';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Please enter a valid email address';
+      }
+      
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>PocketBirds</Text>
@@ -214,6 +240,18 @@ export default function Index() {
           {isLoginMode ? 'Create Account' : 'Back to Login'}
         </Text>
       </TouchableOpacity>
+      
+      {isLoginMode && (
+        <TouchableOpacity 
+          style={styles.forgotPasswordContainer} 
+          onPress={handleForgotPassword}
+          disabled={isLoading}
+        >
+          <Text style={[styles.forgotPasswordText, isLoading && { opacity: 0.7 }]}>
+            Forgot Password?
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -289,5 +327,13 @@ const styles = StyleSheet.create({
   eyeButton: {
     padding: 5,
     marginLeft: 10,
+  },
+  forgotPasswordContainer: {
+    padding: 10,
+  },
+  forgotPasswordText: {
+    color: '#4A90E2',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
