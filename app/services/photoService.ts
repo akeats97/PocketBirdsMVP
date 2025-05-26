@@ -9,9 +9,9 @@ export async function pickImage(): Promise<ImagePicker.ImagePickerResult> {
     throw new Error('Permission to access media library was denied');
   }
 
-  // Launch image picker with updated MediaType API
+  // Launch image picker with correct mediaTypes format
   return await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['image'],
+    mediaTypes: ['images'],
     allowsEditing: true,
     aspect: [4, 3],
     quality: 0.7, // Compress the image
