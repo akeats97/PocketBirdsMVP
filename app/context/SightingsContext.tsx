@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import { User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { auth } from '../../config/firebaseConfig';
 import { addSightingToFirebase, getUserSightingsFromFirebase } from '../services/sightingService';
 import { Sighting } from '../types';
 
@@ -9,6 +11,7 @@ interface SightingsContextType {
   lastLocation: string;
   addSighting: (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => void;
   syncSightings: () => Promise<void>;
+  clearLocalData: () => Promise<void>;
 }
 
 const SightingsContext = createContext<SightingsContextType | undefined>(undefined);
@@ -95,6 +98,32 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     };
   }, [sightings]);
 
+  // Listen for auth state changes and load Firebase data on login
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(async (user: User | null) => {
+      if (user) {
+        console.log('User logged in, loading Firebase data...');
+        await loadFirebaseData();
+      } else {
+        console.log('User logged out');
+        // Data is already cleared by clearLocalData in logout handler
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const loadFirebaseData = async () => {
+    try {
+      console.log('Fetching sightings from Firebase...');
+      const firebaseSightings = await getUserSightingsFromFirebase();
+      console.log(`Loaded ${firebaseSightings.length} sightings from Firebase`);
+      setSightings(firebaseSightings);
+    } catch (error) {
+      console.error('Error loading Firebase data:', error);
+    }
+  };
+
   const addSighting = (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => {
     const newSighting: Sighting = {
       ...sighting,
@@ -166,8 +195,19 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const clearLocalData = async () => {
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEY);
+      await AsyncStorage.removeItem(LOCATION_KEY);
+      setSightings([]);
+      setLastLocation('');
+    } catch (error) {
+      console.error('Failed to clear local data:', error);
+    }
+  };
+
   return (
-    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, syncSightings }}>
+    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, syncSightings, clearLocalData }}>
       {children}
     </SightingsContext.Provider>
   );

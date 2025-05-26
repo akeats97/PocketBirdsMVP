@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, SafeAreaView, StatusBar, TouchableOpacity } from 'react-native';
 import { auth } from '../config/firebaseConfig';
 import FriendSightingsProvider from './context/FriendSightingsContext';
-import { SightingsProvider } from './context/SightingsContext';
+import { SightingsProvider, useSightings } from './context/SightingsContext';
 import Index from './index';
 
 console.log('ROOT LAYOUT: Firebase imported'); //just for bug testing
@@ -37,6 +37,8 @@ const theme = {
 
 // Authenticated App Component
 function AuthenticatedApp() {
+  const { clearLocalData } = useSightings();
+  
   const handleLogout = async () => {
     Alert.alert(
       'Logout',
@@ -52,6 +54,8 @@ function AuthenticatedApp() {
           onPress: async () => {
             try {
               console.log('Starting logout process...');
+              await clearLocalData();
+              console.log('Local data cleared');
               await signOut(auth);
               console.log('Firebase signOut completed');
               // No navigation needed - auth state change will handle UI update
