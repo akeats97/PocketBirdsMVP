@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
@@ -32,6 +32,20 @@ export default function FriendsScreen() {
   // Filter sightings based on selected friend (if any)
   const filteredSightings = useMemo(() => {
     return filterByFriend(searchQuery);
+  }, [searchQuery, filterByFriend]);
+
+  // Calculate stats for selected friend
+  const friendStats = useMemo(() => {
+    if (!searchQuery) return null;
+    
+    const friendSightings = filterByFriend(searchQuery);
+    const totalSightings = friendSightings.length;
+    const uniqueSpecies = new Set(friendSightings.map(sighting => sighting.birdName)).size;
+    
+    return {
+      totalSightings,
+      uniqueSpecies
+    };
   }, [searchQuery, filterByFriend]);
 
   const openSearchModal = () => {
@@ -174,6 +188,29 @@ export default function FriendsScreen() {
           </TouchableOpacity>
         )}
       </View>
+      
+      {/* Friend Stats Panel - shown when a friend is selected */}
+      {friendStats && (
+        <View style={styles.statsPanel}>
+          <View style={styles.statItem}>
+            <FontAwesome5 name="eye" size={18} color="#4CAF50" style={styles.statIcon} />
+            <View>
+              <Text style={styles.statValue}>{friendStats.totalSightings}</Text>
+              <Text style={styles.statLabel}>Total Sightings</Text>
+            </View>
+          </View>
+          
+          <View style={styles.divider} />
+          
+          <View style={styles.statItem}>
+            <FontAwesome5 name="feather" size={18} color="#2196F3" style={styles.statIcon} />
+            <View>
+              <Text style={styles.statValue}>{friendStats.uniqueSpecies}</Text>
+              <Text style={styles.statLabel}>Species Seen</Text>
+            </View>
+          </View>
+        </View>
+      )}
       
       {/* Friends List (shown when searching) */}
       {showFriendsList && (
@@ -567,5 +604,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
+  },
+  
+  // Friend Stats Panel styles
+  statsPanel: {
+    flexDirection: 'row',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statIcon: {
+    marginRight: 10,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  divider: {
+    width: 1,
+    height: '80%',
+    backgroundColor: '#ddd',
   },
 }); 
