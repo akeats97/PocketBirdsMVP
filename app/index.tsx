@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import React, { useState } from 'react';
@@ -10,6 +11,7 @@ export default function Index() {
   const [username, setUsername] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   
   const handleLogin = async () => {
     if (!email || !password) {
@@ -169,15 +171,28 @@ export default function Index() {
         placeholderTextColor="#999"
       />
    
-      <TextInput
-        style={[styles.input, { color: '#333' }]}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        editable={!isLoading}
-        placeholderTextColor="#999"
-      />
+      <View style={styles.passwordContainer}>
+        <TextInput
+          style={[styles.passwordInput, { color: '#333' }]}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+          editable={!isLoading}
+          placeholderTextColor="#999"
+        />
+        <TouchableOpacity
+          style={styles.eyeButton}
+          onPress={() => setShowPassword(!showPassword)}
+          disabled={isLoading}
+        >
+          <Ionicons 
+            name={showPassword ? "eye-off" : "eye"} 
+            size={20} 
+            color="#666" 
+          />
+        </TouchableOpacity>
+      </View>
       </View>
       
       <TouchableOpacity 
@@ -255,5 +270,24 @@ const styles = StyleSheet.create({
     color: '#4A90E2',
     fontSize: 16,
     fontWeight: '500',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginBottom: 12,
+    padding: 11,
+  },
+  passwordInput: {
+    flex: 1,
+    fontSize: 16,
+    padding: 0,
+  },
+  eyeButton: {
+    padding: 5,
+    marginLeft: 10,
   },
 });
