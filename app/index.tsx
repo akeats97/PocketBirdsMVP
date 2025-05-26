@@ -1,14 +1,10 @@
-import { Stack, useRouter } from 'expo-router';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { auth, db } from '../config/firebaseConfig';
 
-
-
 export default function Index() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -25,8 +21,7 @@ export default function Index() {
     
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // Navigate to main app on success
-      router.replace('/(tabs)');
+      // No navigation needed - auth state change will handle UI update
     } catch (error) {
       console.log('Login error:', error);
       Alert.alert(
@@ -148,8 +143,6 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
-      
       <Text style={styles.title}>PocketBirds</Text>
       <Text style={styles.subtitle}>please don't put birds in your pockets</Text>
       
