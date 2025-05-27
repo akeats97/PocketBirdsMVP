@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Sighting } from '../app/types';
 
 interface SightingCardProps {
@@ -8,6 +8,9 @@ interface SightingCardProps {
 }
 
 export default function SightingCard({ sighting }: SightingCardProps) {
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
@@ -19,16 +22,23 @@ export default function SightingCard({ sighting }: SightingCardProps) {
   return (
     <View style={styles.card}>
       {sighting.photoUrl && (
-        <Image 
-          source={{ uri: sighting.photoUrl }} 
-          style={styles.photo}
-          resizeMode="cover"
-        />
+        <TouchableOpacity onPress={() => setIsModalVisible(true)}>
+          <Image 
+            source={{ uri: sighting.photoUrl }} 
+            style={styles.photo}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
       )}
       
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.birdName}>{sighting.birdName}</Text>
+          <View style={styles.birdNameContainer}>
+            <Text style={styles.birdName}>{sighting.birdName}</Text>
+            {sighting.photoUrl && (
+              <Ionicons name="camera" size={16} color="#4CAF50" style={styles.cameraIcon} />
+            )}
+          </View>
           <Text style={styles.date}>{formatDate(sighting.date)}</Text>
         </View>
         
@@ -43,6 +53,41 @@ export default function SightingCard({ sighting }: SightingCardProps) {
           </Text>
         )}
       </View>
+
+      {/* Full-screen photo modal */}
+      <Modal
+        visible={isModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <TouchableOpacity 
+            style={styles.modalCloseButton}
+            onPress={() => setIsModalVisible(false)}
+          >
+            <Ionicons name="close" size={30} color="#fff" />
+          </TouchableOpacity>
+          
+          {sighting.photoUrl && (
+            <ScrollView
+              style={styles.modalPhoto}
+              contentContainerStyle={styles.modalPhotoContainer}
+              minimumZoomScale={1}
+              maximumZoomScale={3}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              bouncesZoom={true}
+            >
+              <Image 
+                source={{ uri: sighting.photoUrl }} 
+                style={[styles.modalPhotoImage, { width: screenWidth, height: screenHeight }]}
+                resizeMode="contain"
+              />
+            </ScrollView>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -76,6 +121,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  birdNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   birdName: {
     fontSize: 18,
     fontWeight: '600',
@@ -99,5 +148,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontStyle: 'italic',
+  },
+  cameraIcon: {
+    marginLeft: 4,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 1,
+    padding: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalPhoto: {
+    width: '100%',
+    height: '100%',
+  },
+  modalPhotoContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalPhotoImage: {
+    flex: 1,
   },
 }); 

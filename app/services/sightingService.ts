@@ -20,6 +20,7 @@ export async function addSightingToFirebase(sighting: Sighting): Promise<void> {
       location: sighting.location,
       date: Timestamp.fromDate(sighting.date),
       notes: sighting.notes || '',
+      photoUrl: sighting.photoUrl || null,
       lastModified: Timestamp.fromDate(sighting.lastModified),
       createdAt: Timestamp.now()
     };
@@ -57,6 +58,7 @@ export async function getUserSightingsFromFirebase(): Promise<Sighting[]> {
         location: data.location,
         date: data.date.toDate(),
         notes: data.notes,
+        photoUrl: data.photoUrl || undefined,
         lastModified: data.lastModified.toDate(),
         syncStatus: 'synced' // All sightings from Firebase are synced
       };
@@ -93,6 +95,7 @@ export async function updateSightingInFirebase(sighting: Sighting): Promise<void
       location: sighting.location,
       date: Timestamp.fromDate(sighting.date),
       notes: sighting.notes || '',
+      photoUrl: sighting.photoUrl || null,
       lastModified: Timestamp.fromDate(sighting.lastModified)
     });
   } catch (error) {

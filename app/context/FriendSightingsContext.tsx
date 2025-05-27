@@ -167,7 +167,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
                 friendName: usernameMap[userId],
                 syncStatus: 'synced' as const,
                 lastModified: data.lastModified ? data.lastModified.toDate() : data.date.toDate(),
-                // Add other fields as needed
+                photoUrl: data.photoUrl || undefined,
               });
             }
           });

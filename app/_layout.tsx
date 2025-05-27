@@ -92,8 +92,14 @@ function AuthenticatedApp() {
                   onPress={handleLogout}
                   style={{
                     marginRight: 15,
-                    padding: 5,
+                    padding: 8,
+                    minWidth: 40,
+                    minHeight: 40,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    borderRadius: 8,
                   }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   <Ionicons name="log-out-outline" size={24} color="#4A90E2" />
                 </TouchableOpacity>
