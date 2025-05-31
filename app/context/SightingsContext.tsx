@@ -9,7 +9,7 @@ import { Sighting } from '../types';
 interface SightingsContextType {
   sightings: Sighting[];
   lastLocation: string;
-  addSighting: (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => void;
+  addSighting: (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => boolean;
   syncSightings: () => Promise<void>;
   clearLocalData: () => Promise<void>;
 }
@@ -124,7 +124,12 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addSighting = (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => {
+  const addSighting = (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>): boolean => {
+    // Check if this is a new species
+    const isNewSpecies = !sightings.some(existingSighting => 
+      existingSighting.birdName.toLowerCase() === sighting.birdName.toLowerCase()
+    );
+
     const newSighting: Sighting = {
       ...sighting,
       id: Date.now().toString(),
@@ -133,6 +138,8 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     };
     setSightings(prev => [newSighting, ...prev]);
     setLastLocation(sighting.location);
+    
+    return isNewSpecies;
   };
 
   const syncSightings = async () => {

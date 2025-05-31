@@ -18,6 +18,7 @@ export default function AddSightingScreen() {
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isNewSpecies, setIsNewSpecies] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const textInputRef = useRef<TextInput>(null);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -131,7 +132,7 @@ export default function AddSightingScreen() {
       }
     }
 
-    addSighting({
+    const newSpeciesDetected = addSighting({
       birdName: selectedBird,
       location,
       date,
@@ -147,7 +148,8 @@ export default function AddSightingScreen() {
     setDate(new Date());
     setPhotoUri(null);
 
-    // Show success popup with animation
+    // Set whether this is a new species and show success popup with animation
+    setIsNewSpecies(newSpeciesDetected);
     setShowSuccess(true);
     Animated.sequence([
       Animated.timing(slideAnim, {
@@ -190,9 +192,21 @@ export default function AddSightingScreen() {
             }
           ]}
         >
-          <View style={styles.successPopupContent}>
-            <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-            <Text style={styles.successPopupText}>Sighting logged successfully!</Text>
+          <View style={[
+            styles.successPopupContent,
+            isNewSpecies && styles.newSpeciesPopupContent
+          ]}>
+            <Ionicons 
+              name={isNewSpecies ? "star" : "checkmark-circle"} 
+              size={24} 
+              color={isNewSpecies ? "#FFD700" : "#4CAF50"} 
+            />
+            <Text style={[
+              styles.successPopupText,
+              isNewSpecies && styles.newSpeciesPopupText
+            ]}>
+              {isNewSpecies ? "New species found! 🎉" : "Sighting logged successfully!"}
+            </Text>
           </View>
         </Animated.View>
       )}
@@ -455,10 +469,19 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 8,
   },
+  newSpeciesPopupContent: {
+    backgroundColor: '#FF6B35',
+    shadowColor: '#FF6B35',
+  },
   successPopupText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  newSpeciesPopupText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
   photoButton: {
     width: '100%',
