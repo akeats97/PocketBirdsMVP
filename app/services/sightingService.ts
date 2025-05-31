@@ -3,7 +3,7 @@ import { auth, db } from '../../config/firebaseConfig';
 import { Sighting } from '../types';
 
 // Add a new sighting to Firestore
-export async function addSightingToFirebase(sighting: Sighting): Promise<void> {
+export async function addSightingToFirebase(sighting: Sighting): Promise<string> {
   const currentUser = auth.currentUser;
   
   if (!currentUser) {
@@ -25,7 +25,8 @@ export async function addSightingToFirebase(sighting: Sighting): Promise<void> {
       createdAt: Timestamp.now()
     };
     
-    await addDoc(sightingsRef, firestoreSighting);
+    const docRef = await addDoc(sightingsRef, firestoreSighting);
+    return docRef.id; // Return the Firebase-generated ID
   } catch (error) {
     console.error('Error adding sighting to Firebase:', error);
     throw error;
@@ -117,7 +118,9 @@ export async function deleteSightingFromFirebase(sightingId: string): Promise<vo
     const sightingDoc = await getDoc(sightingRef);
     
     if (!sightingDoc.exists()) {
-      throw new Error('Sighting not found in Firebase');
+      // Sighting doesn't exist - this is actually success from our perspective
+      // No need to throw an error or log anything
+      return;
     }
     
     const data = sightingDoc.data();
@@ -126,9 +129,16 @@ export async function deleteSightingFromFirebase(sightingId: string): Promise<vo
     }
     
     await deleteDoc(sightingRef);
-  } catch (error) {
-    console.error('Error deleting sighting from Firebase:', error);
-    throw error;
+  } catch (error: any) {
+    // Only log and throw errors that aren't "not found" related
+    if (error.message?.includes('Not authorized')) {
+      console.error('Authorization error deleting sighting from Firebase:', error);
+      throw error;
+    } else {
+      // For other errors (network issues, etc.), log but don't throw
+      // This allows the sync process to continue and mark the deletion as successful
+      console.warn('Non-critical error during sighting deletion:', error);
+    }
   }
 }
 

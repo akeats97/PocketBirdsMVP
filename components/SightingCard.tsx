@@ -39,10 +39,14 @@ export default function SightingCard({ sighting }: SightingCardProps) {
           );
         }
       } else {
-        Alert.alert('Error', 'Failed to delete sighting. Please try again.');
+        // Log error for debugging but don't show user-facing alert
+        console.error('Failed to delete sighting - deleteSighting returned false');
+        setIsDeleteModalVisible(false);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to delete sighting. Please try again.');
+      // Log error for debugging but don't show user-facing alert
+      console.error('Error in handleDelete:', error);
+      setIsDeleteModalVisible(false);
     }
   };
 

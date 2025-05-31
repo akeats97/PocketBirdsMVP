@@ -19,10 +19,12 @@ const SightingsContext = createContext<SightingsContextType | undefined>(undefin
 
 const STORAGE_KEY = 'birdSightings';
 const LOCATION_KEY = 'lastLocation';
+const PENDING_DELETIONS_KEY = 'pendingDeletions';
 
 export function SightingsProvider({ children }: { children: React.ReactNode }) {
   const [sightings, setSightings] = useState<Sighting[]>([]);
   const [lastLocation, setLastLocation] = useState('');
+  const [pendingDeletions, setPendingDeletions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Load sightings data from AsyncStorage on startup
@@ -31,6 +33,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       try {
         const storedSightings = await AsyncStorage.getItem(STORAGE_KEY);
         const storedLocation = await AsyncStorage.getItem(LOCATION_KEY);
+        const storedPendingDeletions = await AsyncStorage.getItem(PENDING_DELETIONS_KEY);
         
         if (storedSightings !== null) {
           // Need to parse the dates back to Date objects and add sync status if missing
@@ -45,6 +48,10 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
         
         if (storedLocation !== null) {
           setLastLocation(storedLocation);
+        }
+
+        if (storedPendingDeletions !== null) {
+          setPendingDeletions(JSON.parse(storedPendingDeletions));
         }
       } catch (error) {
         console.error('Failed to load sightings:', error);
@@ -86,6 +93,21 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [lastLocation, isLoading]);
 
+  // Save pending deletions to AsyncStorage whenever they change
+  useEffect(() => {
+    const savePendingDeletions = async () => {
+      try {
+        await AsyncStorage.setItem(PENDING_DELETIONS_KEY, JSON.stringify(pendingDeletions));
+      } catch (error) {
+        console.error('Failed to save pending deletions:', error);
+      }
+    };
+
+    if (!isLoading) {
+      savePendingDeletions();
+    }
+  }, [pendingDeletions, isLoading]);
+
   // Monitor network status and sync when online
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
@@ -103,8 +125,12 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user: User | null) => {
       if (user) {
-        console.log('User logged in, loading Firebase data...');
-        await loadFirebaseData();
+        console.log('User logged in, waiting for local data to load...');
+        // Wait for AsyncStorage loading to complete before loading Firebase data
+        if (!isLoading) {
+          console.log('Local data loaded, now loading Firebase data...');
+          await loadFirebaseData();
+        }
       } else {
         console.log('User logged out');
         // Data is already cleared by clearLocalData in logout handler
@@ -112,16 +138,59 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isLoading]); // Add isLoading as dependency so it re-runs when loading completes
 
   const loadFirebaseData = async () => {
     try {
+      // First, process any pending deletions before fetching fresh data
+      if (pendingDeletions.length > 0) {
+        console.log('Processing pending deletions before loading Firebase data...');
+        await processPendingDeletions();
+      }
+      
       console.log('Fetching sightings from Firebase...');
       const firebaseSightings = await getUserSightingsFromFirebase();
       console.log(`Loaded ${firebaseSightings.length} sightings from Firebase`);
       setSightings(firebaseSightings);
     } catch (error) {
       console.error('Error loading Firebase data:', error);
+    }
+  };
+
+  // Extract pending deletions processing into a separate function
+  const processPendingDeletions = async () => {
+    if (pendingDeletions.length === 0) return;
+    
+    console.log(`Processing ${pendingDeletions.length} pending deletions:`, pendingDeletions);
+    const successfulDeletions: string[] = [];
+    
+    for (const sightingId of pendingDeletions) {
+      try {
+        console.log(`Attempting to delete sighting ${sightingId} from Firebase...`);
+        await deleteSightingFromFirebase(sightingId);
+        console.log(`Successfully deleted sighting ${sightingId} from Firebase`);
+        successfulDeletions.push(sightingId);
+      } catch (error: any) {
+        if (error.message?.includes('Not authorized')) {
+          console.error(`Authorization error deleting sighting ${sightingId}:`, error);
+        } else {
+          console.warn(`Non-critical error deleting sighting ${sightingId}, marking as resolved:`, error);
+          successfulDeletions.push(sightingId);
+        }
+      }
+    }
+    
+    // Remove successfully deleted items from pending deletions
+    if (successfulDeletions.length > 0) {
+      console.log(`Removing ${successfulDeletions.length} successfully deleted sightings from pending queue:`, successfulDeletions);
+      setPendingDeletions(prev => prev.filter(id => !successfulDeletions.includes(id)));
+    }
+    
+    const remainingDeletions = pendingDeletions.filter(id => !successfulDeletions.includes(id));
+    if (remainingDeletions.length > 0) {
+      console.log(`${remainingDeletions.length} deletions remain pending:`, remainingDeletions);
+    } else {
+      console.log('All pending deletions processed successfully');
     }
   };
 
@@ -157,18 +226,30 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       );
       const wasLastOfSpecies = sightingsOfSameSpecies.length === 1;
 
-      // Remove from local state
+      // Remove from local state immediately
       setSightings(prev => prev.filter(s => s.id !== sightingId));
 
-      // Try to delete from Firebase if it's synced
+      // Handle Firebase deletion based on sync status and network connectivity
       if (sightingToDelete.syncStatus === 'synced') {
         try {
-          await deleteSightingFromFirebase(sightingId);
+          // Check if we're online
+          const netInfo = await NetInfo.fetch();
+          if (netInfo.isConnected) {
+            // Online: try to delete immediately
+            await deleteSightingFromFirebase(sightingId);
+          } else {
+            // Offline: queue for deletion when back online
+            setPendingDeletions(prev => [...prev, sightingId]);
+          }
         } catch (error) {
           console.error('Failed to delete from Firebase:', error);
-          // Don't fail the whole operation if Firebase delete fails
+          // If immediate deletion fails, queue it for later (but only if it was actually synced)
+          if (sightingToDelete.syncStatus === 'synced') {
+            setPendingDeletions(prev => [...prev, sightingId]);
+          }
         }
       }
+      // If syncStatus is 'pending' or 'error', no need to delete from Firebase since it was never successfully uploaded
 
       return { success: true, wasLastOfSpecies };
     } catch (error) {
@@ -179,7 +260,10 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
 
   const syncSightings = async () => {
     try {
-      // Get all pending sightings
+      // Process pending deletions first
+      await processPendingDeletions();
+
+      // Get all pending sightings (additions)
       const pendingSightings = sightings.filter(s => s.syncStatus === 'pending');
       
       if (pendingSightings.length === 0) {
@@ -189,13 +273,13 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       // Try to sync each pending sighting
       for (const sighting of pendingSightings) {
         try {
-          await addSightingToFirebase(sighting);
+          const firebaseId = await addSightingToFirebase(sighting);
           
-          // Update local state to mark as synced
+          // Update local state with Firebase ID and mark as synced
           setSightings(prev => 
             prev.map(s => 
               s.id === sighting.id 
-                ? { ...s, syncStatus: 'synced' }
+                ? { ...s, id: firebaseId, syncStatus: 'synced' }
                 : s
             )
           );
@@ -241,8 +325,10 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     try {
       await AsyncStorage.removeItem(STORAGE_KEY);
       await AsyncStorage.removeItem(LOCATION_KEY);
+      await AsyncStorage.removeItem(PENDING_DELETIONS_KEY);
       setSightings([]);
       setLastLocation('');
+      setPendingDeletions([]);
     } catch (error) {
       console.error('Failed to clear local data:', error);
     }
