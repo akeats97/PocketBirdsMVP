@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { birdNames } from '../../constants/birdNames';
 import { useSightings } from '../context/SightingsContext';
 import { pickImage, uploadPhoto } from '../services/photoService';
@@ -24,6 +24,7 @@ export default function AddSightingScreen() {
   const notesInputRef = useRef<TextInput>(null);
   const locationInputRef = useRef<TextInput>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const slideAnim = useRef(new Animated.Value(-100)).current;
 
   // Handle keyboard appearance
   useEffect(() => {
@@ -146,10 +147,24 @@ export default function AddSightingScreen() {
     setDate(new Date());
     setPhotoUri(null);
 
+    // Show success popup with animation
     setShowSuccess(true);
-    setTimeout(() => {
+    Animated.sequence([
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2000),
+      Animated.timing(slideAnim, {
+        toValue: -100,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
       setShowSuccess(false);
-    }, 2000);
+      slideAnim.setValue(-100);
+    });
   };
 
   const handleOutsidePress = () => {
@@ -165,6 +180,23 @@ export default function AddSightingScreen() {
       style={{ flex: 1 }}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
+      {/* Success Popup */}
+      {showSuccess && (
+        <Animated.View 
+          style={[
+            styles.successPopup,
+            {
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          <View style={styles.successPopupContent}>
+            <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+            <Text style={styles.successPopupText}>Sighting logged successfully!</Text>
+          </View>
+        </Animated.View>
+      )}
+
       <Pressable 
         style={{ flex: 1 }} 
         onPress={handleOutsidePress}
@@ -291,13 +323,6 @@ export default function AddSightingScreen() {
               <Pressable style={styles.saveButton} onPress={handleSave}>
                 <Text style={styles.saveButtonText}>Save Sighting</Text>
               </Pressable>
-
-              {showSuccess && (
-                <View style={styles.successMessage}>
-                  <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                  <Text style={styles.successText}>Sighting logged successfully!</Text>
-                </View>
-              )}
             </View>
           </View>
         </ScrollView>
@@ -405,20 +430,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  successMessage: {
+  successPopup: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    left: 16,
+    right: 16,
+    zIndex: 1000,
+    elevation: 10,
+  },
+  successPopupContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: '#E8F5E9',
-    borderRadius: 8,
+    padding: 16,
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
   },
-  successText: {
-    color: '#2E7D32',
+  successPopupText: {
+    color: '#fff',
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   photoButton: {
     width: '100%',
