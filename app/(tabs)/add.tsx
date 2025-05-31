@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
 import { birdNames } from '../../constants/birdNames';
 import { useSightings } from '../context/SightingsContext';
 import { pickImage, uploadPhoto } from '../services/photoService';
@@ -151,6 +151,13 @@ export default function AddSightingScreen() {
     // Set whether this is a new species and show success popup with animation
     setIsNewSpecies(newSpeciesDetected);
     setShowSuccess(true);
+    
+    // Trigger a gentle vibration if it's a new species
+    if (newSpeciesDetected) {
+      // Celebratory vibration pattern: short-pause-short-pause-longer
+      Vibration.vibrate([0, 150, 100, 150, 100, 300]);
+    }
+    
     Animated.sequence([
       Animated.timing(slideAnim, {
         toValue: 0,
