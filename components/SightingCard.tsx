@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSightings } from '../app/context/SightingsContext';
 import { Sighting } from '../app/types';
 
 interface SightingCardProps {
@@ -9,7 +10,9 @@ interface SightingCardProps {
 
 export default function SightingCard({ sighting }: SightingCardProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const { deleteSighting } = useSightings();
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', {
@@ -19,8 +22,37 @@ export default function SightingCard({ sighting }: SightingCardProps) {
     });
   };
 
+  const handleLongPress = () => {
+    setIsDeleteModalVisible(true);
+  };
+
+  const handleDelete = async () => {
+    try {
+      const result = await deleteSighting(sighting.id);
+      if (result.success) {
+        setIsDeleteModalVisible(false);
+        if (result.wasLastOfSpecies) {
+          Alert.alert(
+            'Species Removed',
+            `${sighting.birdName} has been removed from your species list as this was your only sighting.`,
+            [{ text: 'OK' }]
+          );
+        }
+      } else {
+        Alert.alert('Error', 'Failed to delete sighting. Please try again.');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to delete sighting. Please try again.');
+    }
+  };
+
   return (
-    <View style={styles.card}>
+    <TouchableOpacity 
+      style={styles.card}
+      onLongPress={handleLongPress}
+      delayLongPress={500}
+      activeOpacity={0.9}
+    >
       {sighting.photoUrl && (
         <TouchableOpacity onPress={() => setIsModalVisible(true)}>
           <Image 
@@ -88,7 +120,45 @@ export default function SightingCard({ sighting }: SightingCardProps) {
           )}
         </View>
       </Modal>
-    </View>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        visible={isDeleteModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsDeleteModalVisible(false)}
+      >
+        <View style={styles.deleteModalContainer}>
+          <View style={styles.deleteModalContent}>
+            <View style={styles.deleteIconContainer}>
+              <Ionicons name="trash" size={48} color="#FF4444" />
+            </View>
+            <Text style={styles.deleteModalTitle}>Delete Sighting?</Text>
+            <Text style={styles.deleteModalText}>
+              Are you sure you want to delete this sighting of {sighting.birdName}?
+            </Text>
+            <Text style={styles.deleteModalSubtext}>
+              This action cannot be undone.
+            </Text>
+            
+            <View style={styles.deleteModalButtons}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setIsDeleteModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.deleteButton}
+                onPress={handleDelete}
+              >
+                <Text style={styles.deleteButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </TouchableOpacity>
   );
 }
 
@@ -178,5 +248,70 @@ const styles = StyleSheet.create({
   },
   modalPhotoImage: {
     flex: 1,
+  },
+  deleteModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  deleteModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    maxWidth: 320,
+    width: '100%',
+  },
+  deleteIconContainer: {
+    marginBottom: 16,
+  },
+  deleteModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  deleteModalText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  deleteModalSubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  deleteModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  cancelButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  deleteButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#FF4444',
+    alignItems: 'center',
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
 }); 

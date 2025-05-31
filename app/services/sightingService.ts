@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { Sighting } from '../types';
 
@@ -104,10 +104,39 @@ export async function updateSightingInFirebase(sighting: Sighting): Promise<void
   }
 }
 
+// Delete a sighting from Firebase
+export async function deleteSightingFromFirebase(sightingId: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  
+  if (!currentUser) {
+    throw new Error('User must be logged in to delete a sighting');
+  }
+  
+  try {
+    const sightingRef = doc(db, 'sightings', sightingId);
+    const sightingDoc = await getDoc(sightingRef);
+    
+    if (!sightingDoc.exists()) {
+      throw new Error('Sighting not found in Firebase');
+    }
+    
+    const data = sightingDoc.data();
+    if (data.userId !== currentUser.uid) {
+      throw new Error('Not authorized to delete this sighting');
+    }
+    
+    await deleteDoc(sightingRef);
+  } catch (error) {
+    console.error('Error deleting sighting from Firebase:', error);
+    throw error;
+  }
+}
+
 const sightingService = {
   addSightingToFirebase,
   getUserSightingsFromFirebase,
-  updateSightingInFirebase
+  updateSightingInFirebase,
+  deleteSightingFromFirebase
 };
 
 export default sightingService; 

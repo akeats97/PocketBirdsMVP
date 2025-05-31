@@ -3,13 +3,14 @@ import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth } from '../../config/firebaseConfig';
-import { addSightingToFirebase, getUserSightingsFromFirebase } from '../services/sightingService';
+import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase } from '../services/sightingService';
 import { Sighting } from '../types';
 
 interface SightingsContextType {
   sightings: Sighting[];
   lastLocation: string;
   addSighting: (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => boolean;
+  deleteSighting: (sightingId: string) => Promise<{ success: boolean; wasLastOfSpecies: boolean }>;
   syncSightings: () => Promise<void>;
   clearLocalData: () => Promise<void>;
 }
@@ -142,6 +143,40 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     return isNewSpecies;
   };
 
+  const deleteSighting = async (sightingId: string): Promise<{ success: boolean; wasLastOfSpecies: boolean }> => {
+    try {
+      // Find the sighting to delete
+      const sightingToDelete = sightings.find(s => s.id === sightingId);
+      if (!sightingToDelete) {
+        return { success: false, wasLastOfSpecies: false };
+      }
+
+      // Check if this is the last sighting of this species
+      const sightingsOfSameSpecies = sightings.filter(s => 
+        s.birdName.toLowerCase() === sightingToDelete.birdName.toLowerCase()
+      );
+      const wasLastOfSpecies = sightingsOfSameSpecies.length === 1;
+
+      // Remove from local state
+      setSightings(prev => prev.filter(s => s.id !== sightingId));
+
+      // Try to delete from Firebase if it's synced
+      if (sightingToDelete.syncStatus === 'synced') {
+        try {
+          await deleteSightingFromFirebase(sightingId);
+        } catch (error) {
+          console.error('Failed to delete from Firebase:', error);
+          // Don't fail the whole operation if Firebase delete fails
+        }
+      }
+
+      return { success: true, wasLastOfSpecies };
+    } catch (error) {
+      console.error('Error deleting sighting:', error);
+      return { success: false, wasLastOfSpecies: false };
+    }
+  };
+
   const syncSightings = async () => {
     try {
       // Get all pending sightings
@@ -214,7 +249,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, syncSightings, clearLocalData }}>
+    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, deleteSighting, syncSightings, clearLocalData }}>
       {children}
     </SightingsContext.Provider>
   );
