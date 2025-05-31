@@ -9,6 +9,7 @@ import { UserProfile, followUser, isFollowing, searchUsers, unfollowUser } from 
 // Define search result user type with following status
 interface SearchResultUser extends UserProfile {
   isFollowing?: boolean;
+  notificationsEnabled?: boolean;
 }
 
 export default function FriendsScreen() {
@@ -22,6 +23,7 @@ export default function FriendsScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [notificationPreferences, setNotificationPreferences] = useState<Record<string, boolean>>({});
   
   // Filter friends based on search query
   const filteredFriends = useMemo(() => {
@@ -81,7 +83,8 @@ export default function FriendsScreen() {
             console.log(`User ${user.username} follow status: ${following ? 'Following' : 'Not following'}`);
             return {
               ...user,
-              isFollowing: following
+              isFollowing: following,
+              notificationsEnabled: notificationPreferences[user.uid] || false
             };
           })
         );
@@ -150,6 +153,22 @@ export default function FriendsScreen() {
     } finally {
       setIsRefreshing(false);
     }
+  };
+
+  const handleNotificationToggle = (userId: string) => {
+    setNotificationPreferences(prev => ({
+      ...prev,
+      [userId]: !prev[userId]
+    }));
+    
+    // Update search results to reflect the change
+    setSearchResults(prev => 
+      prev.map(user => 
+        user.uid === userId 
+          ? { ...user, notificationsEnabled: !notificationPreferences[userId] }
+          : user
+      )
+    );
   };
 
   return (
@@ -227,16 +246,28 @@ export default function FriendsScreen() {
               data={filteredFriends}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={styles.friendItem}
-                  onPress={() => {
-                    setSearchQuery(item.name);
-                    setShowFriendsList(false);
-                  }}
-                >
-                  <Ionicons name="person-circle-outline" size={24} color="#4A90E2" />
-                  <Text style={styles.friendName}>{item.name}</Text>
-                </TouchableOpacity>
+                <View style={styles.friendItem}>
+                  <TouchableOpacity 
+                    style={styles.friendItemContent}
+                    onPress={() => {
+                      setSearchQuery(item.name);
+                      setShowFriendsList(false);
+                    }}
+                  >
+                    <Ionicons name="person-circle-outline" size={24} color="#4A90E2" />
+                    <Text style={styles.friendName}>{item.name}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.bellButton}
+                    onPress={() => handleNotificationToggle(item.id)}
+                  >
+                    <Ionicons 
+                      name={notificationPreferences[item.id] ? "notifications" : "notifications-outline"} 
+                      size={18} 
+                      color={notificationPreferences[item.id] ? "#FFD700" : "#999"} 
+                    />
+                  </TouchableOpacity>
+                </View>
               )}
               ListEmptyComponent={
                 <Text style={styles.emptyText}>
@@ -346,22 +377,36 @@ export default function FriendsScreen() {
                           <Ionicons name="person-circle-outline" size={40} color="#4A90E2" />
                           <Text style={styles.username}>{item.username}</Text>
                         </View>
-                        <TouchableOpacity
-                          style={[
-                            styles.followButton,
-                            item.isFollowing && styles.followingButton
-                          ]}
-                          onPress={() => handleFollowAction(item)}
-                          disabled={actionInProgress === item.uid}
-                        >
-                          {actionInProgress === item.uid ? (
-                            <ActivityIndicator size="small" color="white" />
-                          ) : (
-                            <Text style={styles.followButtonText}>
-                              {item.isFollowing ? 'Following' : 'Follow'}
-                            </Text>
+                        <View style={styles.actionButtons}>
+                          {item.isFollowing && (
+                            <TouchableOpacity
+                              style={styles.bellButton}
+                              onPress={() => handleNotificationToggle(item.uid)}
+                            >
+                              <Ionicons 
+                                name={item.notificationsEnabled ? "notifications" : "notifications-outline"} 
+                                size={20} 
+                                color={item.notificationsEnabled ? "#FFD700" : "#999"} 
+                              />
+                            </TouchableOpacity>
                           )}
-                        </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.followButton,
+                              item.isFollowing && styles.followingButton
+                            ]}
+                            onPress={() => handleFollowAction(item)}
+                            disabled={actionInProgress === item.uid}
+                          >
+                            {actionInProgress === item.uid ? (
+                              <ActivityIndicator size="small" color="white" />
+                            ) : (
+                              <Text style={styles.followButtonText}>
+                                {item.isFollowing ? 'Following' : 'Follow'}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     )}
                     ListEmptyComponent={
@@ -460,9 +505,15 @@ const styles = StyleSheet.create({
   friendItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eeeeee',
+  },
+  friendItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   friendName: {
     fontSize: 16,
@@ -578,6 +629,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 12,
     fontWeight: '500',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bellButton: {
+    padding: 4,
+    marginRight: 8,
   },
   followButton: {
     backgroundColor: '#4A90E2',
