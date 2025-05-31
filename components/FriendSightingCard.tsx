@@ -5,9 +5,10 @@ import { FriendSighting } from '../app/types';
 
 interface FriendSightingCardProps {
   sighting: FriendSighting;
+  isFirstSighting?: boolean;
 }
 
-export default function FriendSightingCard({ sighting }: FriendSightingCardProps) {
+export default function FriendSightingCard({ sighting, isFirstSighting }: FriendSightingCardProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -58,6 +59,13 @@ export default function FriendSightingCard({ sighting }: FriendSightingCardProps
           </Text>
         )}
       </View>
+
+      {/* First sighting badge positioned in bottom right corner */}
+      {isFirstSighting && (
+        <View style={styles.firstSightingBadge}>
+          <Text style={styles.firstSightingText}>1st</Text>
+        </View>
+      )}
 
       <Modal
         visible={isModalVisible}
@@ -191,5 +199,22 @@ const styles = StyleSheet.create({
   },
   modalPhotoImage: {
     flex: 1,
+  },
+  firstSightingBadge: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    backgroundColor: '#FFD700',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  firstSightingText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#8B4513',
+    textAlign: 'center',
   },
 }); 

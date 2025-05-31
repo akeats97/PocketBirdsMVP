@@ -13,6 +13,7 @@ interface SightingsContextType {
   deleteSighting: (sightingId: string) => Promise<{ success: boolean; wasLastOfSpecies: boolean }>;
   syncSightings: () => Promise<void>;
   clearLocalData: () => Promise<void>;
+  isNewSpeciesForUser: (birdName: string, sightingDate: Date) => boolean;
 }
 
 const SightingsContext = createContext<SightingsContextType | undefined>(undefined);
@@ -334,8 +335,31 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const isNewSpeciesForUser = (birdName: string, sightingDate: Date): boolean => {
+    // Find all sightings of this species
+    const speciesSightings = sightings.filter(s => 
+      s.birdName.toLowerCase() === birdName.toLowerCase()
+    );
+    
+    // If no sightings of this species, it's definitely new
+    if (speciesSightings.length === 0) {
+      return true;
+    }
+    
+    // Sort sightings by date to find the earliest one
+    const sortedSightings = speciesSightings.sort((a, b) => a.date.getTime() - b.date.getTime());
+    const earliestSighting = sortedSightings[0];
+    
+    // Check if the given sighting date matches the earliest sighting date
+    // (within the same day to account for time differences)
+    const sightingDateOnly = new Date(sightingDate.getFullYear(), sightingDate.getMonth(), sightingDate.getDate());
+    const earliestDateOnly = new Date(earliestSighting.date.getFullYear(), earliestSighting.date.getMonth(), earliestSighting.date.getDate());
+    
+    return sightingDateOnly.getTime() === earliestDateOnly.getTime();
+  };
+
   return (
-    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, deleteSighting, syncSightings, clearLocalData }}>
+    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, deleteSighting, syncSightings, clearLocalData, isNewSpeciesForUser }}>
       {children}
     </SightingsContext.Provider>
   );

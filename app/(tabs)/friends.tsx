@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
 import { useFriendSightings } from '../context/FriendSightingsContext';
+import { useSightings } from '../context/SightingsContext';
 import { UserProfile, followUser, isFollowing, searchUsers, unfollowUser } from '../services/userService';
 
 // Define search result user type with following status
@@ -11,7 +12,8 @@ interface SearchResultUser extends UserProfile {
 }
 
 export default function FriendsScreen() {
-  const { friendSightings, friends, filterByFriend, isLoadingFriends, refreshFriends } = useFriendSightings();
+  const { friendSightings, friends, filterByFriend, isLoadingFriends, refreshFriends, isFirstSightingForFriend } = useFriendSightings();
+  const { isNewSpeciesForUser } = useSightings();
   const [searchQuery, setSearchQuery] = useState('');
   const [showFriendsList, setShowFriendsList] = useState(false);
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
@@ -275,7 +277,12 @@ export default function FriendsScreen() {
         <FlatList
           data={filteredSightings}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <FriendSightingCard sighting={item} />}
+          renderItem={({ item }) => (
+            <FriendSightingCard 
+              sighting={item} 
+              isFirstSighting={isFirstSightingForFriend(item.friendName, item.birdName, item.date)}
+            />
+          )}
           contentContainerStyle={styles.listContent}
           refreshing={isRefreshing}
           onRefresh={handleRefresh}

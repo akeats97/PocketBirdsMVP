@@ -4,7 +4,7 @@ import SightingCard from '../../components/SightingCard';
 import { useSightings } from '../context/SightingsContext';
 
 export default function LogScreen() {
-  const { sightings } = useSightings();
+  const { sightings, isNewSpeciesForUser } = useSightings();
 
   return (
     <View style={styles.container}>
@@ -18,7 +18,12 @@ export default function LogScreen() {
         <FlatList
           data={sightings}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <SightingCard sighting={item} />}
+          renderItem={({ item }) => (
+            <SightingCard 
+              sighting={item} 
+              isNewSpecies={isNewSpeciesForUser(item.birdName, item.date)}
+            />
+          )}
           contentContainerStyle={styles.listContent}
         />
       )}

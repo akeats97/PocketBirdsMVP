@@ -6,9 +6,10 @@ import { Sighting } from '../app/types';
 
 interface SightingCardProps {
   sighting: Sighting;
+  isNewSpecies?: boolean;
 }
 
-export default function SightingCard({ sighting }: SightingCardProps) {
+export default function SightingCard({ sighting, isNewSpecies }: SightingCardProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -89,6 +90,13 @@ export default function SightingCard({ sighting }: SightingCardProps) {
           </Text>
         )}
       </View>
+
+      {/* First sighting badge positioned in bottom right corner */}
+      {isNewSpecies && (
+        <View style={styles.firstSightingBadge}>
+          <Text style={styles.firstSightingText}>1st</Text>
+        </View>
+      )}
 
       {/* Full-screen photo modal */}
       <Modal
@@ -317,5 +325,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  firstSightingBadge: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    backgroundColor: '#FFD700',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  firstSightingText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#8B4513',
+    textAlign: 'center',
   },
 }); 

@@ -83,6 +83,7 @@ interface FriendSightingsContextType {
   filterByFriend: (friendName: string) => FriendSighting[];
   isLoadingFriends: boolean;
   refreshFriends: () => Promise<void>;
+  isFirstSightingForFriend: (friendName: string, birdName: string, sightingDate: Date) => boolean;
 }
 
 const FriendSightingsContext = createContext<FriendSightingsContextType | undefined>(undefined);
@@ -228,6 +229,30 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
     return filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
   };
 
+  const isFirstSightingForFriend = (friendName: string, birdName: string, sightingDate: Date): boolean => {
+    // Get all sightings from this friend for this bird species
+    const friendSightingsForSpecies = friendSightings.filter(sighting => 
+      sighting.friendName === friendName && 
+      sighting.birdName.toLowerCase() === birdName.toLowerCase()
+    );
+    
+    // If no sightings found, this shouldn't happen but return false as fallback
+    if (friendSightingsForSpecies.length === 0) {
+      return false;
+    }
+    
+    // Sort by date to find the earliest sighting
+    const sortedSightings = friendSightingsForSpecies.sort((a, b) => a.date.getTime() - b.date.getTime());
+    const firstSighting = sortedSightings[0];
+    
+    // Check if the provided sighting date matches the first sighting date
+    // Using same-day comparison to handle potential time differences
+    const sightingDateStr = sightingDate.toDateString();
+    const firstSightingDateStr = firstSighting.date.toDateString();
+    
+    return sightingDateStr === firstSightingDateStr;
+  };
+
   return (
     <FriendSightingsContext.Provider 
       value={{ 
@@ -235,7 +260,8 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
         friends, 
         filterByFriend,
         isLoadingFriends,
-        refreshFriends
+        refreshFriends,
+        isFirstSightingForFriend
       }}
     >
       {children}
