@@ -12,6 +12,15 @@
       "distribution": "internal"
     },
     "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "production-aab": {
+      "android": {
+        "buildType": "app-bundle"
+      },
       "autoIncrement": true
     },
     "apk": {

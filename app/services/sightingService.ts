@@ -25,7 +25,16 @@ export async function addSightingToFirebase(sighting: Sighting): Promise<string>
       createdAt: Timestamp.now()
     };
     
+    console.log(`🦅 Adding sighting to Firebase: ${sighting.birdName} at ${sighting.location}`);
+    console.log(`👤 User ID: ${currentUser.uid}`);
+    console.log(`📱 Cloud Function will trigger to send notifications to followers...`);
+    
     const docRef = await addDoc(sightingsRef, firestoreSighting);
+    
+    console.log(`✅ Sighting added successfully! Document ID: ${docRef.id}`);
+    console.log(`🔔 Cloud Function 'onSightingAdded' should now trigger for document: sightings/${docRef.id}`);
+    console.log(`📨 Notifications will be sent to all users who follow ${currentUser.uid}`);
+    
     return docRef.id; // Return the Firebase-generated ID
   } catch (error) {
     console.error('Error adding sighting to Firebase:', error);

@@ -236,9 +236,47 @@ export async function getUserByUsername(username: string): Promise<User | null> 
   }
 }
 
+// Add this function to save push token
+export async function savePushToken(pushToken: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('User must be logged in to save push token');
+  }
+
+  try {
+    const userRef = doc(db, 'users', currentUser.uid);
+    await setDoc(userRef, {
+      expoPushToken: pushToken,
+      lastTokenUpdate: new Date(),
+    }, { merge: true }); // merge: true means update existing document or create if doesn't exist
+    console.log('Push token saved to database');
+  } catch (error) {
+    console.error('Error saving push token:', error);
+    throw error;
+  }
+}
+
+// Add this function to get user's push token
+export async function getUserPushToken(userId: string): Promise<string | null> {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    
+    if (userDoc.exists()) {
+      return userDoc.data().expoPushToken || null;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting user push token:', error);
+    return null;
+  }
+}
+
 const userService = {
   getUserByUsername,
-  getFollowing
+  getFollowing,
+  savePushToken,
+  getUserPushToken
 };
 
 export default userService; 

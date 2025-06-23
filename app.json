@@ -21,7 +21,15 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.akeats97.pocketbirds",
-      "permissions": ["READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"]
+      "permissions": [
+        "READ_EXTERNAL_STORAGE", 
+        "WRITE_EXTERNAL_STORAGE",
+        "POST_NOTIFICATIONS",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK"
+      ],
+      "useNextNotificationsApi": true
     },
     "web": {
       "bundler": "metro",
@@ -43,6 +51,14 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow PocketBirds to access your photos to attach them to bird sightings."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#4A90E2",
+          "sounds": ["./assets/sounds/notification.wav"]
         }
       ]
     ],
