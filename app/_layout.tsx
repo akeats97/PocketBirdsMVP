@@ -120,10 +120,11 @@ function AuthenticatedApp() {
       />
       <SafeAreaView style={{ flex: 1 }}>
         <Stack>
-          <Stack.Screen 
-            name="(tabs)" 
-            options={{ 
+          <Stack.Screen
+            name="(tabs)"
+            options={{
               headerShown: true,
+              headerBackVisible: false,
               title: 'Pocket Birds v0.5',
               headerTitleStyle: {
                 fontSize: 20,
