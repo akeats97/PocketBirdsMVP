@@ -80,7 +80,10 @@ function AuthenticatedApp() {
         const token = await notificationService.registerForPushNotificationsAsync();
         if (token) {
           await savePushToken(token);
-          console.log('Push token saved');
+          console.log('Push token saved:', token);
+          Alert.alert('Notifications', `Token registered successfully.`);
+        } else {
+          Alert.alert('Notifications', 'Token registration returned null — check permissions.');
         }
         
         // Set up notification response handler
@@ -96,8 +99,9 @@ function AuthenticatedApp() {
         });
         
         return subscription;
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error registering for notifications:', error);
+        Alert.alert('Notification Error', error?.message || String(error));
       }
     };
 
