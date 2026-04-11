@@ -12,7 +12,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { auth } from '../config/firebaseConfig';
 import FriendSightingsProvider from './context/FriendSightingsContext';
 import { SightingsProvider, useSightings } from './context/SightingsContext';
-import Index from './index';
+import LoginScreen from '../components/LoginScreen';
 import { notificationService } from './services/notificationService';
 import { savePushToken } from './services/userService';
 
@@ -219,7 +219,7 @@ export default function RootLayout() {
                 translucent={true}
               />
               <SafeAreaView style={{ flex: 1 }}>
-                <Index />
+                <LoginScreen />
               </SafeAreaView>
             </ThemeProvider>
           )}
