@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "854699399919",
+    "project_id": "pocketbirds",
+    "storage_bucket": "pocketbirds.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:854699399919:android:873baebdb8e890fccf591a",
+        "android_client_info": {
+          "package_name": "com.akeats97.pocketbirds"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKGi1CliKDE9fhji_zGHjQM8hBH8iXUec"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
