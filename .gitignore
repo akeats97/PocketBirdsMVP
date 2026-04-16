@@ -36,9 +36,6 @@ yarn-error.*
 # Play Store service account key
 google-play-service-account.json
 
-# Firebase config (contains API keys, don't commit)
-google-services.json
-
 # typescript
 *.tsbuildinfo
 
