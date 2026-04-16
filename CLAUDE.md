@@ -86,6 +86,22 @@ Run these from `/Users/alexkeats/Desktop/PocketBirds4/`.
 
 ---
 
+## Push Notification Status (as of Apr 16 2026)
+Notifications are partially working. Full history in project memory.
+
+- **Cloud Function (`onSightingAdded`):** Deployed and triggering correctly on new sightings
+- **Token registration:** Fixed in v14 (Thorntail) — both Alex and Victoria now save tokens on app open
+- **Delivery:** Still broken as of end of Apr 16 session. Expo push service returns `InvalidCredentials` when trying to forward to FCM. FCM V1 service account key uploaded to expo.dev at ~3:17 PM — not yet confirmed working due to likely propagation delay. **Next session: log a sighting and check Cloud Function logs to see if delivery succeeds.**
+
+To query Firestore with admin access:
+```bash
+cd /Users/alexkeats/Desktop/PocketBirds4/functions
+GOOGLE_APPLICATION_CREDENTIALS=~/Downloads/pocketbirds-firebase-adminsdk-fbsvc-19e23de9d2.json node -e "..."
+```
+Service account key: `~/Downloads/pocketbirds-firebase-adminsdk-fbsvc-19e23de9d2.json`
+
+---
+
 ## Notable Details
 - Login screen tagline: "please don't put birds in your pockets"
 - Error messages have personality ("nice try guy, go again")
