@@ -78,6 +78,14 @@ Run these from `/Users/alexkeats/Desktop/PocketBirds4/`.
 
 ---
 
+## Android / Native Build Notes
+- This is a **bare workflow** Expo app — there is a real `android/` directory. Expo's managed workflow assumptions do NOT apply.
+- `google-services.json` must live at `android/app/google-services.json` (not project root). The `app.json` `googleServicesFile` field is ignored when an `android/` directory is present.
+- The `com.google.gms.google-services` Gradle plugin must be applied explicitly: classpath in `android/build.gradle`, plugin in `android/app/build.gradle`.
+- The app uses the **Firebase JS SDK** (not `@react-native-firebase`) for Firestore and Auth. `google-services.json` is only needed for the native FCM layer used by `expo-notifications`.
+
+---
+
 ## Notable Details
 - Login screen tagline: "please don't put birds in your pockets"
 - Error messages have personality ("nice try guy, go again")
