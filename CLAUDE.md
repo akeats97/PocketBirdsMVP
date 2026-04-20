@@ -74,7 +74,50 @@ Run these from `/Users/alexkeats/Desktop/PocketBirds4/`.
 ## Workflow
 - Commit after every meaningful change
 - Build + submit to Play Store once a batch of changes is ready
-- Current git branch: `push_notifs`
+- Current git branch: `master` (push_notifs merged Apr 19 2026)
+
+---
+
+## 🚨 Active Blocker: Play Store Keystore Mismatch (as of Apr 19 2026, end of session)
+
+**Status:** Build v15 "Sheartail" succeeded but `eas submit` **failed** with a signing key mismatch. We cannot ship to Play Store until this is resolved.
+
+**Root cause (likely):** During the FCM V1 debugging session, when credentials were cleared from the Expo dashboard, the original upload keystore was unlinked/deleted along with the FCM key. EAS then auto-generated a new keystore for the v15 build, which Play Store rejects because it doesn't match the upload key Google Play has on file.
+
+**The keys:**
+- **AAB was signed with (new, auto-generated):** SHA-1 `9F:80:48:66:0E:82:8F:1B:85:6D:1D:9B:3A:C5:0F:55:2A:CA:6C:85` (EAS "Build Credentials Mwm5hIy734", created ~10:37 PM Apr 19)
+- **Play Store expects:** SHA-1 `F4:D0:DD:2D:6D:C6:CE:5C:CB:FE:B2:C4:FD:EA:0D:63:7D:90:61:8F`
+- **Previously-seen EAS keystore (in screenshot before the reset):** SHA-1 started `F2:C9...` ending `B4:30`. Does NOT match Play Store's expected either. May have been a secondary/intermediate keystore.
+
+**What's no longer on EAS:** The old "Build Credentials VxuWsd7D-O" entry (alias `cc0ef95ade44f9166a80a815bb07e0a7`) — the CLI now shows only the new `Mwm5hIy734` entry.
+
+**What's NOT locally available:** No `.jks`, `.keystore`, or `credentials.json` found anywhere in the project or `~/Downloads/` (besides the throwaway `android/app/debug.keystore`).
+
+### Next session: start here
+
+1. **Check Google Play Console app signing state.** Go to <https://play.google.com/console> → select PocketBirds → left nav → **Setup** → **App integrity** → **App signing**. Report back:
+   - Is Play App Signing enabled?
+   - What's the **app signing key certificate** SHA-1?
+   - What's the **upload key certificate** SHA-1? (should be `F4:D0...61:8F`)
+   - Is there a **"Request upload key reset"** button?
+
+2. **Check release history.** Play Console → **Testing** → **Internal testing** → **Releases** tab. What's the highest versionCode that was actually *accepted* (not rejected)? User thinks the Play Store listing was never fully set up — if NO build has ever been accepted, Google may not have locked in an upload key yet and we'd have more flexibility.
+
+### Likely recovery paths (pick based on Play Console findings)
+
+- **Path A — Upload key never locked in:** If no build has been accepted into Play Console and the upload key isn't set, we can just rebuild with the current (new) keystore and submit; Play will accept it as the first upload key.
+- **Path B — Upload key reset via Play Console:** If there's a "Request upload key reset" option, submit a PEM-encoded certificate from the new keystore. ~48 hour turnaround, but doable without Google Support.
+- **Path C — Recover the original keystore:** Unlikely — it's not on EAS and not locally. Worth one more check of old Expo dashboard history before giving up.
+- **Path D — Google Play Support ticket:** Last resort. Slow (~days) but they can reset the upload key.
+
+### Uncommitted at end of session
+- `release-names.csv` has dates added for Thorntail (Apr 16) and Sheartail (Apr 19). Committable but not blocking.
+- Untracked: `.claude/`, `functions/app.json` — leave alone (local tooling / unknown origin).
+
+### What IS working end of session
+- Push notifications fully functional (both warm + cold-start nav to Friends tab, priority:high delivery, FCM V1 credentials).
+- Build succeeded — the AAB `v9xEA9PRMaBm8S1vVxpwYX.aab` exists on EAS servers, just can't be uploaded to Play Store with the current keystore.
+- master branch is at `3632a12`, push_notifs fully merged.
 
 ---
 
