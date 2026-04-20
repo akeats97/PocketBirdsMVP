@@ -123,6 +123,8 @@ exports.onSightingAdded = onDocumentCreated('sightings/{sightingId}', async (eve
       return {
         to: pushToken,
         sound: 'default',
+        priority: 'high',
+        channelId: 'default',
         title: `🐦 ${username} spotted a bird!`,
         body: `${sighting.birdName} at ${sighting.location}`,
         data: {
