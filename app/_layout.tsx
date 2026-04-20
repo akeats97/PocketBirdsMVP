@@ -3,7 +3,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { signOut, User } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
@@ -86,18 +86,26 @@ function AuthenticatedApp() {
           Alert.alert('Notifications', 'Token registration returned null — check permissions.');
         }
         
-        // Set up notification response handler
+        // Set up notification response handler (fires when app is warm)
         const subscription = Notifications.addNotificationResponseReceivedListener(response => {
           const data = response.notification.request.content.data;
           console.log('Notification tapped:', data);
-          
+
           if (data.type === 'friend_sighting') {
-            // Navigate to friend sightings tab
-            console.log('Friend sighting notification tapped');
-            // You can add navigation logic here later
+            router.push('/(tabs)/friends');
           }
         });
-        
+
+        // Handle cold-start: if the app was launched by tapping a notification
+        const lastResponse = await Notifications.getLastNotificationResponseAsync();
+        if (lastResponse) {
+          const data = lastResponse.notification.request.content.data;
+          console.log('Notification tapped (cold start):', data);
+          if (data.type === 'friend_sighting') {
+            router.push('/(tabs)/friends');
+          }
+        }
+
         return subscription;
       } catch (error: any) {
         console.error('Error registering for notifications:', error);
