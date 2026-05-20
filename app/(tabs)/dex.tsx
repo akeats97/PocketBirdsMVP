@@ -6,7 +6,7 @@ import { useSightings } from '../context/SightingsContext';
 
 export default function DexScreen() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [showOnlySeen, setShowOnlySeen] = useState(false);
+  const [showOnlySeen, setShowOnlySeen] = useState(true);
   const { sightings } = useSightings();
   const [stats, setStats] = useState({
     totalSightings: 0,
@@ -38,15 +38,19 @@ export default function DexScreen() {
     // Update with actual sightings data
     sightings.forEach(sighting => {
       const birdName = sighting.birdName;
-      if (data[birdName]) {
-        data[birdName].timesSeen += 1;
-        data[birdName].seen = true;
-        
-        // Update last seen date if it's more recent
-        const sightingDate = sighting.date.toISOString().split('T')[0];
-        if (!data[birdName].lastSeen || sightingDate > data[birdName].lastSeen) {
-          data[birdName].lastSeen = sightingDate;
-        }
+      // If a sighting uses a name not in the canonical list (e.g. legacy naming
+      // before a taxonomy update), still surface it in the Dex so user data is
+      // never hidden.
+      if (!data[birdName]) {
+        data[birdName] = { timesSeen: 0, lastSeen: '', seen: false };
+      }
+      data[birdName].timesSeen += 1;
+      data[birdName].seen = true;
+
+      // Update last seen date if it's more recent
+      const sightingDate = sighting.date.toISOString().split('T')[0];
+      if (!data[birdName].lastSeen || sightingDate > data[birdName].lastSeen) {
+        data[birdName].lastSeen = sightingDate;
       }
     });
 

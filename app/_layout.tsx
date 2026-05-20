@@ -10,6 +10,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, SafeAreaView, StatusBar, TouchableOpacity } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { auth } from '../config/firebaseConfig';
+import { CURRENT_RELEASE_NAME } from '../constants/release';
 import FriendSightingsProvider from './context/FriendSightingsContext';
 import { SightingsProvider, useSightings } from './context/SightingsContext';
 import LoginScreen from '../components/LoginScreen';
@@ -133,7 +134,7 @@ function AuthenticatedApp() {
             options={{
               headerShown: true,
               headerBackVisible: false,
-              title: 'Pocket Birds v0.5',
+              title: `Pocket Birds ${CURRENT_RELEASE_NAME}`,
               headerTitleStyle: {
                 fontSize: 20,
                 fontWeight: '600',

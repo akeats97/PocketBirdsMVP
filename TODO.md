@@ -4,11 +4,29 @@ Backlog of feature ideas. Add context to each as we scope them.
 
 ## UX polish
 
-- [ ] **Save Sighting loading indicator.** Photo upload takes a few seconds — the button should show a spinner / disabled state / progress cue while the upload is in flight so the user knows something is happening and doesn't tap again.
+- [x] ~~Save Sighting loading indicator.~~ Resolved differently: the Add Sighting flow is now fully offline-first. Save writes to local state instantly, and the photo upload happens during sync. No spinner needed because there's no wait.
 
-- [ ] **Bird Dex default filter = seen only.** Currently shows all species (seen + unseen). Default filter should be "seen only" so the dex opens as a personal collection. Unseen view still available via toggle.
+- [x] ~~Bird Dex default filter = seen only.~~ Done.
 
-- [ ] **App title should reflect current version codename.** Today the header/title shows "Pocket Birds v0.5" (hardcoded). Should auto-populate from the version's codename (e.g. v14 = Thorntail → title "Pocket Birds Thorntail"). Needs: a source of truth for codename per versionCode, probably a constant map or read from EAS build metadata.
+- [x] ~~App title should reflect current version codename.~~ Done. Constant lives at `constants/release.ts`. Bump it each release.
+
+## Data / Content
+
+- [ ] **Expand bird list to global (~11,000 species).** Current `constants/birdNames.ts` is ~2,186 names, Americas-focused. Use the **IOC World Bird List** as the source — free for commercial use with attribution. Steps:
+  1. Download the IOC Master List XLSX from <https://www.worldbirdnames.org/new/ioc-lists/master-list-2/>.
+  2. Write a one-off Node script to parse it into the flat string array shape of `birdNames.ts`.
+  3. Add attribution line somewhere visible (suggested: Bird Dex footer). Format: `"Bird names from the IOC World Bird List (vX.X) — worldbirdnames.org"`.
+  4. **Companion UX fixes** (needed because 5x'ing the list will hurt search):
+     - Cap suggestions list in `app/(tabs)/add.tsx` to ~20 visible matches.
+     - Prioritize prefix / whole-word matches over substring matches when ranking suggestions.
+
+- [x] ~~One-time legacy name migration.~~ Done in May 2026. 60 sightings across alex+victoria+Ray renamed to IOC v15.2 equivalents in Firestore. Splits resolved as American/Northern/Eastern/Myrtle (NA defaults).
+
+## Offline / sync
+
+- [ ] **Persist picked photos to a stable location.** The local `photoPath` from `expo-image-picker` lives in the OS cache directory, which can be cleared between app launches. If a user picks a photo offline and the OS clears the cache before sync runs, the photo upload will fail. Fix: copy the picked image to a permanent app-data location (e.g. via `expo-file-system`) and store that path on the sighting. Currently the file usually survives long enough, but it's not guaranteed.
+
+- [ ] **Surface pending/error sync state on each sighting card.** Today the `syncStatus` field exists on every sighting but isn't displayed anywhere. A subtle indicator (e.g. small cloud-with-arrow icon for "uploading", warning icon for "error") would help users know which sightings haven't been backed up yet. Especially relevant after a long birding session offline.
 
 ## Notifications
 

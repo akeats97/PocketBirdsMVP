@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { User } from 'firebase/auth';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { auth } from '../../config/firebaseConfig';
 import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase } from '../services/sightingService';
+import { uploadPhoto } from '../services/photoService';
 import { Sighting } from '../types';
 
 interface SightingsContextType {
@@ -27,6 +28,10 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   const [lastLocation, setLastLocation] = useState('');
   const [pendingDeletions, setPendingDeletions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // NetInfo can fire multiple "online" events in quick succession when wifi
+  // toggles on (isConnected, isInternetReachable, type all change). Without
+  // this guard, syncSightings runs in parallel and creates duplicate docs.
+  const isSyncingRef = useRef(false);
 
   // Load sightings data from AsyncStorage on startup
   useEffect(() => {
@@ -260,12 +265,16 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   const syncSightings = async () => {
+    if (isSyncingRef.current) {
+      return;
+    }
+    isSyncingRef.current = true;
     try {
       // Process pending deletions first
       await processPendingDeletions();
 
-      // Get all pending sightings (additions)
-      const pendingSightings = sightings.filter(s => s.syncStatus === 'pending');
+      // Get all sightings that need to be synced (pending OR previously errored)
+      const pendingSightings = sightings.filter(s => s.syncStatus === 'pending' || s.syncStatus === 'error');
       
       if (pendingSightings.length === 0) {
         return;
@@ -274,23 +283,33 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       // Try to sync each pending sighting
       for (const sighting of pendingSightings) {
         try {
-          const firebaseId = await addSightingToFirebase(sighting);
-          
-          // Update local state with Firebase ID and mark as synced
-          setSightings(prev => 
-            prev.map(s => 
-              s.id === sighting.id 
-                ? { ...s, id: firebaseId, syncStatus: 'synced' }
+          // If a local photo was attached but never uploaded, upload it now
+          // and stamp the resulting URL onto the sighting before creating the
+          // Firestore doc.
+          let toSync = sighting;
+          if (sighting.photoPath && !sighting.photoUrl) {
+            const photoUrl = await uploadPhoto(sighting.photoPath, sighting.id);
+            toSync = { ...sighting, photoUrl };
+          }
+
+          const firebaseId = await addSightingToFirebase(toSync);
+
+          // Update local state with Firebase ID, photoUrl (if uploaded), and
+          // mark as synced.
+          setSightings(prev =>
+            prev.map(s =>
+              s.id === sighting.id
+                ? { ...s, id: firebaseId, photoUrl: toSync.photoUrl, syncStatus: 'synced' }
                 : s
             )
           );
         } catch (error) {
           console.error(`Failed to sync sighting ${sighting.id}:`, error);
-          
-          // Mark as error in local state
-          setSightings(prev => 
-            prev.map(s => 
-              s.id === sighting.id 
+
+          // Mark as error in local state. Will be retried on next sync.
+          setSightings(prev =>
+            prev.map(s =>
+              s.id === sighting.id
                 ? { ...s, syncStatus: 'error' }
                 : s
             )
@@ -319,6 +338,8 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       });
     } catch (error) {
       console.error('Error during sync:', error);
+    } finally {
+      isSyncingRef.current = false;
     }
   };
 

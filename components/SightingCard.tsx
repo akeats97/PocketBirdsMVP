@@ -15,6 +15,10 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const { deleteSighting } = useSightings();
 
+  // Prefer the Firebase-hosted URL once available, but fall back to the local
+  // URI so photos taken offline render before the upload finishes syncing.
+  const photoSource = sighting.photoUrl || sighting.photoPath;
+
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
@@ -58,21 +62,21 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
       delayLongPress={500}
       activeOpacity={0.9}
     >
-      {sighting.photoUrl && (
+      {photoSource && (
         <TouchableOpacity onPress={() => setIsModalVisible(true)}>
-          <Image 
-            source={{ uri: sighting.photoUrl }} 
+          <Image
+            source={{ uri: photoSource }}
             style={styles.photo}
             resizeMode="cover"
           />
         </TouchableOpacity>
       )}
-      
+
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.birdNameContainer}>
             <Text style={styles.birdName}>{sighting.birdName}</Text>
-            {sighting.photoUrl && (
+            {photoSource && (
               <Ionicons name="camera" size={16} color="#4CAF50" style={styles.cameraIcon} />
             )}
           </View>
@@ -113,7 +117,7 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
             <Ionicons name="close" size={30} color="#fff" />
           </TouchableOpacity>
           
-          {sighting.photoUrl && (
+          {photoSource && (
             <ScrollView
               style={styles.modalPhoto}
               contentContainerStyle={styles.modalPhotoContainer}
@@ -123,8 +127,8 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
               showsVerticalScrollIndicator={false}
               bouncesZoom={true}
             >
-              <Image 
-                source={{ uri: sighting.photoUrl }} 
+              <Image
+                source={{ uri: photoSource }}
                 style={[styles.modalPhotoImage, { width: screenWidth, height: screenHeight }]}
                 resizeMode="contain"
               />

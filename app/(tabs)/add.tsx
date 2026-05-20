@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
 import { birdNames } from '../../constants/birdNames';
 import { useSightings } from '../context/SightingsContext';
-import { pickImage, uploadPhoto } from '../services/photoService';
+import { pickImage } from '../services/photoService';
 
 export default function AddSightingScreen() {
   const navigation = useNavigation();
@@ -82,12 +82,28 @@ export default function AddSightingScreen() {
     setLocation(lastLocation);
   }, [lastLocation]);
 
-  // Filter bird names based on search query
+  // Filter bird names based on search query.
+  // Rank: prefix match > word-start match > substring match. Cap to 20.
   useEffect(() => {
     if (searchQuery.length > 0 && searchQuery !== selectedBird) {
-      const filtered = birdNames
-        .filter(name => name.toLowerCase().includes(searchQuery.toLowerCase()));
-      setSuggestions(filtered);
+      const q = searchQuery.toLowerCase();
+      const scored: { name: string; score: number }[] = [];
+      for (const name of birdNames) {
+        const lower = name.toLowerCase();
+        let score = -1;
+        if (lower.startsWith(q)) {
+          score = 0;
+        } else if (lower.includes(' ' + q) || lower.includes('-' + q)) {
+          score = 1;
+        } else if (lower.includes(q)) {
+          score = 2;
+        }
+        if (score >= 0) {
+          scored.push({ name, score });
+        }
+      }
+      scored.sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
+      setSuggestions(scored.slice(0, 20).map(s => s.name));
     } else {
       setSuggestions([]);
     }
@@ -111,7 +127,7 @@ export default function AddSightingScreen() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!selectedBird) {
       Alert.alert('Error', 'Please select a bird');
       return;
@@ -121,23 +137,15 @@ export default function AddSightingScreen() {
       return;
     }
 
-    let photoUrl;
-
-    if (photoUri) {
-      try {
-        photoUrl = await uploadPhoto(photoUri, Date.now().toString());
-      } catch (error) {
-        Alert.alert('Error', 'Failed to upload photo');
-        return;
-      }
-    }
-
+    // Save locally first. If a photo was picked, just store its local URI as
+    // photoPath. The sync layer uploads to Firebase Storage when online and
+    // populates photoUrl. This way offline saves don't get lost.
     const newSpeciesDetected = addSighting({
       birdName: selectedBird,
       location,
       date,
       notes: notes || undefined,
-      photoUrl,
+      photoUrl: undefined,
       photoPath: photoUri || undefined,
     });
 
