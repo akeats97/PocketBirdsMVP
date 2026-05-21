@@ -14,7 +14,7 @@ export async function addSightingToFirebase(sighting: Sighting): Promise<string>
     const sightingsRef = collection(db, 'sightings');
     
     // Convert Date objects to Firestore Timestamps
-    const firestoreSighting = {
+    const firestoreSighting: any = {
       userId: currentUser.uid,
       birdName: sighting.birdName,
       location: sighting.location,
@@ -24,6 +24,17 @@ export async function addSightingToFirebase(sighting: Sighting): Promise<string>
       lastModified: Timestamp.fromDate(sighting.lastModified),
       createdAt: Timestamp.now()
     };
+
+    if (sighting.coordinates) {
+      firestoreSighting.coordinates = {
+        latitude: sighting.coordinates.latitude,
+        longitude: sighting.coordinates.longitude,
+        accuracy: sighting.coordinates.accuracy ?? null,
+        capturedAt: sighting.coordinates.capturedAt
+          ? Timestamp.fromDate(sighting.coordinates.capturedAt)
+          : null,
+      };
+    }
     
     console.log(`🦅 Adding sighting to Firebase: ${sighting.birdName} at ${sighting.location}`);
     console.log(`👤 User ID: ${currentUser.uid}`);
@@ -62,7 +73,7 @@ export async function getUserSightingsFromFirebase(): Promise<Sighting[]> {
     
     return querySnapshot.docs.map(doc => {
       const data = doc.data();
-      return {
+      const sighting: Sighting = {
         id: doc.id,
         birdName: data.birdName,
         location: data.location,
@@ -70,8 +81,17 @@ export async function getUserSightingsFromFirebase(): Promise<Sighting[]> {
         notes: data.notes,
         photoUrl: data.photoUrl || undefined,
         lastModified: data.lastModified.toDate(),
-        syncStatus: 'synced' // All sightings from Firebase are synced
+        syncStatus: 'synced'
       };
+      if (data.coordinates) {
+        sighting.coordinates = {
+          latitude: data.coordinates.latitude,
+          longitude: data.coordinates.longitude,
+          accuracy: data.coordinates.accuracy ?? undefined,
+          capturedAt: data.coordinates.capturedAt?.toDate?.() ?? undefined,
+        };
+      }
+      return sighting;
     });
   } catch (error) {
     console.error('Error getting user sightings from Firebase:', error);
@@ -100,14 +120,25 @@ export async function updateSightingInFirebase(sighting: Sighting): Promise<void
       throw new Error('Not authorized to update this sighting');
     }
     
-    await updateDoc(sightingRef, {
+    const updatePayload: any = {
       birdName: sighting.birdName,
       location: sighting.location,
       date: Timestamp.fromDate(sighting.date),
       notes: sighting.notes || '',
       photoUrl: sighting.photoUrl || null,
       lastModified: Timestamp.fromDate(sighting.lastModified)
-    });
+    };
+    if (sighting.coordinates) {
+      updatePayload.coordinates = {
+        latitude: sighting.coordinates.latitude,
+        longitude: sighting.coordinates.longitude,
+        accuracy: sighting.coordinates.accuracy ?? null,
+        capturedAt: sighting.coordinates.capturedAt
+          ? Timestamp.fromDate(sighting.coordinates.capturedAt)
+          : null,
+      };
+    }
+    await updateDoc(sightingRef, updatePayload);
   } catch (error) {
     console.error('Error updating sighting in Firebase:', error);
     throw error;

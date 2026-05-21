@@ -78,6 +78,38 @@ Run these from `/Users/alexkeats/Desktop/PocketBirds4/`.
 
 ---
 
+## Dev Loop (testing changes on Alex's phone)
+
+For iterating on code changes, use the **Expo dev client on Alex's phone**, NOT the Play Store flow. The Play Store flow is for shipping releases to Alex and Victoria; the dev client is "save code on laptop, see it on phone in 2 seconds."
+
+### One-time setup (already done as of May 20 2026)
+- `expo-dev-client` is installed (in `package.json` deps).
+- The dev-client APK has been built via EAS and installed on Alex's phone. It appears as a separate app icon alongside the normal Play Store version of PocketBirds.
+
+### Daily loop
+1. Phone and laptop must be on the **same wifi**.
+2. From `/Users/alexkeats/Desktop/PocketBirds4/`, run:
+   ```bash
+   npx expo start --dev-client
+   ```
+3. Open the dev-client PocketBirds app on Alex's phone. It should auto-discover the running Metro server under "Development servers." Tap the project to connect.
+4. If auto-discovery fails, tap "Enter URL manually" and type `http://<Mac LAN IP>:8081` (get the IP with `ipconfig getifaddr en0`).
+5. JS bundle loads (10-20s first time, faster after). Edit code on laptop, hit save, phone hot-reloads in a second or two. If hot reload misses a change, shake the phone (or pull the notification shade) and tap **Reload**.
+
+### Important caveats
+- **Dev hits PRODUCTION Firebase.** There is no separate dev environment. Any sighting saved in the dev app writes to the real `pocketbirds` Firestore and fires real push notifications to Victoria. Be intentional about Save taps when testing. For pure UI testing, tap up to but not past Save, or use a junk test account.
+- **Airplane mode is fine AFTER the bundle loads.** Once JS is running on the phone, you can toggle airplane mode to test offline behavior. But you need wifi back on to load any new code changes from Metro.
+- **If you change `package.json` (add a new native module), you must rebuild the dev-client APK:**
+  ```bash
+  eas build --profile development --platform android --non-interactive
+  ```
+  Then uninstall the previous dev app on the phone and install the new one from the EAS install link.
+
+### Why this exists
+PocketBirds is a bare workflow app, so Expo Go cannot run it (native Firebase + FCM). Before this dev loop existed, the only way to test on phone was to do a full `eas build --profile production` + `eas submit` round trip, which took 15-30 min per iteration. The dev client gets that down to seconds.
+
+---
+
 ## 🚨 Active Blocker: Play Store Keystore Mismatch (as of Apr 19 2026, end of session)
 
 **Status:** Build v15 "Sheartail" succeeded but `eas submit` **failed** with a signing key mismatch. We cannot ship to Play Store until this is resolved.

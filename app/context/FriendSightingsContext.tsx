@@ -159,7 +159,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
             const userId = data.userId;
             
             if (usernameMap[userId]) {
-              sightings.push({
+              const friendSighting: FriendSighting = {
                 id: doc.id,
                 birdName: data.birdName,
                 location: data.location,
@@ -169,7 +169,16 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
                 syncStatus: 'synced' as const,
                 lastModified: data.lastModified ? data.lastModified.toDate() : data.date.toDate(),
                 photoUrl: data.photoUrl || undefined,
-              });
+              };
+              if (data.coordinates) {
+                friendSighting.coordinates = {
+                  latitude: data.coordinates.latitude,
+                  longitude: data.coordinates.longitude,
+                  accuracy: data.coordinates.accuracy ?? undefined,
+                  capturedAt: data.coordinates.capturedAt?.toDate?.() ?? undefined,
+                };
+              }
+              sightings.push(friendSighting);
             }
           });
           

@@ -23,12 +23,14 @@
       "edgeToEdgeEnabled": true,
       "package": "com.akeats97.pocketbirds",
       "permissions": [
-        "READ_EXTERNAL_STORAGE", 
+        "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "POST_NOTIFICATIONS",
         "VIBRATE",
         "RECEIVE_BOOT_COMPLETED",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
       ],
       "useNextNotificationsApi": true
     },
@@ -60,7 +62,15 @@
           "icon": "./assets/images/icon.png",
           "color": "#4A90E2"
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "PocketBirds uses your location to tag where you spotted each bird."
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

@@ -6,6 +6,9 @@ import { Alert, Animated, Dimensions, Image, Keyboard, KeyboardAvoidingView, Pla
 import { birdNames } from '../../constants/birdNames';
 import { useSightings } from '../context/SightingsContext';
 import { pickImage } from '../services/photoService';
+import { getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission } from '../services/locationService';
+import { getPlaceCoordinates, getPlacesAutocomplete, PlaceSuggestion } from '../services/placesService';
+import { Coordinates } from '../types';
 
 export default function AddSightingScreen() {
   const navigation = useNavigation();
@@ -13,7 +16,10 @@ export default function AddSightingScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [selectedBird, setSelectedBird] = useState('');
-  const [location, setLocation] = useState(lastLocation);
+  const [location, setLocation] = useState(lastLocation.label);
+  const [locationCoords, setLocationCoords] = useState<Coordinates | undefined>(lastLocation.coordinates);
+  const [placeSuggestions, setPlaceSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [shouldAutocompleteLocation, setShouldAutocompleteLocation] = useState(false);
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -77,10 +83,65 @@ export default function AddSightingScreen() {
     };
   }, []);
 
-  // Update location when lastLocation changes
+  // Update location (label + coords) when lastLocation changes. Pre-fill should
+  // never trigger Places autocomplete, so reset the flag.
   useEffect(() => {
-    setLocation(lastLocation);
+    setLocation(lastLocation.label);
+    setLocationCoords(lastLocation.coordinates);
+    setShouldAutocompleteLocation(false);
+    setPlaceSuggestions([]);
   }, [lastLocation]);
+
+  // Debounced Google Places autocomplete. Only fires when the user has actively
+  // typed into the location field (not on pre-fill, locate button, or
+  // suggestion tap).
+  useEffect(() => {
+    if (!shouldAutocompleteLocation) return;
+    if (!location || location.trim().length < 2) {
+      setPlaceSuggestions([]);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      const results = await getPlacesAutocomplete(location, lastLocation.coordinates);
+      setPlaceSuggestions(results);
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [location, shouldAutocompleteLocation, lastLocation.coordinates]);
+
+  const handleLocationChange = (text: string) => {
+    setLocation(text);
+    // User is editing — clear stale inherited coords. New coords will get
+    // attached only if they tap a suggestion or the locate button.
+    setLocationCoords(undefined);
+    setShouldAutocompleteLocation(true);
+  };
+
+  const handleLocateTap = async () => {
+    let granted = await hasLocationPermission();
+    if (!granted) granted = await requestLocationPermission();
+    if (!granted) return;
+    const result = await getCurrentLocationWithLabel();
+    if (!result) return;
+    setShouldAutocompleteLocation(false);
+    setPlaceSuggestions([]);
+    setLocation(result.label || location);
+    setLocationCoords(result.coordinates);
+  };
+
+  const handlePlaceSuggestionSelect = async (suggestion: PlaceSuggestion) => {
+    setShouldAutocompleteLocation(false);
+    setPlaceSuggestions([]);
+    Keyboard.dismiss();
+    const result = await getPlaceCoordinates(suggestion.placeId);
+    if (result) {
+      setLocation(result.label);
+      setLocationCoords(result.coordinates);
+    } else {
+      // Fall back to the suggestion's description if details fetch fails.
+      setLocation(suggestion.description);
+      setLocationCoords(undefined);
+    }
+  };
 
   // Filter bird names based on search query.
   // Rank: prefix match > word-start match > substring match. Cap to 20.
@@ -147,6 +208,7 @@ export default function AddSightingScreen() {
       notes: notes || undefined,
       photoUrl: undefined,
       photoPath: photoUri || undefined,
+      coordinates: locationCoords,
     });
 
     // Reset form
@@ -187,6 +249,9 @@ export default function AddSightingScreen() {
   const handleOutsidePress = () => {
     if (suggestions.length > 0) {
       setSuggestions([]);
+    }
+    if (placeSuggestions.length > 0) {
+      setPlaceSuggestions([]);
     }
     Keyboard.dismiss();
   };
@@ -305,14 +370,49 @@ export default function AddSightingScreen() {
 
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Location</Text>
-                <TextInput
-                  ref={locationInputRef}
-                  style={styles.input}
-                  value={location}
-                  onChangeText={setLocation}
-                  placeholder="Where did you see it?"
-                  placeholderTextColor="#999"
-                />
+                <View style={styles.locationInputWrapper}>
+                  <TextInput
+                    ref={locationInputRef}
+                    style={[styles.input, styles.locationInput]}
+                    value={location}
+                    onChangeText={handleLocationChange}
+                    placeholder="Where did you see it?"
+                    placeholderTextColor="#999"
+                    onBlur={() => setPlaceSuggestions([])}
+                  />
+                  <TouchableOpacity
+                    style={styles.locateButton}
+                    onPress={handleLocateTap}
+                    accessibilityLabel="Use my current location"
+                  >
+                    <Ionicons name="locate" size={22} color="#4A90E2" />
+                  </TouchableOpacity>
+                </View>
+                {placeSuggestions.length > 0 && (
+                  <View style={styles.suggestionsContainer}>
+                    <ScrollView
+                      style={styles.suggestionsScrollView}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled={true}
+                    >
+                      {placeSuggestions.map((s) => (
+                        <Pressable
+                          key={s.placeId}
+                          style={({ pressed }) => [
+                            styles.suggestionButton,
+                            pressed && { backgroundColor: '#f0f0f0' }
+                          ]}
+                          onPress={() => handlePlaceSuggestionSelect(s)}
+                        >
+                          <Text style={styles.suggestionButtonText}>{s.mainText}</Text>
+                          {s.secondaryText ? (
+                            <Text style={styles.suggestionSecondaryText}>{s.secondaryText}</Text>
+                          ) : null}
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
 
               <View style={styles.inputContainer}>
@@ -433,6 +533,26 @@ const styles = StyleSheet.create({
   suggestionButtonText: {
     fontSize: 16,
     color: '#333',
+  },
+  suggestionSecondaryText: {
+    fontSize: 13,
+    color: '#888',
+    marginTop: 2,
+  },
+  locationInputWrapper: {
+    position: 'relative',
+  },
+  locationInput: {
+    paddingRight: 44,
+  },
+  locateButton: {
+    position: 'absolute',
+    right: 4,
+    top: 0,
+    bottom: 0,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   dateButton: {
     flexDirection: 'row',

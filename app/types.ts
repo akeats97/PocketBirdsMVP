@@ -1,3 +1,10 @@
+export interface Coordinates {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;   // meters
+  capturedAt?: Date;
+}
+
 export interface Sighting {
   id: string;
   birdName: string;
@@ -8,6 +15,7 @@ export interface Sighting {
   lastModified: Date;
   photoUrl?: string;  // URL to the photo in Firebase Storage
   photoPath?: string; // Local path to the photo before upload
+  coordinates?: Coordinates;
 }
 
 export interface FriendSighting extends Sighting {

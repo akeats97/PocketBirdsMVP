@@ -84,7 +84,11 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
         </View>
         
         <View style={styles.locationContainer}>
-          <Ionicons name="location" size={16} color="#666" />
+          <Ionicons
+            name="location"
+            size={16}
+            color={sighting.coordinates ? "#4CAF50" : "#666"}
+          />
           <Text style={styles.location}>{sighting.location}</Text>
         </View>
 

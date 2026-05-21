@@ -5,11 +5,16 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { auth } from '../../config/firebaseConfig';
 import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase } from '../services/sightingService';
 import { uploadPhoto } from '../services/photoService';
-import { Sighting } from '../types';
+import { Coordinates, Sighting } from '../types';
+
+export interface LastLocation {
+  label: string;
+  coordinates?: Coordinates;
+}
 
 interface SightingsContextType {
   sightings: Sighting[];
-  lastLocation: string;
+  lastLocation: LastLocation;
   addSighting: (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => boolean;
   deleteSighting: (sightingId: string) => Promise<{ success: boolean; wasLastOfSpecies: boolean }>;
   syncSightings: () => Promise<void>;
@@ -25,7 +30,7 @@ const PENDING_DELETIONS_KEY = 'pendingDeletions';
 
 export function SightingsProvider({ children }: { children: React.ReactNode }) {
   const [sightings, setSightings] = useState<Sighting[]>([]);
-  const [lastLocation, setLastLocation] = useState('');
+  const [lastLocation, setLastLocation] = useState<LastLocation>({ label: '' });
   const [pendingDeletions, setPendingDeletions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // NetInfo can fire multiple "online" events in quick succession when wifi
@@ -43,17 +48,52 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
         
         if (storedSightings !== null) {
           // Need to parse the dates back to Date objects and add sync status if missing
-          const parsedSightings = JSON.parse(storedSightings).map((sighting: any) => ({
-            ...sighting,
-            date: new Date(sighting.date),
-            lastModified: new Date(sighting.lastModified || sighting.date),
-            syncStatus: sighting.syncStatus || 'pending'
-          }));
+          const parsedSightings = JSON.parse(storedSightings).map((sighting: any) => {
+            const result: Sighting = {
+              ...sighting,
+              date: new Date(sighting.date),
+              lastModified: new Date(sighting.lastModified || sighting.date),
+              syncStatus: sighting.syncStatus || 'pending'
+            };
+            if (sighting.coordinates) {
+              result.coordinates = {
+                ...sighting.coordinates,
+                capturedAt: sighting.coordinates.capturedAt
+                  ? new Date(sighting.coordinates.capturedAt)
+                  : undefined,
+              };
+            }
+            return result;
+          });
           setSightings(parsedSightings);
         }
-        
+
         if (storedLocation !== null) {
-          setLastLocation(storedLocation);
+          // Legacy shape was a plain string; new shape is JSON {label, coordinates?}.
+          // Migrate transparently.
+          let parsed: LastLocation;
+          try {
+            const maybeObj = JSON.parse(storedLocation);
+            if (maybeObj && typeof maybeObj === 'object' && typeof maybeObj.label === 'string') {
+              parsed = {
+                label: maybeObj.label,
+                coordinates: maybeObj.coordinates
+                  ? {
+                      ...maybeObj.coordinates,
+                      capturedAt: maybeObj.coordinates.capturedAt
+                        ? new Date(maybeObj.coordinates.capturedAt)
+                        : undefined,
+                    }
+                  : undefined,
+              };
+            } else {
+              parsed = { label: storedLocation };
+            }
+          } catch {
+            // Not valid JSON — assume legacy bare string.
+            parsed = { label: storedLocation };
+          }
+          setLastLocation(parsed);
         }
 
         if (storedPendingDeletions !== null) {
@@ -88,13 +128,13 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const saveLocation = async () => {
       try {
-        await AsyncStorage.setItem(LOCATION_KEY, lastLocation);
+        await AsyncStorage.setItem(LOCATION_KEY, JSON.stringify(lastLocation));
       } catch (error) {
         console.error('Failed to save location:', error);
       }
     };
 
-    if (!isLoading && lastLocation) {
+    if (!isLoading && lastLocation.label) {
       saveLocation();
     }
   }, [lastLocation, isLoading]);
@@ -213,8 +253,11 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       lastModified: new Date()
     };
     setSightings(prev => [newSighting, ...prev]);
-    setLastLocation(sighting.location);
-    
+    setLastLocation({
+      label: sighting.location,
+      coordinates: sighting.coordinates,
+    });
+
     return isNewSpecies;
   };
 
@@ -349,7 +392,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.removeItem(LOCATION_KEY);
       await AsyncStorage.removeItem(PENDING_DELETIONS_KEY);
       setSightings([]);
-      setLastLocation('');
+      setLastLocation({ label: '' });
       setPendingDeletions([]);
     } catch (error) {
       console.error('Failed to clear local data:', error);
