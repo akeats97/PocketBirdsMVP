@@ -16,6 +16,10 @@ export interface Sighting {
   photoUrl?: string;  // URL to the photo in Firebase Storage
   photoPath?: string; // Local path to the photo before upload
   coordinates?: Coordinates;
+  // Set to the user's unique-species count if THIS sighting crossed a
+  // milestone (e.g. 5, 10, 25, 50, 100, then every 50). Cloud Function
+  // reads this to send a richer push notification to followers.
+  milestoneCrossed?: number;
 }
 
 export interface FriendSighting extends Sighting {

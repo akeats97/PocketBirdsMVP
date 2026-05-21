@@ -16,6 +16,10 @@ Backlog of feature ideas. Add context to each as we scope them.
 
 - [x] ~~One-time legacy name migration.~~ Done in May 2026. 60 sightings across alex+victoria+Ray renamed to IOC v15.2 equivalents in Firestore. Splits resolved as American/Northern/Eastern/Myrtle (NA defaults).
 
+## Copy / Content
+
+- [ ] **Tweak milestone taglines to be more teasing/personal.** Lines live in `app/constants/milestones.ts` (`milestoneTagline`). The "150 species? Jeez, what a nerd!" tone is the target. Other milestones (5, 10, 25, 50, 100, 200, 250, 500, 1000, plus the generic fallback for the rest) currently lean straight-celebratory — punch them up later.
+
 ## Bugs / cleanup
 
 - [ ] **Firebase data loads multiple times on app start.** Observed in Metro logs during May 20 session: `Loaded 310 sightings from Firebase` printed 4-5 times after a single app open. Likely cause: the `useEffect` in `SightingsContext.tsx` that subscribes to `auth.onAuthStateChanged` has `[isLoading]` as a dependency, so it re-subscribes when isLoading flips, and the auth listener fires its callback again. Wasted Firestore reads — not user-visible but burns reads on each app start. Worth flattening to a single load.

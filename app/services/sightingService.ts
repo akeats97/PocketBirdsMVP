@@ -35,7 +35,11 @@ export async function addSightingToFirebase(sighting: Sighting): Promise<string>
           : null,
       };
     }
-    
+
+    if (typeof sighting.milestoneCrossed === 'number') {
+      firestoreSighting.milestoneCrossed = sighting.milestoneCrossed;
+    }
+
     console.log(`🦅 Adding sighting to Firebase: ${sighting.birdName} at ${sighting.location}`);
     console.log(`👤 User ID: ${currentUser.uid}`);
     console.log(`📱 Cloud Function will trigger to send notifications to followers...`);

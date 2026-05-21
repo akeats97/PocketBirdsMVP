@@ -36,6 +36,12 @@ admin.initializeApp();
 
 const expo = new Expo();
 
+function ordinalSuffix(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
+
 exports.onSightingAdded = onDocumentCreated('sightings/{sightingId}', async (event) => {
   const sighting = event.data.data();
   const sightingId = event.params.sightingId;
@@ -113,26 +119,42 @@ exports.onSightingAdded = onDocumentCreated('sightings/{sightingId}', async (eve
     
     console.log(`Sending notifications to ${pushTokens.length} followers`);
     
+    // If this save crossed a species-count milestone, swap in a richer
+    // congratulations message so followers feel the moment too.
+    const milestone = typeof sighting.milestoneCrossed === 'number'
+      ? sighting.milestoneCrossed
+      : null;
+
+    const baseTitle = `🐦 ${username} spotted a bird!`;
+    const baseBody = `${sighting.birdName} at ${sighting.location}`;
+    const milestoneTitle = milestone
+      ? `🎉 ${username} hit ${milestone} species!`
+      : null;
+    const milestoneBody = milestone
+      ? `Just logged their ${milestone}${ordinalSuffix(milestone)} species: ${sighting.birdName}`
+      : null;
+
     // Create notification messages
     const messages = pushTokens.map(pushToken => {
       if (!Expo.isExpoPushToken(pushToken)) {
         console.log(`Invalid push token: ${pushToken}`);
         return null;
       }
-      
+
       return {
         to: pushToken,
         sound: 'default',
         priority: 'high',
         channelId: 'default',
-        title: `🐦 ${username} spotted a bird!`,
-        body: `${sighting.birdName} at ${sighting.location}`,
+        title: milestoneTitle || baseTitle,
+        body: milestoneBody || baseBody,
         data: {
-          type: 'friend_sighting',
+          type: milestone ? 'friend_milestone' : 'friend_sighting',
           sightingId: sightingId,
           friendName: username,
           birdName: sighting.birdName,
           location: sighting.location,
+          ...(milestone ? { milestone } : {}),
         },
       };
     }).filter(message => message !== null);

@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
 import { birdNamesAlpha, birdNamesAlphaLower } from '../../constants/birdNamesLower';
+import MilestoneCelebration from '../components/MilestoneCelebration';
 import { useSightings } from '../context/SightingsContext';
 import { pickImage } from '../services/photoService';
 import { getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission } from '../services/locationService';
@@ -26,6 +27,7 @@ export default function AddSightingScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [isNewSpecies, setIsNewSpecies] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const textInputRef = useRef<TextInput>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const notesInputRef = useRef<TextInput>(null);
@@ -214,7 +216,7 @@ export default function AddSightingScreen() {
     // Save locally first. If a photo was picked, just store its local URI as
     // photoPath. The sync layer uploads to Firebase Storage when online and
     // populates photoUrl. This way offline saves don't get lost.
-    const newSpeciesDetected = addSighting({
+    const { isNewSpecies: newSpeciesDetected, milestone } = addSighting({
       birdName: selectedBird,
       location,
       date,
@@ -231,16 +233,21 @@ export default function AddSightingScreen() {
     setDate(new Date());
     setPhotoUri(null);
 
-    // Set whether this is a new species and show success popup with animation
+    // Milestone takes over the celebration UX. Skip the top banner so the two
+    // celebrations don't fight for attention.
+    if (milestone) {
+      setMilestoneCount(milestone);
+      return;
+    }
+
     setIsNewSpecies(newSpeciesDetected);
     setShowSuccess(true);
-    
-    // Trigger a gentle vibration if it's a new species
+
     if (newSpeciesDetected) {
       // Celebratory vibration pattern: short-pause-short-pause-longer
       Vibration.vibrate([0, 150, 100, 150, 100, 300]);
     }
-    
+
     Animated.sequence([
       Animated.timing(slideAnim, {
         toValue: 0,
@@ -270,11 +277,17 @@ export default function AddSightingScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{ flex: 1 }}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
     >
+      <MilestoneCelebration
+        visible={milestoneCount !== null}
+        count={milestoneCount}
+        onDismiss={() => setMilestoneCount(null)}
+      />
+
       {/* Success Popup */}
       {showSuccess && (
         <Animated.View 

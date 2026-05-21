@@ -5,7 +5,13 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { auth } from '../../config/firebaseConfig';
 import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase } from '../services/sightingService';
 import { uploadPhoto } from '../services/photoService';
+import { isMilestone } from '../constants/milestones';
 import { Coordinates, Sighting } from '../types';
+
+export interface AddSightingResult {
+  isNewSpecies: boolean;
+  milestone: number | null; // unique-species count if THIS save crossed a milestone
+}
 
 export interface LastLocation {
   label: string;
@@ -15,7 +21,7 @@ export interface LastLocation {
 interface SightingsContextType {
   sightings: Sighting[];
   lastLocation: LastLocation;
-  addSighting: (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => boolean;
+  addSighting: (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>) => AddSightingResult;
   deleteSighting: (sightingId: string) => Promise<{ success: boolean; wasLastOfSpecies: boolean }>;
   syncSightings: () => Promise<void>;
   clearLocalData: () => Promise<void>;
@@ -240,17 +246,31 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addSighting = (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>): boolean => {
-    // Check if this is a new species
-    const isNewSpecies = !sightings.some(existingSighting => 
+  const addSighting = (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>): AddSightingResult => {
+    // Check if this is a new species (case-insensitive match against existing).
+    const isNewSpecies = !sightings.some(existingSighting =>
       existingSighting.birdName.toLowerCase() === sighting.birdName.toLowerCase()
     );
+
+    // Compute the user's unique-species count AFTER this save and decide
+    // whether it crossed a milestone (5, 10, 25, 50, 100, then every 50).
+    let milestone: number | null = null;
+    if (isNewSpecies) {
+      const uniqueBefore = new Set(
+        sightings.map(s => s.birdName.toLowerCase())
+      ).size;
+      const uniqueAfter = uniqueBefore + 1;
+      if (isMilestone(uniqueAfter)) {
+        milestone = uniqueAfter;
+      }
+    }
 
     const newSighting: Sighting = {
       ...sighting,
       id: Date.now().toString(),
       syncStatus: 'pending',
-      lastModified: new Date()
+      lastModified: new Date(),
+      ...(milestone !== null ? { milestoneCrossed: milestone } : {}),
     };
     setSightings(prev => [newSighting, ...prev]);
     setLastLocation({
@@ -258,7 +278,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       coordinates: sighting.coordinates,
     });
 
-    return isNewSpecies;
+    return { isNewSpecies, milestone };
   };
 
   const deleteSighting = async (sightingId: string): Promise<{ success: boolean; wasLastOfSpecies: boolean }> => {
