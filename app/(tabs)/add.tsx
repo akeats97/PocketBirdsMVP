@@ -304,19 +304,19 @@ export default function AddSightingScreen() {
         </Animated.View>
       )}
 
-      <Pressable 
-        style={{ flex: 1 }} 
-        onPress={handleOutsidePress}
-        android_disableSound={true}
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.container}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 }
+        ]}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={handleOutsidePress}
       >
-        <ScrollView 
-          ref={scrollViewRef}
-          style={styles.container}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 }
-          ]}
-          keyboardShouldPersistTaps="handled"
+        <Pressable
+          onPress={handleOutsidePress}
+          android_disableSound={true}
         >
           <View style={styles.innerContainer}>
             <Text style={styles.title}>Add Sighting</Text>
@@ -430,13 +430,13 @@ export default function AddSightingScreen() {
 
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Photo</Text>
-                <TouchableOpacity 
-                  style={[styles.photoButton, { height: photoUri ? 200 : 80 }]} 
+                <TouchableOpacity
+                  style={[styles.photoButton, { height: photoUri ? 200 : 80 }]}
                   onPress={handleSelectPhoto}
                 >
                   {photoUri ? (
-                    <Image 
-                      source={{ uri: photoUri }} 
+                    <Image
+                      source={{ uri: photoUri }}
                       style={styles.photoPreview}
                     />
                   ) : (
@@ -444,6 +444,16 @@ export default function AddSightingScreen() {
                       <Ionicons name="camera" size={24} color="#666" />
                       <Text style={styles.photoPlaceholderText}>Add Photo</Text>
                     </View>
+                  )}
+                  {photoUri && (
+                    <TouchableOpacity
+                      style={styles.removePhotoButton}
+                      onPress={() => setPhotoUri(null)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityLabel="Remove photo"
+                    >
+                      <Ionicons name="close" size={18} color="#fff" />
+                    </TouchableOpacity>
                   )}
                 </TouchableOpacity>
               </View>
@@ -467,8 +477,8 @@ export default function AddSightingScreen() {
               </Pressable>
             </View>
           </View>
-        </ScrollView>
-      </Pressable>
+        </Pressable>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -482,24 +492,25 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   innerContainer: {
-    padding: 20,
-    paddingBottom: 40, // Add extra padding at the bottom
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   form: {
-    gap: 16,
+    gap: 10,
   },
   inputContainer: {
-    marginBottom: 8,
+    marginBottom: 0,
   },
   label: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 4,
     color: '#333',
   },
   input: {
@@ -511,7 +522,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   notesInput: {
-    height: 80, // Made taller for better usability
+    height: 48,
     textAlignVertical: 'top',
   },
   suggestionsContainer: {
@@ -582,10 +593,10 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: '#4A90E2',
-    padding: 16,
+    padding: 14,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 8,
   },
   saveButtonText: {
     color: '#fff',
@@ -635,7 +646,6 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#f5f5f5',
     borderRadius: 12,
-    marginBottom: 16,
     overflow: 'hidden',
   },
   photoPreview: {
@@ -652,5 +662,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: '#666',
     fontSize: 14,
+  },
+  removePhotoButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 }); 
