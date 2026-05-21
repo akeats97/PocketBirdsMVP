@@ -12,13 +12,7 @@ Backlog of feature ideas. Add context to each as we scope them.
 
 ## Data / Content
 
-- [ ] **Expand bird list to global (~11,000 species).** Current `constants/birdNames.ts` is ~2,186 names, Americas-focused. Use the **IOC World Bird List** as the source — free for commercial use with attribution. Steps:
-  1. Download the IOC Master List XLSX from <https://www.worldbirdnames.org/new/ioc-lists/master-list-2/>.
-  2. Write a one-off Node script to parse it into the flat string array shape of `birdNames.ts`.
-  3. Add attribution line somewhere visible (suggested: Bird Dex footer). Format: `"Bird names from the IOC World Bird List (vX.X) — worldbirdnames.org"`.
-  4. **Companion UX fixes** (needed because 5x'ing the list will hurt search):
-     - Cap suggestions list in `app/(tabs)/add.tsx` to ~20 visible matches.
-     - Prioritize prefix / whole-word matches over substring matches when ranking suggestions.
+- [x] ~~Expand bird list to global (~11,000 species).~~ Done with IOC World Bird List v15.2 (11,227 species). Attribution shown at the bottom of the Bird Dex. Search uses pre-sorted/pre-lowercased arrays + tiered early-exit to stay snappy at 11K entries.
 
 - [x] ~~One-time legacy name migration.~~ Done in May 2026. 60 sightings across alex+victoria+Ray renamed to IOC v15.2 equivalents in Firestore. Splits resolved as American/Northern/Eastern/Myrtle (NA defaults).
 

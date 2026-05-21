@@ -3,7 +3,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
-import { birdNames } from '../../constants/birdNames';
+import { birdNamesAlpha, birdNamesAlphaLower } from '../../constants/birdNamesLower';
 import { useSightings } from '../context/SightingsContext';
 import { pickImage } from '../services/photoService';
 import { getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission } from '../services/locationService';
@@ -143,31 +143,44 @@ export default function AddSightingScreen() {
     }
   };
 
-  // Filter bird names based on search query.
-  // Rank: prefix match > word-start match > substring match. Cap to 20.
+  // Filter bird names based on search query (debounced 100ms to coalesce fast
+  // typing). Rank: prefix > word-start > substring. Cap to 20.
+  // Uses pre-computed lowercase array to avoid string allocations in the loop.
   useEffect(() => {
-    if (searchQuery.length > 0 && searchQuery !== selectedBird) {
-      const q = searchQuery.toLowerCase();
-      const scored: { name: string; score: number }[] = [];
-      for (const name of birdNames) {
-        const lower = name.toLowerCase();
-        let score = -1;
-        if (lower.startsWith(q)) {
-          score = 0;
-        } else if (lower.includes(' ' + q) || lower.includes('-' + q)) {
-          score = 1;
-        } else if (lower.includes(q)) {
-          score = 2;
-        }
-        if (score >= 0) {
-          scored.push({ name, score });
-        }
-      }
-      scored.sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
-      setSuggestions(scored.slice(0, 20).map(s => s.name));
-    } else {
+    if (!searchQuery || searchQuery === selectedBird) {
       setSuggestions([]);
+      return;
     }
+    const handle = setTimeout(() => {
+      const q = searchQuery.toLowerCase();
+      const qSpace = ' ' + q;
+      const qDash = '-' + q;
+      const CAP = 20;
+      const tier0: string[] = [];
+      const tier1: string[] = [];
+      const tier2: string[] = [];
+
+      // Iterate alphabetically-sorted names so each tier collects matches in
+      // alphabetical order naturally — no per-keystroke sort needed.
+      for (let i = 0; i < birdNamesAlpha.length; i++) {
+        const lower = birdNamesAlphaLower[i];
+        if (lower.startsWith(q)) {
+          if (tier0.length < CAP) tier0.push(birdNamesAlpha[i]);
+        } else if (tier0.length < CAP) {
+          // Only bother checking lower tiers if tier 0 still needs fillers.
+          if (lower.includes(qSpace) || lower.includes(qDash)) {
+            if (tier1.length < CAP) tier1.push(birdNamesAlpha[i]);
+          } else if (lower.includes(q)) {
+            if (tier2.length < CAP) tier2.push(birdNamesAlpha[i]);
+          }
+        }
+        // Early exit: once tier 0 is full, no point scanning the rest.
+        if (tier0.length >= CAP) break;
+      }
+
+      setSuggestions([...tier0, ...tier1, ...tier2].slice(0, CAP));
+    }, 100);
+    return () => clearTimeout(handle);
   }, [searchQuery, selectedBird]);
 
   const handleBirdSelect = (bird: string) => {

@@ -151,6 +151,11 @@ export default function DexScreen() {
             </View>
           </View>
         )}
+        ListFooterComponent={
+          <Text style={styles.attribution}>
+            Bird names from the IOC World Bird List (v15.2) — worldbirdnames.org
+          </Text>
+        }
       />
     </View>
   );
@@ -266,5 +271,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#555',
     marginBottom: 4,
+  },
+  attribution: {
+    fontSize: 11,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 16,
   },
 }); 
