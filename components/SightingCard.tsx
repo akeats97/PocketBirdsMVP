@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Alert, Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSightings } from '../app/context/SightingsContext';
 import { Sighting } from '../app/types';
+import { border, palette, radius, recipes, space, type } from '../constants/Colors';
 
 interface SightingCardProps {
   sighting: Sighting;
@@ -15,17 +16,7 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const { deleteSighting } = useSightings();
 
-  // Prefer the Firebase-hosted URL once available, but fall back to the local
-  // URI so photos taken offline render before the upload finishes syncing.
   const photoSource = sighting.photoUrl || sighting.photoPath;
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
 
   const handleLongPress = () => {
     setIsDeleteModalVisible(true);
@@ -44,67 +35,68 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
           );
         }
       } else {
-        // Log error for debugging but don't show user-facing alert
         console.error('Failed to delete sighting - deleteSighting returned false');
         setIsDeleteModalVisible(false);
       }
     } catch (error) {
-      // Log error for debugging but don't show user-facing alert
       console.error('Error in handleDelete:', error);
       setIsDeleteModalVisible(false);
     }
   };
 
   return (
-    <TouchableOpacity 
-      style={styles.card}
-      onLongPress={handleLongPress}
-      delayLongPress={500}
-      activeOpacity={0.9}
-    >
-      {photoSource && (
-        <TouchableOpacity onPress={() => setIsModalVisible(true)}>
-          <Image
-            source={{ uri: photoSource }}
-            style={styles.photo}
-            resizeMode="cover"
-          />
-        </TouchableOpacity>
-      )}
+    <HardShadow style={styles.shadowWrap}>
+      <Pressable
+        style={styles.card}
+        onLongPress={handleLongPress}
+        delayLongPress={500}
+        android_ripple={{ color: 'rgba(0,0,0,0.04)' }}
+      >
+        {/* TODO: IUCN conservation status strip goes here once Wikidata dump exists.
+            See CLAUDE.md "Pending Design Work" and design_handoff_pocket_dex/wikidata-dump.md. */}
 
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.birdNameContainer}>
-            <Text style={styles.birdName}>{sighting.birdName}</Text>
-            {photoSource && (
-              <Ionicons name="camera" size={16} color="#4CAF50" style={styles.cameraIcon} />
+        {photoSource && (
+          <Pressable onPress={() => setIsModalVisible(true)}>
+            <Image
+              source={{ uri: photoSource }}
+              style={styles.photo}
+              resizeMode="cover"
+            />
+          </Pressable>
+        )}
+
+        <View style={styles.body}>
+          <View style={styles.headerRow}>
+            <View style={styles.nameBlock}>
+              <Text style={styles.birdName} numberOfLines={2}>{sighting.birdName}</Text>
+            </View>
+
+            {isNewSpecies && (
+              <View style={recipes.liferBadge}>
+                <Ionicons name="star" size={9} color="#fff" />
+                <Text style={recipes.liferBadgeText}>1ST</Text>
+              </View>
             )}
           </View>
-          <Text style={styles.date}>{formatDate(sighting.date)}</Text>
-        </View>
-        
-        <View style={styles.locationContainer}>
-          <Ionicons
-            name="location"
-            size={16}
-            color={sighting.coordinates ? "#4CAF50" : "#666"}
-          />
-          <Text style={styles.location}>{sighting.location}</Text>
-        </View>
 
-        {sighting.notes && (
-          <Text style={styles.notes} numberOfLines={2}>
-            {sighting.notes}
-          </Text>
-        )}
-      </View>
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <Ionicons
+                name="location"
+                size={12}
+                color={sighting.coordinates ? palette.leaf : palette.muted}
+              />
+              <Text style={styles.metaText} numberOfLines={1}>{sighting.location}</Text>
+            </View>
+            <Text style={styles.metaDivider}>·</Text>
+            <Text style={styles.metaText}>{formatRelativeDate(sighting.date)}</Text>
+          </View>
 
-      {/* First sighting badge positioned in bottom right corner */}
-      {isNewSpecies && (
-        <View style={styles.firstSightingBadge}>
-          <Text style={styles.firstSightingText}>1st</Text>
+          {sighting.notes && (
+            <Text style={styles.notes} numberOfLines={2}>{sighting.notes}</Text>
+          )}
         </View>
-      )}
+      </Pressable>
 
       {/* Full-screen photo modal */}
       <Modal
@@ -114,13 +106,13 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
         onRequestClose={() => setIsModalVisible(false)}
       >
         <View style={styles.modalContainer}>
-          <TouchableOpacity 
+          <Pressable
             style={styles.modalCloseButton}
             onPress={() => setIsModalVisible(false)}
           >
-            <Ionicons name="close" size={30} color="#fff" />
-          </TouchableOpacity>
-          
+            <Ionicons name="close" size={28} color={palette.ink} />
+          </Pressable>
+
           {photoSource && (
             <ScrollView
               style={styles.modalPhoto}
@@ -149,102 +141,149 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
         onRequestClose={() => setIsDeleteModalVisible(false)}
       >
         <View style={styles.deleteModalContainer}>
-          <View style={styles.deleteModalContent}>
-            <View style={styles.deleteIconContainer}>
-              <Ionicons name="trash" size={48} color="#FF4444" />
+          <HardShadow offset={4} borderRadius={radius.card}>
+            <View style={styles.deleteModalContent}>
+              <View style={styles.deleteIconContainer}>
+                <Ionicons name="trash" size={40} color={palette.coral} />
+              </View>
+              <Text style={styles.deleteModalTitle}>Delete sighting?</Text>
+              <Text style={styles.deleteModalText}>
+                Remove this sighting of {sighting.birdName}?
+              </Text>
+              <Text style={styles.deleteModalSubtext}>
+                This can&apos;t be undone.
+              </Text>
+
+              <View style={styles.deleteModalButtons}>
+                <Pressable
+                  style={styles.cancelButton}
+                  onPress={() => setIsDeleteModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.deleteButton}
+                  onPress={handleDelete}
+                >
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </Pressable>
+              </View>
             </View>
-            <Text style={styles.deleteModalTitle}>Delete Sighting?</Text>
-            <Text style={styles.deleteModalText}>
-              Are you sure you want to delete this sighting of {sighting.birdName}?
-            </Text>
-            <Text style={styles.deleteModalSubtext}>
-              This action cannot be undone.
-            </Text>
-            
-            <View style={styles.deleteModalButtons}>
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={() => setIsDeleteModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.deleteButton}
-                onPress={handleDelete}
-              >
-                <Text style={styles.deleteButtonText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          </HardShadow>
         </View>
       </Modal>
-    </TouchableOpacity>
+    </HardShadow>
   );
 }
 
+/**
+ * Hard offset shadow. RN's shadow props can't render a hard, no-blur shadow,
+ * so we stack an absolutely-positioned ink rectangle one layer below the
+ * content. Reserve room for the offset with marginRight + marginBottom.
+ */
+export function HardShadow({
+  children,
+  style,
+  offset = 4,
+  borderRadius = radius.card,
+}: {
+  children: React.ReactNode;
+  style?: any;
+  offset?: number;
+  borderRadius?: number;
+}) {
+  return (
+    <View style={style}>
+      <View style={{ marginRight: offset, marginBottom: offset }}>
+        <View
+          style={{
+            position: 'absolute',
+            top: offset,
+            left: offset,
+            right: -offset,
+            bottom: -offset,
+            backgroundColor: palette.ink,
+            borderRadius,
+          }}
+          pointerEvents="none"
+        />
+        {children}
+      </View>
+    </View>
+  );
+}
+
+function formatRelativeDate(date: Date): string {
+  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) return `${Math.floor(days / 7)} wk ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 const styles = StyleSheet.create({
+  shadowWrap: {
+    marginHorizontal: space.lg,
+    marginVertical: space.sm,
+  },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
+    ...recipes.card,
   },
   photo: {
     width: '100%',
     height: 200,
+    backgroundColor: palette.leafSoft,
   },
-  content: {
-    padding: 16,
+  body: {
+    padding: space.lg,
   },
-  header: {
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    gap: space.sm,
   },
-  birdNameContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  nameBlock: {
+    flex: 1,
+    minWidth: 0,
   },
   birdName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    ...type.h3,
+    color: palette.ink,
+    fontWeight: '700',
   },
-  date: {
-    fontSize: 14,
-    color: '#666',
-  },
-  locationContainer: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: space.sm,
+    marginTop: space.sm,
   },
-  location: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 4,
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 1,
+  },
+  metaText: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    fontWeight: '500',
+  },
+  metaDivider: {
+    color: palette.muted,
   },
   notes: {
-    fontSize: 14,
-    color: '#666',
+    ...type.body,
+    color: palette.inkSoft,
+    marginTop: space.sm,
     fontStyle: 'italic',
   },
-  cameraIcon: {
-    marginLeft: 4,
-  },
+
+  // Photo zoom modal
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.92)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -253,9 +292,13 @@ const styles = StyleSheet.create({
     top: 60,
     right: 20,
     zIndex: 1,
-    padding: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: palette.cream,
+    ...border.thick,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalPhoto: {
     width: '100%',
@@ -269,86 +312,72 @@ const styles = StyleSheet.create({
   modalPhotoImage: {
     flex: 1,
   },
+
+  // Delete confirmation modal
   deleteModalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(26, 36, 23, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: space.xl,
   },
   deleteModalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
+    ...recipes.card,
+    padding: space.xl,
     alignItems: 'center',
     maxWidth: 320,
     width: '100%',
   },
   deleteIconContainer: {
-    marginBottom: 16,
+    marginBottom: space.md,
   },
   deleteModalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+    ...type.h2,
+    color: palette.ink,
+    marginBottom: space.xs,
   },
   deleteModalText: {
-    fontSize: 16,
-    color: '#666',
+    ...type.bodyL,
+    color: palette.ink,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: space.xs,
   },
   deleteModalSubtext: {
-    fontSize: 14,
-    color: '#999',
+    ...type.body,
+    color: palette.inkSoft,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: space.xl,
   },
   deleteModalButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: space.md,
     width: '100%',
   },
   cancelButton: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#f5f5f5',
+    paddingVertical: space.md,
+    borderRadius: radius.input,
+    backgroundColor: palette.cream,
+    ...border.thick,
     alignItems: 'center',
   },
   cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
+    fontFamily: 'SpaceGrotesk_700Bold',
+    fontSize: 15,
+    color: palette.ink,
   },
   deleteButton: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#FF4444',
+    paddingVertical: space.md,
+    borderRadius: radius.input,
+    backgroundColor: palette.coral,
+    ...border.thick,
     alignItems: 'center',
   },
   deleteButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontFamily: 'BricolageGrotesque_700Bold',
+    fontSize: 15,
     color: '#fff',
+    letterSpacing: -0.3,
   },
-  firstSightingBadge: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    backgroundColor: '#FFD700',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  firstSightingText: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#8B4513',
-    textAlign: 'center',
-  },
-}); 
+});

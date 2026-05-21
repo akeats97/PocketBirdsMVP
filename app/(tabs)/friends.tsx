@@ -1,15 +1,38 @@
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
+import { HardShadow } from '../../components/SightingCard';
+import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useSightings } from '../context/SightingsContext';
 import { UserProfile, followUser, isFollowing, searchUsers, unfollowUser } from '../services/userService';
 
-// Define search result user type with following status
 interface SearchResultUser extends UserProfile {
   isFollowing?: boolean;
   notificationsEnabled?: boolean;
+}
+
+const AVATAR_COLORS = [palette.sky, palette.leaf, palette.coral];
+
+function avatarColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
+
+function Avatar({ name, seed, size = 44 }: { name: string; seed: string; size?: number }) {
+  const letter = (name || '?').trim().charAt(0).toUpperCase() || '?';
+  return (
+    <View
+      style={[
+        styles.avatar,
+        { width: size, height: size, borderRadius: 12, backgroundColor: avatarColor(seed) },
+      ]}
+    >
+      <Text style={[styles.avatarLetter, { fontSize: size * 0.46 }]}>{letter}</Text>
+    </View>
+  );
 }
 
 export default function FriendsScreen() {
@@ -24,71 +47,51 @@ export default function FriendsScreen() {
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notificationPreferences, setNotificationPreferences] = useState<Record<string, boolean>>({});
-  
-  // Filter friends based on search query
+
   const filteredFriends = useMemo(() => {
     if (!searchQuery) return friends;
-    return friends.filter(friend => 
+    return friends.filter(friend =>
       friend.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [searchQuery, friends]);
-  
-  // Filter sightings based on selected friend (if any)
+
   const filteredSightings = useMemo(() => {
     return filterByFriend(searchQuery);
   }, [searchQuery, filterByFriend]);
 
-  // Calculate stats for selected friend
   const friendStats = useMemo(() => {
     if (!searchQuery) return null;
-    
-    const friendSightings = filterByFriend(searchQuery);
-    const totalSightings = friendSightings.length;
-    const uniqueSpecies = new Set(friendSightings.map(sighting => sighting.birdName)).size;
-    
-    return {
-      totalSightings,
-      uniqueSpecies
-    };
+    const sightings = filterByFriend(searchQuery);
+    const totalSightings = sightings.length;
+    const uniqueSpecies = new Set(sightings.map(sighting => sighting.birdName)).size;
+    return { totalSightings, uniqueSpecies };
   }, [searchQuery, filterByFriend]);
 
-  const openSearchModal = () => {
-    setIsSearchModalVisible(true);
-  };
+  const openSearchModal = () => setIsSearchModalVisible(true);
 
   const closeSearchModal = () => {
     setIsSearchModalVisible(false);
     setModalSearchQuery('');
     setSearchResults([]);
-    
-    // Refresh friends list when modal closes to show any new follows
     refreshFriends();
   };
 
   const handleSearchUsers = async (text: string) => {
     setModalSearchQuery(text);
-    
     if (text.length >= 2) {
       setIsSearching(true);
-      console.log(`Starting search for username: "${text}"`);
       try {
-        // Get users that match the search query
         const results = await searchUsers(text);
-        console.log(`Search returned ${results.length} results`, results);
-        
-        // Check following status for each user
         const resultsWithFollowing = await Promise.all(
           results.map(async (user) => {
             const following = await isFollowing(user.uid);
-            console.log(`User ${user.username} follow status: ${following ? 'Following' : 'Not following'}`);
             return {
               ...user,
               isFollowing: following,
-              notificationsEnabled: notificationPreferences[user.uid] || false
+              notificationsEnabled: notificationPreferences[user.uid] || false,
             };
           })
         );
-        
         setSearchResults(resultsWithFollowing);
       } catch (error) {
         console.error('Error searching users:', error);
@@ -97,53 +100,29 @@ export default function FriendsScreen() {
         setIsSearching(false);
       }
     } else {
-      console.log('Search query too short, clearing results');
       setSearchResults([]);
     }
   };
 
   const handleFollowAction = async (user: SearchResultUser) => {
     if (actionInProgress === user.uid) return;
-    
     setActionInProgress(user.uid);
     try {
       if (user.isFollowing) {
-        // Unfollow the user
         await unfollowUser(user.uid);
-        
-        // Update local state
-        setSearchResults(prev => 
-          prev.map(u => 
-            u.uid === user.uid 
-              ? { ...u, isFollowing: false } 
-              : u
-          )
-        );
+        setSearchResults(prev => prev.map(u => u.uid === user.uid ? { ...u, isFollowing: false } : u));
       } else {
-        // Follow the user
         await followUser(user.uid);
-        
-        // Update local state
-        setSearchResults(prev => 
-          prev.map(u => 
-            u.uid === user.uid 
-              ? { ...u, isFollowing: true } 
-              : u
-          )
-        );
+        setSearchResults(prev => prev.map(u => u.uid === user.uid ? { ...u, isFollowing: true } : u));
       }
     } catch (error) {
       console.error('Error following/unfollowing user:', error);
-      Alert.alert(
-        'Error', 
-        `Failed to ${user.isFollowing ? 'unfollow' : 'follow'} user. Please try again.`
-      );
+      Alert.alert('Error', `Failed to ${user.isFollowing ? 'unfollow' : 'follow'} user. Please try again.`);
     } finally {
       setActionInProgress(null);
     }
   };
-  
-  // Handle pull-to-refresh
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -156,161 +135,165 @@ export default function FriendsScreen() {
   };
 
   const handleNotificationToggle = (userId: string) => {
-    setNotificationPreferences(prev => ({
-      ...prev,
-      [userId]: !prev[userId]
-    }));
-    
-    // Update search results to reflect the change
-    setSearchResults(prev => 
-      prev.map(user => 
-        user.uid === userId 
-          ? { ...user, notificationsEnabled: !notificationPreferences[userId] }
-          : user
+    setNotificationPreferences(prev => ({ ...prev, [userId]: !prev[userId] }));
+    setSearchResults(prev =>
+      prev.map(user =>
+        user.uid === userId ? { ...user, notificationsEnabled: !notificationPreferences[userId] } : user
       )
     );
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.titleContainer}>
-        <Text style={styles.title}>Friends Activity</Text>
-        <TouchableOpacity 
-          style={styles.addFriendButton}
-          onPress={openSearchModal}
-        >
-          <Ionicons name="person-add-outline" size={20} color="#4A90E2" />
-          <Text style={styles.addFriendText}>Add</Text>
-        </TouchableOpacity>
-      </View>
-      
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search friends..."
-          value={searchQuery}
-          onChangeText={text => {
-            setSearchQuery(text);
-            setShowFriendsList(text.length > 0);
-          }}
-          onFocus={() => setShowFriendsList(true)}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity 
-            onPress={() => {
-              setSearchQuery('');
-              setShowFriendsList(false);
-            }}
-            style={styles.clearButton}
-          >
-            <Ionicons name="close-circle" size={20} color="#999" />
-          </TouchableOpacity>
-        )}
-      </View>
-      
-      {/* Friend Stats Panel - shown when a friend is selected */}
-      {friendStats && (
-        <View style={styles.statsPanel}>
-          <View style={styles.statItem}>
-            <FontAwesome5 name="eye" size={18} color="#4CAF50" style={styles.statIcon} />
-            <View>
-              <Text style={styles.statValue}>{friendStats.totalSightings}</Text>
-              <Text style={styles.statLabel}>Total Sightings</Text>
-            </View>
-          </View>
-          
-          <View style={styles.divider} />
-          
-          <View style={styles.statItem}>
-            <FontAwesome5 name="feather" size={18} color="#2196F3" style={styles.statIcon} />
-            <View>
-              <Text style={styles.statValue}>{friendStats.uniqueSpecies}</Text>
-              <Text style={styles.statLabel}>Species Seen</Text>
-            </View>
-          </View>
+      <View style={styles.headerSection}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Friends</Text>
+          <HardShadow offset={3} borderRadius={radius.pill}>
+            <Pressable
+              style={({ pressed }) => [styles.addButton, pressed && { backgroundColor: palette.inkSoft }]}
+              onPress={openSearchModal}
+            >
+              <Ionicons name="person-add" size={14} color={palette.cream} />
+              <Text style={styles.addButtonText}>Add</Text>
+            </Pressable>
+          </HardShadow>
         </View>
-      )}
-      
-      {/* Friends List (shown when searching) */}
-      {showFriendsList && (
-        <View style={styles.friendsListContainer}>
-          {isLoadingFriends ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#4A90E2" />
-              <Text style={styles.loadingText}>Loading friends...</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={filteredFriends}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <View style={styles.friendItem}>
-                  <TouchableOpacity 
-                    style={styles.friendItemContent}
-                    onPress={() => {
-                      setSearchQuery(item.name);
-                      setShowFriendsList(false);
-                    }}
-                  >
-                    <Ionicons name="person-circle-outline" size={24} color="#4A90E2" />
-                    <Text style={styles.friendName}>{item.name}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.bellButton}
-                    onPress={() => handleNotificationToggle(item.id)}
-                  >
-                    <Ionicons 
-                      name={notificationPreferences[item.id] ? "notifications" : "notifications-outline"} 
-                      size={18} 
-                      color={notificationPreferences[item.id] ? "#FFD700" : "#999"} 
-                    />
-                  </TouchableOpacity>
-                </View>
-              )}
-              ListEmptyComponent={
-                <Text style={styles.emptyText}>
-                  {searchQuery ? "No friends match your search" : "You're not following anyone yet"}
-                </Text>
-              }
-            />
+
+        {/* Friends filter search */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={18} color={palette.inkSoft} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Filter by friend..."
+            placeholderTextColor={palette.muted}
+            value={searchQuery}
+            onChangeText={text => {
+              setSearchQuery(text);
+              setShowFriendsList(text.length > 0);
+            }}
+            onFocus={() => setShowFriendsList(true)}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => {
+                setSearchQuery('');
+                setShowFriendsList(false);
+              }}
+              style={styles.clearButton}
+            >
+              <Ionicons name="close-circle" size={20} color={palette.inkSoft} />
+            </TouchableOpacity>
           )}
         </View>
-      )}
-      
-      {/* Friend Sightings Feed */}
+
+        {/* Friend stats panel — shown when a friend is selected */}
+        {friendStats && (
+          <View style={styles.statsWrap}>
+            <HardShadow borderRadius={radius.card}>
+              <View style={styles.statsPanel}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{friendStats.totalSightings}</Text>
+                  <Text style={styles.statLabel}>Sightings</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statValue}>{friendStats.uniqueSpecies}</Text>
+                  <Text style={styles.statLabel}>Species</Text>
+                </View>
+              </View>
+            </HardShadow>
+          </View>
+        )}
+
+        {/* Friends list dropdown */}
+        {showFriendsList && (
+          <View style={styles.friendsListWrap}>
+            <HardShadow borderRadius={radius.card}>
+              <View style={styles.friendsList}>
+                {isLoadingFriends ? (
+                  <View style={styles.loadingRow}>
+                    <ActivityIndicator size="small" color={palette.leaf} />
+                    <Text style={styles.loadingText}>Loading friends...</Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={filteredFriends}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                      <View style={styles.friendRow}>
+                        <Pressable
+                          style={styles.friendRowContent}
+                          onPress={() => {
+                            setSearchQuery(item.name);
+                            setShowFriendsList(false);
+                          }}
+                        >
+                          <Avatar name={item.name} seed={item.id} size={36} />
+                          <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.bellButton}
+                          onPress={() => handleNotificationToggle(item.id)}
+                        >
+                          <Ionicons
+                            name={notificationPreferences[item.id] ? 'notifications' : 'notifications-outline'}
+                            size={18}
+                            color={notificationPreferences[item.id] ? palette.sun : palette.muted}
+                          />
+                        </Pressable>
+                      </View>
+                    )}
+                    ListEmptyComponent={
+                      <Text style={styles.emptyText}>
+                        {searchQuery ? 'No friends match your search' : "You're not following anyone yet"}
+                      </Text>
+                    }
+                  />
+                )}
+              </View>
+            </HardShadow>
+          </View>
+        )}
+      </View>
+
+      {/* Sightings feed / empty / loading */}
       {isLoadingFriends && !isRefreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4A90E2" />
+          <ActivityIndicator size="large" color={palette.leaf} />
           <Text style={styles.loadingText}>Loading friend activity...</Text>
         </View>
       ) : filteredSightings.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No sightings found</Text>
-          <Text style={styles.emptyStateSubtext}>
-            {searchQuery 
-              ? `No sightings from "${searchQuery}"` 
-              : friends.length > 0 
-                ? "Your friends haven't shared any sightings yet"
-                : "Follow some friends to see their sightings here"}
-          </Text>
-          {friends.length === 0 && (
-            <TouchableOpacity 
-              style={styles.findFriendsButton}
-              onPress={openSearchModal}
-            >
-              <Text style={styles.findFriendsButtonText}>Find Friends</Text>
-            </TouchableOpacity>
-          )}
+          <HardShadow>
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No sightings found.</Text>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery
+                  ? `Nothing from "${searchQuery}" yet.`
+                  : friends.length > 0
+                    ? "Your friends haven't shared any sightings yet."
+                    : 'Follow some friends to see their sightings here.'}
+              </Text>
+              {friends.length === 0 && (
+                <HardShadow offset={3} borderRadius={radius.input} style={{ marginTop: space.md }}>
+                  <Pressable
+                    style={({ pressed }) => [styles.findFriendsButton, pressed && { backgroundColor: palette.ink }]}
+                    onPress={openSearchModal}
+                  >
+                    <Text style={styles.findFriendsButtonText}>Find Friends</Text>
+                  </Pressable>
+                </HardShadow>
+              )}
+            </View>
+          </HardShadow>
         </View>
       ) : (
         <FlatList
           data={filteredSightings}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <FriendSightingCard 
-              sighting={item} 
+            <FriendSightingCard
+              sighting={item}
               isFirstSighting={isFirstSightingForFriend(item.friendName, item.birdName, item.date)}
             />
           )}
@@ -320,7 +303,7 @@ export default function FriendsScreen() {
         />
       )}
 
-      {/* Search Modal */}
+      {/* Add friends modal */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -328,105 +311,109 @@ export default function FriendsScreen() {
         onRequestClose={closeSearchModal}
       >
         <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Find Users to Follow</Text>
-              <TouchableOpacity onPress={closeSearchModal}>
-                <Ionicons name="close" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-            
-            {/* Modal Search Bar */}
-            <View style={styles.modalSearchContainer}>
-              <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
-              <TextInput
-                style={styles.modalSearchInput}
-                placeholder="Search by username..."
-                value={modalSearchQuery}
-                onChangeText={handleSearchUsers}
-                autoFocus={true}
-              />
-              {modalSearchQuery.length > 0 && (
-                <TouchableOpacity 
-                  onPress={() => {
-                    setModalSearchQuery('');
-                    setSearchResults([]);
-                  }}
-                  style={styles.clearButton}
+          <HardShadow borderRadius={radius.card}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Find Users to Follow</Text>
+                <Pressable
+                  onPress={closeSearchModal}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.modalCloseButton}
                 >
-                  <Ionicons name="close-circle" size={20} color="#999" />
-                </TouchableOpacity>
+                  <Ionicons name="close" size={20} color={palette.ink} />
+                </Pressable>
+              </View>
+
+              <View style={styles.modalSearchContainer}>
+                <Ionicons name="search" size={18} color={palette.inkSoft} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.modalSearchInput}
+                  placeholder="Search by username..."
+                  placeholderTextColor={palette.muted}
+                  value={modalSearchQuery}
+                  onChangeText={handleSearchUsers}
+                  autoFocus={true}
+                />
+                {modalSearchQuery.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setModalSearchQuery('');
+                      setSearchResults([]);
+                    }}
+                    style={styles.clearButton}
+                  >
+                    <Ionicons name="close-circle" size={20} color={palette.inkSoft} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {isSearching ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={palette.leaf} />
+                  <Text style={styles.loadingText}>Searching...</Text>
+                </View>
+              ) : (
+                <>
+                  {modalSearchQuery.length > 0 ? (
+                    <FlatList
+                      data={searchResults}
+                      keyExtractor={(item) => item.uid}
+                      renderItem={({ item }) => (
+                        <View style={styles.searchResultItem}>
+                          <View style={styles.userInfo}>
+                            <Avatar name={item.username} seed={item.uid} size={40} />
+                            <Text style={styles.username} numberOfLines={1}>{item.username}</Text>
+                          </View>
+                          <View style={styles.actionButtons}>
+                            {item.isFollowing && (
+                              <Pressable
+                                style={styles.bellButton}
+                                onPress={() => handleNotificationToggle(item.uid)}
+                              >
+                                <Ionicons
+                                  name={item.notificationsEnabled ? 'notifications' : 'notifications-outline'}
+                                  size={20}
+                                  color={item.notificationsEnabled ? palette.sun : palette.muted}
+                                />
+                              </Pressable>
+                            )}
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.followButton,
+                                item.isFollowing && styles.followingButton,
+                                pressed && { opacity: 0.85 },
+                              ]}
+                              onPress={() => handleFollowAction(item)}
+                              disabled={actionInProgress === item.uid}
+                            >
+                              {actionInProgress === item.uid ? (
+                                <ActivityIndicator size="small" color={item.isFollowing ? palette.ink : palette.cream} />
+                              ) : (
+                                <Text style={[styles.followButtonText, item.isFollowing && styles.followingButtonText]}>
+                                  {item.isFollowing ? 'Following' : 'Follow'}
+                                </Text>
+                              )}
+                            </Pressable>
+                          </View>
+                        </View>
+                      )}
+                      ListEmptyComponent={
+                        <Text style={styles.emptyText}>No users found</Text>
+                      }
+                    />
+                  ) : (
+                    <View style={styles.searchPromptContainer}>
+                      <Ionicons name="people-outline" size={48} color={palette.muted} />
+                      <Text style={styles.searchPromptText}>Search for users to follow</Text>
+                      <Text style={styles.searchPromptSubtext}>
+                        Enter a username to find other birders.
+                      </Text>
+                    </View>
+                  )}
+                </>
               )}
             </View>
-            
-            {/* Search Results */}
-            {isSearching ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#4A90E2" />
-                <Text style={styles.loadingText}>Searching...</Text>
-              </View>
-            ) : (
-              <>
-                {modalSearchQuery.length > 0 ? (
-                  <FlatList
-                    data={searchResults}
-                    keyExtractor={(item) => item.uid}
-                    renderItem={({ item }) => (
-                      <View style={styles.searchResultItem}>
-                        <View style={styles.userInfo}>
-                          <Ionicons name="person-circle-outline" size={40} color="#4A90E2" />
-                          <Text style={styles.username}>{item.username}</Text>
-                        </View>
-                        <View style={styles.actionButtons}>
-                          {item.isFollowing && (
-                            <TouchableOpacity
-                              style={styles.bellButton}
-                              onPress={() => handleNotificationToggle(item.uid)}
-                            >
-                              <Ionicons 
-                                name={item.notificationsEnabled ? "notifications" : "notifications-outline"} 
-                                size={20} 
-                                color={item.notificationsEnabled ? "#FFD700" : "#999"} 
-                              />
-                            </TouchableOpacity>
-                          )}
-                          <TouchableOpacity
-                            style={[
-                              styles.followButton,
-                              item.isFollowing && styles.followingButton
-                            ]}
-                            onPress={() => handleFollowAction(item)}
-                            disabled={actionInProgress === item.uid}
-                          >
-                            {actionInProgress === item.uid ? (
-                              <ActivityIndicator size="small" color="white" />
-                            ) : (
-                              <Text style={styles.followButtonText}>
-                                {item.isFollowing ? 'Following' : 'Follow'}
-                              </Text>
-                            )}
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    )}
-                    ListEmptyComponent={
-                      <Text style={styles.emptyText}>No users found</Text>
-                    }
-                  />
-                ) : (
-                  <View style={styles.searchPromptContainer}>
-                    <Ionicons name="people-outline" size={60} color="#ccc" />
-                    <Text style={styles.searchPromptText}>
-                      Search for users to follow
-                    </Text>
-                    <Text style={styles.searchPromptSubtext}>
-                      Enter a username to find other bird enthusiasts
-                    </Text>
-                  </View>
-                )}
-              </>
-            )}
-          </View>
+          </HardShadow>
         </View>
       </Modal>
     </View>
@@ -436,276 +423,330 @@ export default function FriendsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    padding: 20,
+    backgroundColor: palette.cream,
   },
-  titleContainer: {
+  headerSection: {
+    paddingTop: space.lg,
+    paddingHorizontal: space.xl,
+  },
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
     justifyContent: 'space-between',
+    marginBottom: space.md,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    ...type.h1,
+    color: palette.ink,
+    fontWeight: '700',
   },
-  addFriendButton: {
-    backgroundColor: '#f0f8ff',
-    borderRadius: 20,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: '#e1ebf9',
+
+  // Add button
+  addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: palette.ink,
+    ...border.thick,
   },
-  addFriendText: {
-    marginLeft: 4,
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#4A90E2',
+  addButtonText: {
+    fontFamily: font.display,
+    fontSize: 13,
+    fontWeight: '700',
+    color: palette.cream,
+    letterSpacing: -0.2,
   },
+
+  // Avatar
+  avatar: {
+    borderWidth: 2,
+    borderColor: palette.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarLetter: {
+    fontFamily: font.displayBlack,
+    color: palette.cream,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+
+  // Search bar
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    marginBottom: 16,
+    backgroundColor: palette.card,
+    borderRadius: radius.input,
+    paddingHorizontal: space.md,
+    ...border.thick,
+    marginBottom: space.md,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: space.sm,
   },
   searchInput: {
     flex: 1,
-    height: 40,
-    fontSize: 16,
+    height: 44,
+    fontFamily: font.body,
+    fontSize: 15,
+    color: palette.ink,
   },
   clearButton: {
     padding: 4,
   },
-  friendsListContainer: {
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#eeeeee',
-    marginBottom: 16,
-    maxHeight: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    zIndex: 10,
+
+  // Stats panel
+  statsWrap: {
+    marginBottom: space.md,
   },
-  friendItem: {
+  statsPanel: {
+    backgroundColor: palette.card,
+    borderRadius: radius.card,
+    padding: space.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eeeeee',
+    justifyContent: 'space-around',
+    ...border.thick,
   },
-  friendItemContent: {
-    flexDirection: 'row',
+  statItem: {
+    flexDirection: 'column',
     alignItems: 'center',
     flex: 1,
   },
+  statValue: {
+    ...type.h2,
+    color: palette.ink,
+    fontWeight: '700',
+  },
+  statLabel: {
+    ...type.label,
+    color: palette.inkSoft,
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: '70%',
+    backgroundColor: palette.rule,
+  },
+
+  // Friends list dropdown
+  friendsListWrap: {
+    marginBottom: space.md,
+    zIndex: 10,
+  },
+  friendsList: {
+    backgroundColor: palette.card,
+    borderRadius: radius.card,
+    ...border.thick,
+    maxHeight: 220,
+    overflow: 'hidden',
+  },
+  friendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.rule,
+  },
+  friendRowContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: space.md,
+  },
   friendName: {
-    fontSize: 16,
-    marginLeft: 8,
+    ...type.bodyL,
+    color: palette.ink,
+    fontWeight: '600',
+    flex: 1,
+  },
+  bellButton: {
+    padding: 6,
+  },
+
+  // Loading + empty
+  loadingContainer: {
+    padding: space.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  loadingRow: {
+    padding: space.lg,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: space.sm,
+  },
+  loadingText: {
+    ...type.body,
+    color: palette.inkSoft,
   },
   emptyText: {
-    padding: 16,
+    padding: space.lg,
     textAlign: 'center',
-    color: '#666',
+    ...type.body,
+    color: palette.inkSoft,
   },
   listContent: {
-    paddingVertical: 8,
+    paddingVertical: space.sm,
+    paddingBottom: space.xl,
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: space.xl,
+    paddingBottom: space.xxl,
   },
-  emptyStateText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+  emptyCard: {
+    ...recipes.card,
+    padding: space.xl,
+    alignItems: 'center',
+    minWidth: 260,
   },
-  emptyStateSubtext: {
-    fontSize: 16,
-    color: '#666',
+  emptyTitle: {
+    ...type.h2,
+    color: palette.ink,
+    marginBottom: space.xs,
     textAlign: 'center',
-    marginBottom: 24,
+  },
+  emptySubtitle: {
+    ...type.body,
+    color: palette.inkSoft,
+    textAlign: 'center',
   },
   findFriendsButton: {
-    backgroundColor: '#4A90E2',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    marginTop: 8,
+    backgroundColor: palette.leaf,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderRadius: radius.input,
+    ...border.thick,
+    alignItems: 'center',
   },
   findFriendsButtonText: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 16,
+    fontFamily: font.display,
+    fontWeight: '700',
+    fontSize: 15,
+    color: '#fff',
+    letterSpacing: -0.3,
   },
-  loadingContainer: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    color: '#666',
-  },
-  
-  // Modal styles
+
+  // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(26, 36, 23, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: space.lg,
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    width: '90%',
-    height: '80%',
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    ...recipes.card,
+    width: '100%',
+    maxWidth: 380,
+    height: '78%',
+    padding: space.lg,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    marginBottom: space.md,
+    paddingBottom: space.md,
+    borderBottomWidth: 1.5,
+    borderBottomColor: palette.ink,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    ...type.h2,
+    color: palette.ink,
+  },
+  modalCloseButton: {
+    padding: 4,
   },
   modalSearchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    marginBottom: 16,
+    backgroundColor: palette.card,
+    borderRadius: radius.input,
+    paddingHorizontal: space.md,
+    ...border.thick,
+    marginBottom: space.md,
   },
   modalSearchInput: {
     flex: 1,
-    height: 45,
-    fontSize: 16,
+    height: 44,
+    fontFamily: font.body,
+    fontSize: 15,
+    color: palette.ink,
   },
   searchResultItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 15,
+    paddingVertical: space.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: palette.rule,
+    gap: space.md,
   },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    gap: space.md,
   },
   username: {
-    fontSize: 16,
-    marginLeft: 12,
-    fontWeight: '500',
+    ...type.bodyL,
+    color: palette.ink,
+    fontWeight: '600',
+    flex: 1,
   },
   actionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  bellButton: {
-    padding: 4,
-    marginRight: 8,
+    gap: space.sm,
   },
   followButton: {
-    backgroundColor: '#4A90E2',
-    paddingHorizontal: 16,
+    backgroundColor: palette.leaf,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
-    minWidth: 100,
+    borderRadius: radius.pill,
+    ...border.thick,
+    minWidth: 90,
     alignItems: 'center',
   },
   followingButton: {
-    backgroundColor: '#6BB06E', // Green color for following state
+    backgroundColor: palette.card,
   },
   followButtonText: {
-    color: 'white',
-    fontWeight: '600',
+    fontFamily: font.display,
+    fontWeight: '700',
+    fontSize: 12,
+    color: '#fff',
+    letterSpacing: -0.2,
+  },
+  followingButtonText: {
+    color: palette.ink,
   },
   searchPromptContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: space.lg,
+    gap: space.sm,
   },
   searchPromptText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 15,
-    marginBottom: 8,
-    color: '#333',
+    ...type.h3,
+    color: palette.ink,
+    marginTop: space.md,
   },
   searchPromptSubtext: {
-    fontSize: 14,
-    color: '#666',
+    ...type.body,
+    color: palette.inkSoft,
     textAlign: 'center',
   },
-  
-  // Friend Stats Panel styles
-  statsPanel: {
-    flexDirection: 'row',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statIcon: {
-    marginRight: 10,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-  },
-  divider: {
-    width: 1,
-    height: '80%',
-    backgroundColor: '#ddd',
-  },
-}); 
+});

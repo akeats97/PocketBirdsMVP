@@ -1,5 +1,20 @@
 # PocketBirds4 — Claude Context
 
+## Pending Design Work (Pocket Dex refactor, started May 21 2026)
+
+Visual-language refactor in progress. Handoff lives at `/Users/alexkeats/Downloads/design_handoff_pocket_dex/` (tokens, migration doc, prompts, reference HTML).
+
+**Status:** tokens + fonts landed. Screen-by-screen restyle pending.
+
+**Deferred to follow-up sessions:**
+- **IUCN conservation status strip** on every sighting card. Needs a one-time Wikidata dump per `design_handoff_pocket_dex/wikidata-dump.md` → ship `constants/iucnStatus.ts` + `statusFor(birdName)` helper. Status types + `STATUS_VISUAL` map already live in `constants/Colors.ts`. Also drives a small color dot on threatened-species Dex tiles.
+- **Streak banner** on Field Journal. Alex flagged Victoria may dislike it; build behind a `Settings → show streaks` toggle, default off.
+- **Leaderboard ribbon** on Friends. Alex said "no competition" — skip until requested, then gate behind a Settings flag default off.
+- **Latin names in feed cards.** Mockups show them, but `Sighting` has no Latin field. Look up at render time from `constants/birdNames.ts` (same name key as IUCN lookup).
+- **Dark mode.** Deferred until light-mode redesign settles. `theme` export in tokens already structured to swap palette values without touching consumers.
+
+---
+
 ## Project Location
 **This folder** (`/Users/alexkeats/Desktop/PocketBirds4/`) is the real, active project.
 

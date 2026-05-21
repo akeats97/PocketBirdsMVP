@@ -1,21 +1,49 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { useColorScheme } from 'react-native';
+import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { font, palette, radius } from '../../constants/Colors';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+function TabPill({ name, color, focused }: { name: IoniconName; color: string; focused: boolean }) {
+  return (
+    <View
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: radius.chip,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: focused ? palette.leafSoft : 'transparent',
+      }}
+    >
+      <Ionicons name={name} size={20} color={color} />
+    </View>
+  );
+}
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
+  const insets = useSafeAreaInsets();
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#4A90E2',
-        tabBarInactiveTintColor: '#999',
+        tabBarActiveTintColor: palette.leaf,
+        tabBarInactiveTintColor: palette.muted,
         tabBarStyle: {
-          borderTopWidth: 1,
-          borderTopColor: '#eee',
-          paddingTop: 5,
-          paddingBottom: 5,
+          backgroundColor: palette.card,
+          borderTopWidth: 2,
+          borderTopColor: palette.ink,
+          height: 60 + insets.bottom,
+          paddingTop: 0,
+          paddingBottom: 8 + insets.bottom,
+        },
+        tabBarLabelStyle: {
+          fontFamily: font.body,
+          fontSize: 10.5,
+          fontWeight: '600',
+          letterSpacing: 0.2,
         },
         headerShown: false,
       }}
@@ -26,7 +54,9 @@ export default function TabLayout() {
         options={{
           title: 'Log',
           tabBarShowLabel: true,
-          tabBarIcon: ({ color }) => <Ionicons name="list-outline" size={24} color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabPill name="list-outline" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -34,7 +64,9 @@ export default function TabLayout() {
         options={{
           title: 'Add Sighting',
           tabBarShowLabel: true,
-          tabBarIcon: ({ color }) => <Ionicons name="add-circle-outline" size={24} color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabPill name="add-circle-outline" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -42,7 +74,9 @@ export default function TabLayout() {
         options={{
           title: 'Dex',
           tabBarShowLabel: true,
-          tabBarIcon: ({ color }) => <Ionicons name="book-outline" size={24} color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabPill name="book-outline" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -50,7 +84,9 @@ export default function TabLayout() {
         options={{
           title: 'Friends',
           tabBarShowLabel: true,
-          tabBarIcon: ({ color }) => <Ionicons name="people-outline" size={24} color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <TabPill name="people-outline" color={color} focused={focused} />
+          ),
         }}
       />
     </Tabs>

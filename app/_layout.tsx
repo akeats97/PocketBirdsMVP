@@ -1,6 +1,20 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import {
+  BricolageGrotesque_700Bold,
+  BricolageGrotesque_800ExtraBold,
+} from '@expo-google-fonts/bricolage-grotesque';
+import {
+  DMMono_400Regular,
+  DMMono_500Medium,
+} from '@expo-google-fonts/dm-mono';
+import {
+  SpaceGrotesk_400Regular,
+  SpaceGrotesk_500Medium,
+  SpaceGrotesk_600SemiBold,
+  SpaceGrotesk_700Bold,
+} from '@expo-google-fonts/space-grotesk';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
@@ -10,6 +24,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, SafeAreaView, StatusBar, TouchableOpacity } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { auth } from '../config/firebaseConfig';
+import { palette } from '../constants/Colors';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
 import FriendSightingsProvider from './context/FriendSightingsContext';
 import { SightingsProvider, useSightings } from './context/SightingsContext';
@@ -36,7 +51,11 @@ const theme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    primary: '#4A90E2',
+    primary: palette.leaf,
+    background: palette.cream,
+    text: palette.ink,
+    border: palette.ink,
+    notification: palette.coral,
   },
 };
 
@@ -124,10 +143,10 @@ function AuthenticatedApp() {
     <ThemeProvider value={theme}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor="#ffffff"
+        backgroundColor={palette.cream}
         translucent={true}
       />
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: palette.cream }}>
         <Stack>
           <Stack.Screen
             name="(tabs)"
@@ -135,10 +154,16 @@ function AuthenticatedApp() {
               headerShown: true,
               headerBackVisible: false,
               title: `Pocket Birds ${CURRENT_RELEASE_NAME}`,
-              headerTitleStyle: {
-                fontSize: 20,
-                fontWeight: '600',
+              headerStyle: {
+                backgroundColor: palette.cream,
               },
+              headerTintColor: palette.ink,
+              headerTitleStyle: {
+                fontFamily: 'BricolageGrotesque_700Bold',
+                fontSize: 20,
+                color: palette.ink,
+              },
+              headerShadowVisible: false,
               headerRight: () => (
                 <TouchableOpacity
                   onPress={handleLogout}
@@ -153,10 +178,10 @@ function AuthenticatedApp() {
                   }}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Ionicons name="log-out-outline" size={24} color="#4A90E2" />
+                  <Ionicons name="log-out-outline" size={24} color={palette.ink} />
                 </TouchableOpacity>
               ),
-            }} 
+            }}
           />
         </Stack>
       </SafeAreaView>
@@ -168,6 +193,14 @@ export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
+    BricolageGrotesque_700Bold,
+    BricolageGrotesque_800ExtraBold,
+    SpaceGrotesk_400Regular,
+    SpaceGrotesk_500Medium,
+    SpaceGrotesk_600SemiBold,
+    SpaceGrotesk_700Bold,
+    DMMono_400Regular,
+    DMMono_500Medium,
   });
 
   const [user, setUser] = useState<User | null>(null);
@@ -229,10 +262,10 @@ export default function RootLayout() {
             <ThemeProvider value={theme} key="login">
               <StatusBar
                 barStyle="dark-content"
-                backgroundColor="#ffffff"
+                backgroundColor={palette.cream}
                 translucent={true}
               />
-              <SafeAreaView style={{ flex: 1 }}>
+              <SafeAreaView style={{ flex: 1, backgroundColor: palette.cream }}>
                 <LoginScreen />
               </SafeAreaView>
             </ThemeProvider>

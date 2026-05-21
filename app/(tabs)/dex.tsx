@@ -1,17 +1,28 @@
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { HardShadow } from '../../components/SightingCard';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
+import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { useSightings } from '../context/SightingsContext';
 
 type SeenInfo = { timesSeen: number; lastSeen: string };
-type RowItem = string[]; // up to COLUMNS bird names per row
-type Section = { title: string; data: RowItem[] };
+type RowItem = string[];
+type Section = { title: string; data: RowItem[]; familySeen: number; familyTotal: number };
 
 const COLUMNS = 3;
+const TOTAL_SPECIES = 11227; // IOC v15.2
 const REGIONS_STORAGE_KEY = 'dex.selectedRegions.v1';
 const ALL_REGIONS: RegionCode[] = [...REGION_CODES];
+
+function nextMilestone(count: number): number {
+  if (count < 5) return 5;
+  if (count < 10) return 10;
+  if (count < 25) return 25;
+  if (count < 50) return 50;
+  return Math.ceil((count + 1) / 50) * 50;
+}
 
 export default function DexScreen() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,7 +31,6 @@ export default function DexScreen() {
   const [regionsModalOpen, setRegionsModalOpen] = useState(false);
   const { sightings } = useSightings();
 
-  // Load persisted region filter on mount.
   useEffect(() => {
     (async () => {
       try {
@@ -50,7 +60,6 @@ export default function DexScreen() {
     );
   };
 
-  // Build a name → SeenInfo map from sightings (recomputed when sightings change).
   const seenMap = useMemo(() => {
     const map: { [name: string]: SeenInfo } = {};
     sightings.forEach(s => {
@@ -68,10 +77,6 @@ export default function DexScreen() {
     uniqueSpecies: Object.keys(seenMap).length,
   }), [sightings.length, seenMap]);
 
-  // Build section data: one section per family, rows of up to COLUMNS birds.
-  // A species is included if any of its regions is selected, OR the user has
-  // seen it (never hide a sighting), OR it has no region data (avoid hiding
-  // species due to missing IOC metadata).
   const sections = useMemo<Section[]>(() => {
     const q = searchQuery.trim().toLowerCase();
     const selSet = new Set(selectedRegions);
@@ -83,9 +88,11 @@ export default function DexScreen() {
 
     for (const fam of birdFamilies) {
       const filtered: string[] = [];
+      let familySeen = 0;
       for (const b of fam.birds) {
         canonical.add(b.name);
         const seen = !!seenMap[b.name];
+        if (seen) familySeen += 1;
         if (showOnlySeen && !seen) continue;
         if (!passesRegion(b.regions, seen)) continue;
         if (q && !b.name.toLowerCase().includes(q)) continue;
@@ -96,10 +103,9 @@ export default function DexScreen() {
       for (let i = 0; i < filtered.length; i += COLUMNS) {
         rows.push(filtered.slice(i, i + COLUMNS));
       }
-      out.push({ title: fam.family, data: rows });
+      out.push({ title: fam.family, data: rows, familySeen, familyTotal: fam.birds.length });
     }
 
-    // Sightings logged under names not in the canonical list — never hidden.
     const orphans = Object.keys(seenMap)
       .filter(name => !canonical.has(name))
       .filter(name => !q || name.toLowerCase().includes(q));
@@ -108,7 +114,7 @@ export default function DexScreen() {
       for (let i = 0; i < orphans.length; i += COLUMNS) {
         rows.push(orphans.slice(i, i + COLUMNS));
       }
-      out.push({ title: 'Other', data: rows });
+      out.push({ title: 'Other', data: rows, familySeen: orphans.length, familyTotal: orphans.length });
     }
 
     return out;
@@ -124,85 +130,84 @@ export default function DexScreen() {
   const renderRow = useCallback(({ item }: { item: RowItem }) => (
     <View style={styles.row}>
       {item.map(name => {
-        const seen = !!seenMap[name];
+        const info = seenMap[name];
+        const seen = !!info;
+        const times = info?.timesSeen ?? 0;
         return (
-          <View key={name} style={[styles.card, seen && styles.cardSeen]}>
+          <View key={name} style={[styles.tile, seen ? styles.tileSeen : styles.tileUnseen]}>
             <Text
-              style={[styles.birdName, seen && styles.birdNameSeen]}
+              style={[styles.tileName, seen ? styles.tileNameSeen : styles.tileNameUnseen]}
               numberOfLines={3}
             >
               {name}
             </Text>
+            {seen && times > 1 && (
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>×{times}</Text>
+              </View>
+            )}
           </View>
         );
       })}
       {item.length < COLUMNS &&
         Array.from({ length: COLUMNS - item.length }).map((_, i) => (
-          <View key={`spacer-${i}`} style={styles.cardSpacer} />
+          <View key={`spacer-${i}`} style={styles.tileSpacer} />
         ))}
     </View>
   ), [seenMap]);
 
   const renderSectionHeader = useCallback(({ section }: { section: Section }) => (
-    <Text style={styles.sectionHeader}>{section.title}</Text>
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderTitle}>{section.title}</Text>
+      <Text style={styles.sectionHeaderCount}>
+        {section.familySeen}/{section.familyTotal}
+      </Text>
+    </View>
   ), []);
 
-  // Stable per-row key so React reuses row components across filter changes
-  // (the first bird name in a row is unique across the whole list).
   const keyExtractor = useCallback((item: RowItem) => item[0], []);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Bird Dex</Text>
+      <View style={styles.headerSection}>
+        <Text style={styles.title}>Bird Dex</Text>
 
-      <View style={styles.statsPanel}>
-        <View style={styles.statItem}>
-          <FontAwesome5 name="eye" size={18} color="#4CAF50" style={styles.statIcon} />
-          <View>
-            <Text style={styles.statValue}>{stats.totalSightings}</Text>
-            <Text style={styles.statLabel}>Total Sightings</Text>
-          </View>
+        <View style={styles.heroWrap}>
+          <HardShadow borderRadius={radius.card}>
+            <View style={styles.hero}>
+              <View style={styles.heroBadge}>
+                <Text style={styles.heroBadgeNumber}>{stats.uniqueSpecies}</Text>
+              </View>
+              <View style={styles.heroText}>
+                <Text style={styles.heroLabel}>YOUR LIFE LIST</Text>
+                <Text style={styles.heroValue}>
+                  {stats.uniqueSpecies} {stats.uniqueSpecies === 1 ? 'species' : 'species'}
+                </Text>
+                <Text style={styles.heroSubtitle}>
+                  Next milestone: {nextMilestone(stats.uniqueSpecies)} — keep going.
+                </Text>
+              </View>
+            </View>
+          </HardShadow>
         </View>
 
-        <View style={styles.divider} />
+        <TextInput
+          style={styles.searchBar}
+          placeholder="Search birds..."
+          placeholderTextColor={palette.muted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
 
-        <View style={styles.statItem}>
-          <FontAwesome5 name="feather" size={18} color="#2196F3" style={styles.statIcon} />
-          <View>
-            <Text style={styles.statValue}>{stats.uniqueSpecies}</Text>
-            <Text style={styles.statLabel}>Species Seen</Text>
-          </View>
-        </View>
-      </View>
-
-      <TextInput
-        style={styles.searchBar}
-        placeholder="Search birds..."
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-      />
-
-      <View style={styles.controlsRow}>
-        <TouchableOpacity
-          style={styles.toggleContainer}
-          onPress={() => setShowOnlySeen(!showOnlySeen)}
-          hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
-          activeOpacity={0.6}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
         >
-          <View style={[styles.checkbox, showOnlySeen && styles.checkboxChecked]}>
-            {showOnlySeen && <FontAwesome5 name="check" size={12} color="white" />}
-          </View>
-          <Text style={styles.toggleText}>Show only seen birds</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.regionsButton}
-          onPress={() => setRegionsModalOpen(true)}
-          accessibilityLabel="Region filter"
-        >
-          <Ionicons name="earth-outline" size={16} color="#444" />
-          <Text style={styles.regionsButtonText}>{regionsLabel}</Text>
-        </TouchableOpacity>
+          <Chip label="All" active={!showOnlySeen} onPress={() => setShowOnlySeen(false)} />
+          <Chip label="Seen" active={showOnlySeen} onPress={() => setShowOnlySeen(true)} />
+          <Chip label={`Region · ${regionsLabel}`} active={false} onPress={() => setRegionsModalOpen(true)} />
+        </ScrollView>
       </View>
 
       <SectionList
@@ -216,6 +221,7 @@ export default function DexScreen() {
         initialNumToRender={12}
         maxToRenderPerBatch={8}
         updateCellsBatchingPeriod={50}
+        contentContainerStyle={styles.listContent}
         ListFooterComponent={
           <Text style={styles.attribution}>
             Bird names from the IOC World Bird List (v15.2) — worldbirdnames.org
@@ -230,47 +236,57 @@ export default function DexScreen() {
         onRequestClose={() => setRegionsModalOpen(false)}
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setRegionsModalOpen(false)}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Regions</Text>
-              <TouchableOpacity onPress={() => setRegionsModalOpen(false)}>
-                <Ionicons name="close" size={22} color="#333" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.modalSubtitle}>
-              Hide birds not from these regions. Birds you've already logged stay visible regardless.
-            </Text>
+          <Pressable onPress={() => {}}>
+            <HardShadow borderRadius={radius.card}>
+              <View style={styles.modalSheet}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Regions</Text>
+                  <Pressable
+                    onPress={() => setRegionsModalOpen(false)}
+                    style={styles.modalCloseButton}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close" size={20} color={palette.ink} />
+                  </Pressable>
+                </View>
+                <Text style={styles.modalSubtitle}>
+                  Hide birds not from these regions. Birds you&apos;ve already logged stay visible regardless.
+                </Text>
 
-            <View style={styles.modalQuickRow}>
-              <TouchableOpacity
-                style={styles.quickButton}
-                onPress={() => persistRegions(ALL_REGIONS)}
-              >
-                <Text style={styles.quickButtonText}>Select all</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.quickButton}
-                onPress={() => persistRegions([])}
-              >
-                <Text style={styles.quickButtonText}>Clear</Text>
-              </TouchableOpacity>
-            </View>
+                <View style={styles.modalQuickRow}>
+                  <Pressable
+                    style={styles.quickButton}
+                    onPress={() => persistRegions(ALL_REGIONS)}
+                  >
+                    <Text style={styles.quickButtonText}>Select all</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.quickButton}
+                    onPress={() => persistRegions([])}
+                  >
+                    <Text style={styles.quickButtonText}>Clear</Text>
+                  </Pressable>
+                </View>
 
-            {ALL_REGIONS.map(code => {
-              const on = selectedRegions.includes(code);
-              return (
-                <TouchableOpacity
-                  key={code}
-                  style={styles.regionRow}
-                  onPress={() => toggleRegion(code)}
-                >
-                  <View style={[styles.checkbox, on && styles.checkboxChecked]}>
-                    {on && <FontAwesome5 name="check" size={12} color="white" />}
-                  </View>
-                  <Text style={styles.regionLabel}>{REGION_LABELS[code]}</Text>
-                </TouchableOpacity>
-              );
-            })}
+                <ScrollView style={styles.modalScroll}>
+                  {ALL_REGIONS.map(code => {
+                    const on = selectedRegions.includes(code);
+                    return (
+                      <Pressable
+                        key={code}
+                        style={styles.regionRow}
+                        onPress={() => toggleRegion(code)}
+                      >
+                        <View style={[styles.checkbox, on && styles.checkboxChecked]}>
+                          {on && <Ionicons name="checkmark" size={14} color={palette.cream} />}
+                        </View>
+                        <Text style={styles.regionLabel}>{REGION_LABELS[code]}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </HardShadow>
           </Pressable>
         </Pressable>
       </Modal>
@@ -278,208 +294,302 @@ export default function DexScreen() {
   );
 }
 
+function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.chip, active && styles.chipActive]}
+    >
+      <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    padding: 20,
+    backgroundColor: palette.cream,
+  },
+  headerSection: {
+    paddingTop: space.lg,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 15,
+    ...type.h1,
+    color: palette.ink,
+    fontWeight: '700',
+    paddingHorizontal: space.xl,
+    marginBottom: space.md,
   },
-  statsPanel: {
-    flexDirection: 'row',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+
+  // Stats hero
+  heroWrap: {
+    paddingHorizontal: space.xl,
+    marginBottom: space.md,
   },
-  statItem: {
+  hero: {
+    backgroundColor: palette.ink,
+    borderRadius: radius.card,
+    padding: space.lg,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: space.lg,
+    ...border.thick,
   },
-  statIcon: {
-    marginRight: 10,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-  },
-  divider: {
-    width: 1,
-    height: '80%',
-    backgroundColor: '#ddd',
-  },
-  searchBar: {
-    height: 40,
-    borderColor: '#ccc',
-    borderWidth: 1,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    marginBottom: 12,
-  },
-  controlsRow: {
-    flexDirection: 'row',
+  heroBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: palette.sun,
+    borderWidth: 2,
+    borderColor: palette.cream,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  toggleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
-    paddingVertical: 6,
-    paddingRight: 8,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#555',
-    marginRight: 8,
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  checkboxChecked: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
+  heroBadgeNumber: {
+    fontFamily: font.displayBlack,
+    fontSize: 22,
+    color: palette.ink,
+    letterSpacing: -0.5,
   },
-  toggleText: {
-    fontSize: 14,
+  heroText: {
+    flex: 1,
   },
-  regionsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  heroLabel: {
+    ...type.label,
+    color: palette.cream,
+    opacity: 0.65,
+  },
+  heroValue: {
+    ...type.h2,
+    color: palette.cream,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  heroSubtitle: {
+    ...type.bodyS,
+    color: palette.cream,
+    opacity: 0.7,
+    marginTop: 4,
+  },
+
+  // Search
+  searchBar: {
+    marginHorizontal: space.xl,
+    marginBottom: space.md,
+    backgroundColor: palette.card,
+    borderRadius: radius.input,
+    paddingVertical: space.sm + 2,
+    paddingHorizontal: space.lg,
+    ...border.thick,
+    fontFamily: font.body,
+    fontSize: 15,
+    color: palette.ink,
+  },
+
+  // Filter chips
+  chipsRow: {
+    paddingHorizontal: space.xl,
+    gap: space.xs + 2,
+    paddingBottom: space.md,
+  },
+  chip: {
     paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    backgroundColor: palette.card,
+    borderWidth: 1.5,
+    borderColor: palette.ink,
   },
-  regionsButtonText: {
-    fontSize: 13,
-    color: '#333',
-    fontWeight: '500',
+  chipActive: {
+    backgroundColor: palette.ink,
+  },
+  chipText: {
+    fontFamily: font.bodyBold,
+    fontSize: 12,
+    color: palette.ink,
+  },
+  chipTextActive: {
+    color: palette.cream,
+  },
+
+  // List + section
+  listContent: {
+    paddingBottom: space.xl,
   },
   sectionHeader: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#555',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    backgroundColor: '#fff',
+    backgroundColor: palette.cream,
+    borderTopWidth: 1.5,
+    borderBottomWidth: 1.5,
+    borderColor: palette.ink,
     paddingTop: 12,
-    paddingBottom: 6,
+    paddingBottom: 8,
+    paddingHorizontal: space.lg + 2,
+    marginTop: space.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
+  sectionHeaderTitle: {
+    fontFamily: font.display,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    color: palette.ink,
+  },
+  sectionHeaderCount: {
+    fontFamily: font.mono,
+    fontSize: 10,
+    color: palette.inkSoft,
+  },
+
+  // Tile grid
   row: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
+    gap: 6,
+    marginBottom: 6,
+    paddingHorizontal: 14,
+    marginTop: 6,
   },
-  card: {
+  tile: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
-    minHeight: 72,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingTop: 8,
+    paddingHorizontal: 8,
+    paddingBottom: 7,
+    borderWidth: 2,
+    borderColor: palette.ink,
+    minHeight: 82,
+    justifyContent: 'space-between',
   },
-  cardSeen: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#A5D6A7',
+  tileSeen: {
+    backgroundColor: palette.leafSoft,
   },
-  cardSpacer: {
+  tileUnseen: {
+    backgroundColor: palette.card,
+    opacity: 0.78,
+  },
+  tileSpacer: {
     flex: 1,
   },
-  birdName: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#999',
-    textAlign: 'center',
+  tileName: {
+    fontFamily: font.display,
+    fontSize: 12,
+    lineHeight: 13.2,
+    letterSpacing: -0.3,
+    paddingRight: 4,
   },
-  birdNameSeen: {
-    color: '#1B5E20',
+  tileNameSeen: {
+    fontWeight: '700',
+    color: palette.ink,
+  },
+  tileNameUnseen: {
     fontWeight: '600',
+    color: palette.inkSoft,
   },
+  countBadge: {
+    alignSelf: 'flex-end',
+    backgroundColor: palette.ink,
+    borderRadius: radius.pill,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    marginTop: 4,
+  },
+  countBadgeText: {
+    fontFamily: font.monoBold,
+    fontSize: 9,
+    color: palette.cream,
+    letterSpacing: 0.3,
+  },
+
+  // Attribution
   attribution: {
-    fontSize: 11,
-    color: '#999',
+    ...type.bodyS,
+    color: palette.muted,
     textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 16,
+    fontStyle: 'italic',
+    marginTop: space.lg,
+    marginHorizontal: space.xl,
   },
+
+  // Modal
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(26, 36, 23, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: space.xl,
   },
   modalSheet: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 18,
+    width: 320,
+    maxWidth: '100%',
+    ...recipes.card,
+    padding: space.lg,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: space.xs,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#222',
+    ...type.h2,
+    color: palette.ink,
+  },
+  modalCloseButton: {
+    padding: 4,
   },
   modalSubtitle: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 12,
+    ...type.bodyS,
+    color: palette.inkSoft,
+    marginBottom: space.md,
     lineHeight: 16,
   },
   modalQuickRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    gap: space.sm,
+    marginBottom: space.md,
   },
   quickButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: '#f0f0f0',
+    borderRadius: radius.pill,
+    backgroundColor: palette.card,
+    borderWidth: 1.5,
+    borderColor: palette.ink,
   },
   quickButtonText: {
-    fontSize: 13,
-    color: '#333',
-    fontWeight: '500',
+    fontFamily: font.bodyBold,
+    fontSize: 12,
+    color: palette.ink,
+  },
+  modalScroll: {
+    maxHeight: 320,
   },
   regionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
+    gap: space.md,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: palette.card,
+    borderWidth: 2,
+    borderColor: palette.ink,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: palette.leaf,
+    borderColor: palette.ink,
   },
   regionLabel: {
-    fontSize: 15,
-    color: '#222',
+    ...type.bodyL,
+    color: palette.ink,
+    fontWeight: '500',
   },
 });

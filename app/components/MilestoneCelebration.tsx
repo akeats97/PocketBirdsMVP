@@ -9,26 +9,19 @@ import {
   Vibration,
   View,
 } from 'react-native';
+import { HardShadow } from '../../components/SightingCard';
+import { font, palette, radius, space } from '../../constants/Colors';
 import { milestoneTagline } from '../constants/milestones';
 
 const SCREEN = Dimensions.get('window');
 const PIECE_COUNT = 45;
-const CONFETTI_COLORS = [
-  '#FFD700', // gold
-  '#4CAF50', // green
-  '#2196F3', // blue
-  '#FF6B35', // orange
-  '#9C27B0', // purple
-  '#FF1744', // red
-  '#00BCD4', // cyan
-];
+const CONFETTI_COLORS = [palette.leaf, palette.sun, palette.sky, palette.coral, palette.crimson];
 
 type ConfettiPieceProps = {
   index: number;
 };
 
 function ConfettiPiece({ index }: ConfettiPieceProps) {
-  // Stable per-piece random values via useRef so re-renders don't reshuffle.
   const cfg = useRef({
     startX: Math.random() * SCREEN.width,
     driftX: (Math.random() - 0.5) * 120,
@@ -36,7 +29,7 @@ function ConfettiPiece({ index }: ConfettiPieceProps) {
     delay: index * 22,
     color: CONFETTI_COLORS[index % CONFETTI_COLORS.length],
     size: 6 + Math.random() * 6,
-    rotateTurns: (Math.random() - 0.5) * 4, // -2 to +2 full turns
+    rotateTurns: (Math.random() - 0.5) * 4,
   }).current;
 
   const translateY = useRef(new Animated.Value(-40)).current;
@@ -150,16 +143,19 @@ export default function MilestoneCelebration({ visible, count, onDismiss }: Prop
         ))}
         <Animated.View
           style={[
-            styles.card,
             { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
           ]}
         >
-          <Text style={styles.eyebrow}>MILESTONE</Text>
-          <Text style={styles.number}>{count}</Text>
-          <Text style={styles.label}>SPECIES</Text>
-          <View style={styles.divider} />
-          <Text style={styles.tagline}>{milestoneTagline(count)}</Text>
-          <Text style={styles.dismiss}>tap anywhere to keep birding</Text>
+          <HardShadow offset={5} borderRadius={radius.card}>
+            <View style={styles.card}>
+              <Text style={styles.eyebrow}>MILESTONE</Text>
+              <Text style={styles.number}>{count}</Text>
+              <Text style={styles.label}>SPECIES</Text>
+              <View style={styles.divider} />
+              <Text style={styles.tagline}>{milestoneTagline(count)}</Text>
+              <Text style={styles.dismiss}>tap anywhere to keep birding</Text>
+            </View>
+          </HardShadow>
         </Animated.View>
       </Pressable>
     </Modal>
@@ -169,58 +165,66 @@ export default function MilestoneCelebration({ visible, count, onDismiss }: Prop
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 35, 25, 0.92)',
+    backgroundColor: 'rgba(26, 36, 23, 0.92)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: space.xl,
   },
   card: {
-    alignItems: 'center',
+    backgroundColor: palette.ink,
+    borderRadius: radius.card,
+    borderWidth: 2,
+    borderColor: palette.ink,
     paddingVertical: 32,
     paddingHorizontal: 28,
+    alignItems: 'center',
+    minWidth: 280,
   },
   eyebrow: {
-    color: '#FFD700',
-    fontSize: 14,
+    fontFamily: font.bodyBold,
+    color: palette.sun,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 4,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   number: {
-    color: '#fff',
-    fontSize: 110,
+    fontFamily: font.displayBlack,
+    color: palette.sun,
+    fontSize: 96,
     fontWeight: '900',
-    lineHeight: 116,
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 8,
+    lineHeight: 100,
+    letterSpacing: -3,
   },
   label: {
-    color: '#fff',
-    fontSize: 22,
+    fontFamily: font.display,
+    color: palette.cream,
+    fontSize: 18,
     fontWeight: '700',
-    letterSpacing: 6,
-    marginTop: -4,
+    letterSpacing: 5,
+    marginTop: -2,
   },
   divider: {
     width: 60,
     height: 2,
-    backgroundColor: '#FFD700',
+    backgroundColor: palette.sun,
     marginVertical: 18,
-    borderRadius: 1,
   },
   tagline: {
-    color: '#fff',
+    fontFamily: font.display,
+    color: palette.cream,
     fontSize: 17,
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 22,
     maxWidth: 280,
+    letterSpacing: -0.3,
   },
   dismiss: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
-    marginTop: 36,
-    letterSpacing: 1.2,
+    fontFamily: font.mono,
+    color: 'rgba(253, 246, 230, 0.55)',
+    fontSize: 10,
+    marginTop: 32,
+    letterSpacing: 1.5,
   },
 });

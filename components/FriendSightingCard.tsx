@@ -1,71 +1,79 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Dimensions, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { FriendSighting } from '../app/types';
+import { border, palette, radius, recipes, space, type } from '../constants/Colors';
+import { HardShadow } from './SightingCard';
 
 interface FriendSightingCardProps {
   sighting: FriendSighting;
   isFirstSighting?: boolean;
 }
 
+function formatRelativeDate(date: Date): string {
+  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) return `${Math.floor(days / 7)} wk ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export default function FriendSightingCard({ sighting, isFirstSighting }: FriendSightingCardProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
   return (
-    <View style={styles.card}>
-      {sighting.photoUrl && (
-        <TouchableOpacity onPress={() => setIsModalVisible(true)}>
-          <Image 
-            source={{ uri: sighting.photoUrl }} 
-            style={styles.photo}
-            resizeMode="cover"
-          />
-        </TouchableOpacity>
-      )}
-      
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.birdNameContainer}>
-            <Text style={styles.birdName}>{sighting.birdName}</Text>
-            {sighting.photoUrl && (
-              <Ionicons name="camera" size={16} color="#4CAF50" style={styles.cameraIcon} />
+    <HardShadow style={styles.shadowWrap}>
+      <View style={styles.card}>
+        {sighting.photoUrl && (
+          <Pressable onPress={() => setIsModalVisible(true)}>
+            <Image
+              source={{ uri: sighting.photoUrl }}
+              style={styles.photo}
+              resizeMode="cover"
+            />
+          </Pressable>
+        )}
+
+        <View style={styles.body}>
+          {/* Friend tag */}
+          <View style={styles.friendTagRow}>
+            <View style={styles.friendTag}>
+              <Ionicons name="person" size={10} color={palette.ink} />
+              <Text style={styles.friendTagText} numberOfLines={1}>
+                {sighting.friendName.toUpperCase()}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.headerRow}>
+            <View style={styles.nameBlock}>
+              <Text style={styles.birdName} numberOfLines={2}>{sighting.birdName}</Text>
+            </View>
+
+            {isFirstSighting && (
+              <View style={recipes.liferBadge}>
+                <Ionicons name="star" size={9} color="#fff" />
+                <Text style={recipes.liferBadgeText}>1ST</Text>
+              </View>
             )}
           </View>
-          <Text style={styles.date}>{formatDate(sighting.date)}</Text>
-        </View>
-        
-        <View style={styles.friendContainer}>
-          <Ionicons name="person" size={16} color="#4A90E2" />
-          <Text style={styles.friendName}>{sighting.friendName}</Text>
-        </View>
-        
-        <View style={styles.locationContainer}>
-          <Ionicons name="location" size={16} color="#666" />
-          <Text style={styles.location}>{sighting.location}</Text>
-        </View>
 
-        {sighting.notes && (
-          <Text style={styles.notes} numberOfLines={2}>
-            {sighting.notes}
-          </Text>
-        )}
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <Ionicons name="location" size={12} color={palette.muted} />
+              <Text style={styles.metaText} numberOfLines={1}>{sighting.location}</Text>
+            </View>
+            <Text style={styles.metaDivider}>·</Text>
+            <Text style={styles.metaText}>{formatRelativeDate(sighting.date)}</Text>
+          </View>
+
+          {sighting.notes && (
+            <Text style={styles.notes} numberOfLines={2}>{sighting.notes}</Text>
+          )}
+        </View>
       </View>
-
-      {/* First sighting badge positioned in bottom right corner */}
-      {isFirstSighting && (
-        <View style={styles.firstSightingBadge}>
-          <Text style={styles.firstSightingText}>1st</Text>
-        </View>
-      )}
 
       <Modal
         visible={isModalVisible}
@@ -74,13 +82,13 @@ export default function FriendSightingCard({ sighting, isFirstSighting }: Friend
         onRequestClose={() => setIsModalVisible(false)}
       >
         <View style={styles.modalContainer}>
-          <TouchableOpacity 
+          <Pressable
             style={styles.modalCloseButton}
             onPress={() => setIsModalVisible(false)}
           >
-            <Ionicons name="close" size={30} color="#fff" />
-          </TouchableOpacity>
-          
+            <Ionicons name="close" size={28} color={palette.ink} />
+          </Pressable>
+
           {sighting.photoUrl && (
             <ScrollView
               style={styles.modalPhoto}
@@ -91,8 +99,8 @@ export default function FriendSightingCard({ sighting, isFirstSighting }: Friend
               showsVerticalScrollIndicator={false}
               bouncesZoom={true}
             >
-              <Image 
-                source={{ uri: sighting.photoUrl }} 
+              <Image
+                source={{ uri: sighting.photoUrl }}
                 style={[styles.modalPhotoImage, { width: screenWidth, height: screenHeight }]}
                 resizeMode="contain"
               />
@@ -100,97 +108,117 @@ export default function FriendSightingCard({ sighting, isFirstSighting }: Friend
           )}
         </View>
       </Modal>
-    </View>
+    </HardShadow>
   );
 }
 
 const styles = StyleSheet.create({
+  shadowWrap: {
+    marginHorizontal: space.lg,
+    marginVertical: space.sm,
+  },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
+    ...recipes.card,
   },
   photo: {
     width: '100%',
     height: 200,
+    backgroundColor: palette.skySoft,
   },
-  content: {
-    padding: 16,
+  body: {
+    padding: space.lg,
   },
-  header: {
+
+  // Friend tag — sky-blue accent identifying who logged it
+  friendTagRow: {
+    flexDirection: 'row',
+    marginBottom: space.sm,
+  },
+  friendTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: palette.skySoft,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: palette.ink,
+    maxWidth: '100%',
+  },
+  friendTagText: {
+    fontFamily: 'DMMono_500Medium',
+    fontSize: 10,
+    color: palette.ink,
+    letterSpacing: 1.2,
+    fontWeight: '700',
+  },
+
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    gap: space.sm,
   },
-  birdNameContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  nameBlock: {
+    flex: 1,
+    minWidth: 0,
   },
   birdName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    ...type.h3,
+    color: palette.ink,
+    fontWeight: '700',
   },
-  cameraIcon: {
-    marginLeft: 6,
-  },
-  date: {
-    fontSize: 14,
-    color: '#666',
-  },
-  friendContainer: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: space.sm,
+    marginTop: space.sm,
   },
-  friendName: {
-    fontSize: 14,
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 1,
+  },
+  metaText: {
+    ...type.bodyS,
+    color: palette.inkSoft,
     fontWeight: '500',
-    color: '#4A90E2',
-    marginLeft: 4,
   },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  location: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 4,
+  metaDivider: {
+    color: palette.muted,
   },
   notes: {
-    fontSize: 14,
-    color: '#666',
+    ...type.body,
+    color: palette.inkSoft,
+    marginTop: space.sm,
     fontStyle: 'italic',
   },
+
+  // Photo zoom modal
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.92)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalCloseButton: {
     position: 'absolute',
-    top: 40,
+    top: 60,
     right: 20,
     zIndex: 1,
-    padding: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: palette.cream,
+    ...border.thick,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalPhoto: {
-    flex: 1,
     width: '100%',
+    height: '100%',
   },
   modalPhotoContainer: {
     flex: 1,
@@ -200,21 +228,4 @@ const styles = StyleSheet.create({
   modalPhotoImage: {
     flex: 1,
   },
-  firstSightingBadge: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    backgroundColor: '#FFD700',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  firstSightingText: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#8B4513',
-    textAlign: 'center',
-  },
-}); 
+});
