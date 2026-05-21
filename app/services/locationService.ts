@@ -26,16 +26,32 @@ interface LocationResult {
 
 // One-shot GPS fix + reverse geocode to a human-readable label. Catches all
 // errors and returns null so callers never need to think about failure modes.
+//
+// Strategy: prefer the OS-cached last-known position (instant) if it's recent
+// enough, otherwise request a fresh fix with a timeout. Cold fresh fixes on
+// Android can take 8+ seconds; using the cache makes consecutive locate taps
+// feel snappy.
 export async function getCurrentLocationWithLabel(
-  opts: { timeoutMs?: number } = {}
+  opts: { timeoutMs?: number; maxAgeMs?: number } = {}
 ): Promise<LocationResult | null> {
   const timeoutMs = opts.timeoutMs ?? 8000;
+  const maxAgeMs = opts.maxAgeMs ?? 60_000;
 
   try {
-    const position = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs)),
-    ]);
+    let position: Location.LocationObject | null = null;
+
+    try {
+      position = await Location.getLastKnownPositionAsync({ maxAge: maxAgeMs });
+    } catch (err) {
+      console.log('[locationService] getLastKnownPositionAsync failed:', err);
+    }
+
+    if (!position) {
+      position = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs)),
+      ]);
+    }
 
     if (!position) {
       console.log('[locationService] GPS fix timed out');

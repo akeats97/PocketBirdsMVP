@@ -116,6 +116,8 @@ export default function AddSightingScreen() {
   };
 
   const handleLocateTap = async () => {
+    locationInputRef.current?.blur();
+    Keyboard.dismiss();
     let granted = await hasLocationPermission();
     if (!granted) granted = await requestLocationPermission();
     if (!granted) return;
@@ -123,7 +125,7 @@ export default function AddSightingScreen() {
     if (!result) return;
     setShouldAutocompleteLocation(false);
     setPlaceSuggestions([]);
-    setLocation(result.label || location);
+    setLocation(result.label);
     setLocationCoords(result.coordinates);
   };
 
@@ -306,7 +308,7 @@ export default function AddSightingScreen() {
           styles.scrollContent,
           { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 },
         ]}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
         onScrollBeginDrag={handleOutsidePress}
       >
         <Pressable onPress={handleOutsidePress} android_disableSound={true}>
@@ -396,8 +398,11 @@ export default function AddSightingScreen() {
                     placeholderTextColor={palette.muted}
                     onBlur={() => setPlaceSuggestions([])}
                   />
-                  <TouchableOpacity
-                    style={styles.locateButton}
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.locateButton,
+                      pressed && { backgroundColor: palette.sunSoft },
+                    ]}
                     onPress={handleLocateTap}
                     accessibilityLabel="Use my current location"
                   >
@@ -406,7 +411,7 @@ export default function AddSightingScreen() {
                       size={22}
                       color={locationCoords ? palette.leaf : palette.ink}
                     />
-                  </TouchableOpacity>
+                  </Pressable>
                 </View>
                 {placeSuggestions.length > 0 && (
                   <View style={styles.suggestionsContainer}>

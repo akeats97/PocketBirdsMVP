@@ -55,7 +55,7 @@ export default function TabLayout() {
           title: 'Log',
           tabBarShowLabel: true,
           tabBarIcon: ({ focused, color }) => (
-            <TabPill name="list-outline" color={color} focused={focused} />
+            <TabPill name={focused ? 'list' : 'list-outline'} color={color} focused={focused} />
           ),
         }}
       />
@@ -65,7 +65,7 @@ export default function TabLayout() {
           title: 'Add Sighting',
           tabBarShowLabel: true,
           tabBarIcon: ({ focused, color }) => (
-            <TabPill name="add-circle-outline" color={color} focused={focused} />
+            <TabPill name={focused ? 'add-circle' : 'add-circle-outline'} color={color} focused={focused} />
           ),
         }}
       />
@@ -75,7 +75,7 @@ export default function TabLayout() {
           title: 'Dex',
           tabBarShowLabel: true,
           tabBarIcon: ({ focused, color }) => (
-            <TabPill name="book-outline" color={color} focused={focused} />
+            <TabPill name={focused ? 'book' : 'book-outline'} color={color} focused={focused} />
           ),
         }}
       />
@@ -85,7 +85,7 @@ export default function TabLayout() {
           title: 'Friends',
           tabBarShowLabel: true,
           tabBarIcon: ({ focused, color }) => (
-            <TabPill name="people-outline" color={color} focused={focused} />
+            <TabPill name={focused ? 'people' : 'people-outline'} color={color} focused={focused} />
           ),
         }}
       />

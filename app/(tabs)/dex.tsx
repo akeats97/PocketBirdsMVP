@@ -189,7 +189,6 @@ export default function DexScreen() {
                 <Text style={styles.heroBadgeNumber}>{stats.uniqueSpecies}</Text>
               </View>
               <View style={styles.heroText}>
-                <Text style={styles.heroLabel}>YOUR LIFE LIST</Text>
                 <Text style={styles.heroValue}>
                   {stats.uniqueSpecies} {stats.uniqueSpecies === 1 ? 'species' : 'species'}
                 </Text>
@@ -364,11 +363,6 @@ const styles = StyleSheet.create({
   },
   heroText: {
     flex: 1,
-  },
-  heroLabel: {
-    ...type.label,
-    color: palette.cream,
-    opacity: 0.65,
   },
   heroValue: {
     ...type.h2,
