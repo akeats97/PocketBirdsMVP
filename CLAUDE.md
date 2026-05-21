@@ -110,46 +110,17 @@ PocketBirds is a bare workflow app, so Expo Go cannot run it (native Firebase + 
 
 ---
 
-## 🚨 Active Blocker: Play Store Keystore Mismatch (as of Apr 19 2026, end of session)
+## Play Store Keystore — Recovery in progress (resolves May 23 2026)
 
-**Status:** Build v15 "Sheartail" succeeded but `eas submit` **failed** with a signing key mismatch. We cannot ship to Play Store until this is resolved.
+Path A (upload key reset via Play Console) was submitted and approved May 21 2026. The new upload key (the EAS keystore "Build Credentials Mwm5hIy734", SHA-1 `9F:80:48:66:0E:82:8F:1B:85:6D:1D:9B:3A:C5:0F:55:2A:CA:6C:85`) becomes valid in Play Console on **May 23 2026 at 10:47 AM UTC (~6:47 AM EDT)**.
 
-**Root cause (likely):** During the FCM V1 debugging session, when credentials were cleared from the Expo dashboard, the original upload keystore was unlinked/deleted along with the FCM key. EAS then auto-generated a new keystore for the v15 build, which Play Store rejects because it doesn't match the upload key Google Play has on file.
+**After that timestamp:** uploads work normally. The AAB from build `bcl6tdi7c` is already signed with the right keystore — just upload it to Play Console internal testing. No rebuild needed.
 
-**The keys:**
-- **AAB was signed with (new, auto-generated):** SHA-1 `9F:80:48:66:0E:82:8F:1B:85:6D:1D:9B:3A:C5:0F:55:2A:CA:6C:85` (EAS "Build Credentials Mwm5hIy734", created ~10:37 PM Apr 19)
-- **Play Store expects:** SHA-1 `F4:D0:DD:2D:6D:C6:CE:5C:CB:FE:B2:C4:FD:EA:0D:63:7D:90:61:8F`
-- **Previously-seen EAS keystore (in screenshot before the reset):** SHA-1 started `F2:C9...` ending `B4:30`. Does NOT match Play Store's expected either. May have been a secondary/intermediate keystore.
+**Original keystore status:** the original upload key (SHA-1 `F4:D0:DD:2D:6D:C6:CE:5C:CB:FE:B2:C4:FD:EA:0D:63:7D:90:61:8F`) is permanently lost. Was confirmed missing from EAS, local disk, iCloud, Time Machine, and Desktop Junk in the May 21 session. After the reset takes effect, Play Store no longer expects it.
 
-**What's no longer on EAS:** The old "Build Credentials VxuWsd7D-O" entry (alias `cc0ef95ade44f9166a80a815bb07e0a7`) — the CLI now shows only the new `Mwm5hIy734` entry.
+**Keystore backup:** Alex saved the .jks file + all three passwords (keystore password, key alias, key password) to his 1Password as of May 21. If EAS ever loses credentials again, restore from 1Password before letting EAS auto-generate yet another keystore — that avoids the whole reset cycle.
 
-**What's NOT locally available:** No `.jks`, `.keystore`, or `credentials.json` found anywhere in the project or `~/Downloads/` (besides the throwaway `android/app/debug.keystore`).
-
-### Next session: start here
-
-1. **Check Google Play Console app signing state.** Go to <https://play.google.com/console> → select PocketBirds → left nav → **Setup** → **App integrity** → **App signing**. Report back:
-   - Is Play App Signing enabled?
-   - What's the **app signing key certificate** SHA-1?
-   - What's the **upload key certificate** SHA-1? (should be `F4:D0...61:8F`)
-   - Is there a **"Request upload key reset"** button?
-
-2. **Check release history.** Play Console → **Testing** → **Internal testing** → **Releases** tab. What's the highest versionCode that was actually *accepted* (not rejected)? User thinks the Play Store listing was never fully set up — if NO build has ever been accepted, Google may not have locked in an upload key yet and we'd have more flexibility.
-
-### Likely recovery paths (pick based on Play Console findings)
-
-- **Path A — Upload key never locked in:** If no build has been accepted into Play Console and the upload key isn't set, we can just rebuild with the current (new) keystore and submit; Play will accept it as the first upload key.
-- **Path B — Upload key reset via Play Console:** If there's a "Request upload key reset" option, submit a PEM-encoded certificate from the new keystore. ~48 hour turnaround, but doable without Google Support.
-- **Path C — Recover the original keystore:** Unlikely — it's not on EAS and not locally. Worth one more check of old Expo dashboard history before giving up.
-- **Path D — Google Play Support ticket:** Last resort. Slow (~days) but they can reset the upload key.
-
-### Uncommitted at end of session
-- `release-names.csv` has dates added for Thorntail (Apr 16) and Sheartail (Apr 19). Committable but not blocking.
-- Untracked: `.claude/`, `functions/app.json` — leave alone (local tooling / unknown origin).
-
-### What IS working end of session
-- Push notifications fully functional (both warm + cold-start nav to Friends tab, priority:high delivery, FCM V1 credentials).
-- Build succeeded — the AAB `v9xEA9PRMaBm8S1vVxpwYX.aab` exists on EAS servers, just can't be uploaded to Play Store with the current keystore.
-- master branch is at `3632a12`, push_notifs fully merged.
+The leftover `release-names.csv` dates for Thorntail (Apr 16) and Sheartail (Apr 19) were committed during the May 20 session.
 
 ---
 
@@ -234,6 +205,47 @@ const {GoogleAuth} = require('google-auth-library');
 "
 ```
 Expected: `400 ... INVALID_ARGUMENT` (the bogus token is rejected, but auth succeeded). If you see `403 PERMISSION_DENIED`, the service account lacks the Firebase Messaging API Admin role.
+
+---
+
+## Location / Places (added May 20 2026)
+
+Sightings can now carry optional GPS coordinates alongside the freeform location label.
+
+**Data shape:**
+- `Sighting.coordinates?: { latitude, longitude, accuracy?, capturedAt? }` (see `app/types.ts`)
+- `SightingsContext.lastLocation` is now `{ label: string, coordinates? }` (used to be a bare string — there's an AsyncStorage migration for the legacy shape).
+
+**Services:**
+- `app/services/locationService.ts` — wraps `expo-location` for current GPS fix + reverse-geocode. Reverse-geocode is FREE (uses native OS geocoders). Returns null on any failure so callers don't need error handling.
+- `app/services/placesService.ts` — wraps Google Places Autocomplete + Place Details. **Costs money** (within the $200/mo Google Maps free tier at our scale). API key in `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY` env var.
+
+**Google Places API setup:**
+- Key lives in `.env` (gitignored) as `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY`. Loaded by Expo at build time.
+- GCP project is `pocketbirds` (same as Firebase). Key restricted by Android package `com.akeats97.pocketbirds` + SHA-1 of the EAS keystore.
+- Only the **classic** "Places API" is enabled (NOT "Places API (New)" — the placesService code uses the classic endpoints).
+- For EAS production/dev builds, also need: `eas env:create --scope project --visibility plaintext --name EXPO_PUBLIC_GOOGLE_PLACES_API_KEY --value '<key>'`. Local `.env` only covers `npx expo start`.
+
+**Add Sighting UX:**
+- Location field has a crosshair "locate" icon (Ionicons `locate`) inside the input on the right. Tap → permission prompt JIT → GPS fix → reverse-geocode → fills label + attaches coords.
+- Typing into the field triggers debounced (300ms) Google Places autocomplete biased to `lastLocation.coordinates` (if available). Suggestion tap fetches Place Details for coords.
+- Coords are explicitly user-initiated. No silent GPS capture on save.
+- Free-typed labels with no suggestion/locate tap save with no coords (label only).
+
+**SightingCard:** the location pin icon tints green when `coordinates` are attached, default gray otherwise. Subtle visual cue for verification.
+
+---
+
+## Bird Taxonomy / Search Perf
+
+- Bird list is **IOC World Bird List v15.2**, 11,227 species, stored in `constants/birdNames.ts` (taxonomic order).
+- Attribution is mandatory under IOC's license — shown as a small footer on the Bird Dex tab. Don't remove it.
+- For hot-path search (Add Sighting suggestions), use `constants/birdNamesLower.ts`. It exports:
+  - `birdNamesLower` — lowercase copy of `birdNames`, parallel array
+  - `birdNamesAlpha` — alphabetically-sorted copy of `birdNames` (taxonomic order is lost — this is purely a search index)
+  - `birdNamesAlphaLower` — lowercase of `birdNamesAlpha`
+- The search pattern in `add.tsx` iterates `birdNamesAlpha` with tiered early-exit (prefix > word-start > substring, cap 20). No per-keystroke sort. Re-use this pattern for any other "filter the bird list" feature.
+- Legacy name handling: existing sightings logged under old AOS-style names (e.g. "Bank Swallow") were migrated in Firestore to IOC equivalents (e.g. "Sand Martin") in the May 20 session. Dex code is also resilient: any species the user has logged appears even if its name isn't in the canonical list.
 
 ---
 
