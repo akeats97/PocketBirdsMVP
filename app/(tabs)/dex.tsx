@@ -83,16 +83,26 @@ export default function DexScreen() {
     const out: Section[] = [];
     const canonical = new Set<string>();
 
+    // A bird's intrinsic regional fit (independent of whether the user has
+    // seen it). Used for the section header count so the denominator tracks
+    // the selected regions instead of the global species total.
+    const inRegion = (regions: RegionCode[]) =>
+      regions.length === 0 || regions.some(r => selSet.has(r));
+
     const passesRegion = (regions: RegionCode[], seen: boolean) =>
-      seen || regions.length === 0 || regions.some(r => selSet.has(r));
+      seen || inRegion(regions);
 
     for (const fam of birdFamilies) {
       const filtered: string[] = [];
       let familySeen = 0;
+      let familyTotal = 0;
       for (const b of fam.birds) {
         canonical.add(b.name);
         const seen = !!seenMap[b.name];
-        if (seen) familySeen += 1;
+        if (inRegion(b.regions)) {
+          familyTotal += 1;
+          if (seen) familySeen += 1;
+        }
         if (showOnlySeen && !seen) continue;
         if (!passesRegion(b.regions, seen)) continue;
         if (q && !b.name.toLowerCase().includes(q)) continue;
@@ -103,7 +113,7 @@ export default function DexScreen() {
       for (let i = 0; i < filtered.length; i += COLUMNS) {
         rows.push(filtered.slice(i, i + COLUMNS));
       }
-      out.push({ title: fam.family, data: rows, familySeen, familyTotal: fam.birds.length });
+      out.push({ title: fam.family, data: rows, familySeen, familyTotal });
     }
 
     const orphans = Object.keys(seenMap)
@@ -215,8 +225,7 @@ export default function DexScreen() {
         keyExtractor={keyExtractor}
         renderItem={renderRow}
         renderSectionHeader={renderSectionHeader}
-        stickySectionHeadersEnabled
-        removeClippedSubviews
+        stickySectionHeadersEnabled={false}
         windowSize={5}
         initialNumToRender={12}
         maxToRenderPerBatch={8}
@@ -423,10 +432,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1.5,
     borderBottomWidth: 1.5,
     borderColor: palette.ink,
-    paddingTop: 12,
+    paddingTop: 20,
     paddingBottom: 8,
     paddingHorizontal: space.lg + 2,
-    marginTop: space.sm,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
