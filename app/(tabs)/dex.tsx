@@ -1,6 +1,6 @@
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
 import { useSightings } from '../context/SightingsContext';
@@ -121,7 +121,7 @@ export default function DexScreen() {
         ? 'No regions'
         : `${selectedRegions.length} region${selectedRegions.length === 1 ? '' : 's'}`;
 
-  const renderRow = ({ item }: { item: RowItem }) => (
+  const renderRow = useCallback(({ item }: { item: RowItem }) => (
     <View style={styles.row}>
       {item.map(name => {
         const seen = !!seenMap[name];
@@ -141,7 +141,15 @@ export default function DexScreen() {
           <View key={`spacer-${i}`} style={styles.cardSpacer} />
         ))}
     </View>
-  );
+  ), [seenMap]);
+
+  const renderSectionHeader = useCallback(({ section }: { section: Section }) => (
+    <Text style={styles.sectionHeader}>{section.title}</Text>
+  ), []);
+
+  // Stable per-row key so React reuses row components across filter changes
+  // (the first bird name in a row is unique across the whole list).
+  const keyExtractor = useCallback((item: RowItem) => item[0], []);
 
   return (
     <View style={styles.container}>
@@ -178,6 +186,8 @@ export default function DexScreen() {
         <TouchableOpacity
           style={styles.toggleContainer}
           onPress={() => setShowOnlySeen(!showOnlySeen)}
+          hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+          activeOpacity={0.6}
         >
           <View style={[styles.checkbox, showOnlySeen && styles.checkboxChecked]}>
             {showOnlySeen && <FontAwesome5 name="check" size={12} color="white" />}
@@ -197,12 +207,15 @@ export default function DexScreen() {
 
       <SectionList
         sections={sections}
-        keyExtractor={(item, idx) => item.join('|') + idx}
+        keyExtractor={keyExtractor}
         renderItem={renderRow}
-        renderSectionHeader={({ section: { title } }) => (
-          <Text style={styles.sectionHeader}>{title}</Text>
-        )}
+        renderSectionHeader={renderSectionHeader}
         stickySectionHeadersEnabled
+        removeClippedSubviews
+        windowSize={5}
+        initialNumToRender={12}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={50}
         ListFooterComponent={
           <Text style={styles.attribution}>
             Bird names from the IOC World Bird List (v15.2) — worldbirdnames.org
@@ -329,6 +342,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 1,
+    paddingVertical: 6,
+    paddingRight: 8,
   },
   checkbox: {
     width: 20,
