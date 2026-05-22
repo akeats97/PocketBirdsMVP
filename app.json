@@ -10,8 +10,11 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.akeats97.pocketbirds",
+      "googleServicesFile": "./ios/PocketBirds4/GoogleService-Info.plist",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Allow PocketBirds to access your photos to attach them to bird sightings."
+        "NSPhotoLibraryUsageDescription": "Allow PocketBirds to access your photos to attach them to bird sightings.",
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
