@@ -10,7 +10,7 @@ import { useWishlist } from '../context/WishlistContext';
 
 type FilterMode = 'all' | 'seen' | 'wishlist';
 
-type SeenInfo = { timesSeen: number; lastSeen: string };
+type SeenInfo = { timesSeen: number; lastSeen: string; hasPhoto: boolean };
 type RowItem = string[];
 type Section = { title: string; data: RowItem[]; familySeen: number; familyTotal: number };
 
@@ -67,10 +67,11 @@ export default function DexScreen() {
   const seenMap = useMemo(() => {
     const map: { [name: string]: SeenInfo } = {};
     sightings.forEach(s => {
-      const entry = map[s.birdName] || { timesSeen: 0, lastSeen: '' };
+      const entry = map[s.birdName] || { timesSeen: 0, lastSeen: '', hasPhoto: false };
       entry.timesSeen += 1;
       const d = s.date.toISOString().split('T')[0];
       if (!entry.lastSeen || d > entry.lastSeen) entry.lastSeen = d;
+      if (s.photoUrl) entry.hasPhoto = true;
       map[s.birdName] = entry;
     });
     return map;
@@ -79,6 +80,7 @@ export default function DexScreen() {
   const stats = useMemo(() => ({
     totalSightings: sightings.length,
     uniqueSpecies: Object.keys(seenMap).length,
+    photographedSpecies: Object.values(seenMap).filter(info => info.hasPhoto).length,
   }), [sightings.length, seenMap]);
 
   const sections = useMemo<Section[]>(() => {
@@ -167,6 +169,7 @@ export default function DexScreen() {
         const info = seenMap[name];
         const seen = !!info;
         const times = info?.timesSeen ?? 0;
+        const hasPhoto = info?.hasPhoto ?? false;
         const wished = wishlist.has(name);
         return (
           <View key={name} style={[styles.tile, seen ? styles.tileSeen : styles.tileUnseen]}>
@@ -188,6 +191,11 @@ export default function DexScreen() {
                 color={wished ? palette.sun : palette.muted}
               />
             </Pressable>
+            {hasPhoto && (
+              <View style={styles.cameraIndicator}>
+                <Ionicons name="camera" size={14} color={palette.sun} />
+              </View>
+            )}
             {seen && times > 1 && (
               <View style={styles.countBadge}>
                 <Text style={styles.countBadgeText}>×{times}</Text>
@@ -222,16 +230,28 @@ export default function DexScreen() {
         <View style={styles.heroWrap}>
           <HardShadow borderRadius={radius.card}>
             <View style={styles.hero}>
-              <View style={styles.heroBadge}>
-                <Text style={styles.heroBadgeNumber}>{stats.uniqueSpecies}</Text>
-              </View>
-              <View style={styles.heroText}>
-                <Text style={styles.heroValue}>
-                  {stats.uniqueSpecies} {stats.uniqueSpecies === 1 ? 'species' : 'species'}
-                </Text>
-                <Text style={styles.heroSubtitle}>
-                  Next milestone: {nextMilestone(stats.uniqueSpecies)} — keep going.
-                </Text>
+              <View style={styles.statsRow}>
+                <View style={styles.statBlock}>
+                  <View style={styles.statCircle}>
+                    <Text style={styles.statCircleNumber}>{stats.uniqueSpecies}</Text>
+                  </View>
+                  <Text style={styles.statLabel}>species</Text>
+                </View>
+                <View style={styles.statBlock}>
+                  <View style={styles.statCircle}>
+                    <Text style={styles.statCircleNumber}>{stats.totalSightings}</Text>
+                  </View>
+                  <Text style={styles.statLabel}>sightings</Text>
+                </View>
+                <View style={styles.statBlock}>
+                  <View style={styles.statCircle}>
+                    <Text style={styles.statCircleNumber}>{stats.photographedSpecies}</Text>
+                  </View>
+                  <View style={styles.statLabelRow}>
+                    <Ionicons name="camera" size={11} color={palette.cream} style={{ marginRight: 3, opacity: 0.7 }} />
+                    <Text style={styles.statLabel}>photographed</Text>
+                  </View>
+                </View>
               </View>
             </View>
           </HardShadow>
@@ -378,41 +398,42 @@ const styles = StyleSheet.create({
     backgroundColor: palette.ink,
     borderRadius: radius.card,
     padding: space.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.lg,
     ...border.thick,
   },
-  heroBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statBlock: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: palette.sun,
     borderWidth: 2,
     borderColor: palette.cream,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 6,
   },
-  heroBadgeNumber: {
+  statCircleNumber: {
     fontFamily: font.displayBlack,
-    fontSize: 22,
+    fontSize: 20,
     color: palette.ink,
     letterSpacing: -0.5,
   },
-  heroText: {
-    flex: 1,
-  },
-  heroValue: {
-    ...type.h2,
-    color: palette.cream,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  heroSubtitle: {
+  statLabel: {
     ...type.bodyS,
     color: palette.cream,
     opacity: 0.7,
-    marginTop: 4,
+  },
+  statLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 
   // Search
@@ -550,6 +571,11 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: palette.cream,
     letterSpacing: 0.3,
+  },
+  cameraIndicator: {
+    position: 'absolute',
+    bottom: 5,
+    left: 6,
   },
 
   // Attribution
