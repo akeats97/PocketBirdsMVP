@@ -294,7 +294,7 @@ export default function AddSightingScreen() {
                 color="#fff"
               />
               <Text style={styles.successPopupText}>
-                {isNewSpecies ? 'Lifer.' : 'Sighting logged successfully!'}
+                {isNewSpecies ? 'New species added to your dex!' : 'Sighting logged successfully!'}
               </Text>
             </View>
           </HardShadow>
