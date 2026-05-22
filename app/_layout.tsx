@@ -28,6 +28,7 @@ import { palette } from '../constants/Colors';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
 import FriendSightingsProvider from './context/FriendSightingsContext';
 import { SightingsProvider, useSightings } from './context/SightingsContext';
+import { WishlistProvider } from './context/WishlistContext';
 import LoginScreen from '../components/LoginScreen';
 import { notificationService } from './services/notificationService';
 import { savePushToken } from './services/userService';
@@ -254,22 +255,24 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SightingsProvider>
         <FriendSightingsProvider>
-          {user ? (
-            // User is logged in - show the main app with Stack navigation
-            <AuthenticatedApp key="authenticated" />
-          ) : (
-            // User is not logged in - show login screen directly (not as a route)
-            <ThemeProvider value={theme} key="login">
-              <StatusBar
-                barStyle="dark-content"
-                backgroundColor={palette.cream}
-                translucent={true}
-              />
-              <SafeAreaView style={{ flex: 1, backgroundColor: palette.cream }}>
-                <LoginScreen />
-              </SafeAreaView>
-            </ThemeProvider>
-          )}
+          <WishlistProvider>
+            {user ? (
+              // User is logged in - show the main app with Stack navigation
+              <AuthenticatedApp key="authenticated" />
+            ) : (
+              // User is not logged in - show login screen directly (not as a route)
+              <ThemeProvider value={theme} key="login">
+                <StatusBar
+                  barStyle="dark-content"
+                  backgroundColor={palette.cream}
+                  translucent={true}
+                />
+                <SafeAreaView style={{ flex: 1, backgroundColor: palette.cream }}>
+                  <LoginScreen />
+                </SafeAreaView>
+              </ThemeProvider>
+            )}
+          </WishlistProvider>
         </FriendSightingsProvider>
       </SightingsProvider>
     </GestureHandlerRootView>

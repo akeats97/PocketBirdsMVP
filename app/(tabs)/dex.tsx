@@ -6,6 +6,9 @@ import { HardShadow } from '../../components/SightingCard';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { useSightings } from '../context/SightingsContext';
+import { useWishlist } from '../context/WishlistContext';
+
+type FilterMode = 'all' | 'seen' | 'wishlist';
 
 type SeenInfo = { timesSeen: number; lastSeen: string };
 type RowItem = string[];
@@ -26,10 +29,11 @@ function nextMilestone(count: number): number {
 
 export default function DexScreen() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [showOnlySeen, setShowOnlySeen] = useState(true);
+  const [filter, setFilter] = useState<FilterMode>('seen');
   const [selectedRegions, setSelectedRegions] = useState<RegionCode[]>(ALL_REGIONS);
   const [regionsModalOpen, setRegionsModalOpen] = useState(false);
   const { sightings } = useSightings();
+  const { wishlist, toggle: toggleWishlist } = useWishlist();
 
   useEffect(() => {
     (async () => {
@@ -99,12 +103,17 @@ export default function DexScreen() {
       for (const b of fam.birds) {
         canonical.add(b.name);
         const seen = !!seenMap[b.name];
+        const wished = wishlist.has(b.name);
         if (inRegion(b.regions)) {
           familyTotal += 1;
           if (seen) familySeen += 1;
         }
-        if (showOnlySeen && !seen) continue;
-        if (!passesRegion(b.regions, seen)) continue;
+        if (filter === 'seen' && !seen) continue;
+        if (filter === 'wishlist' && !wished) continue;
+        // 'all' shows the region-scoped set; 'seen'/'wishlist' don't need the
+        // region-pass check because seen and wishlisted birds are always
+        // visible regardless of region selection.
+        if (filter === 'all' && !passesRegion(b.regions, seen || wished)) continue;
         if (q && !b.name.toLowerCase().includes(q)) continue;
         filtered.push(b.name);
       }
@@ -116,9 +125,24 @@ export default function DexScreen() {
       out.push({ title: fam.family, data: rows, familySeen, familyTotal });
     }
 
-    const orphans = Object.keys(seenMap)
-      .filter(name => !canonical.has(name))
-      .filter(name => !q || name.toLowerCase().includes(q));
+    // Orphan names: anything in the user's seen map OR wishlist that isn't in
+    // the canonical IOC list. Show them under "Other" if they pass the active
+    // filter.
+    const orphanCandidates = new Set<string>();
+    for (const name of Object.keys(seenMap)) if (!canonical.has(name)) orphanCandidates.add(name);
+    for (const name of wishlist) if (!canonical.has(name)) orphanCandidates.add(name);
+
+    const orphans = Array.from(orphanCandidates)
+      .filter((name) => {
+        const seen = !!seenMap[name];
+        const wished = wishlist.has(name);
+        if (filter === 'seen' && !seen) return false;
+        if (filter === 'wishlist' && !wished) return false;
+        return true;
+      })
+      .filter((name) => !q || name.toLowerCase().includes(q))
+      .sort();
+
     if (orphans.length) {
       const rows: RowItem[] = [];
       for (let i = 0; i < orphans.length; i += COLUMNS) {
@@ -128,7 +152,7 @@ export default function DexScreen() {
     }
 
     return out;
-  }, [searchQuery, showOnlySeen, seenMap, selectedRegions]);
+  }, [searchQuery, filter, seenMap, selectedRegions, wishlist]);
 
   const regionsLabel =
     selectedRegions.length === ALL_REGIONS.length
@@ -139,10 +163,11 @@ export default function DexScreen() {
 
   const renderRow = useCallback(({ item }: { item: RowItem }) => (
     <View style={styles.row}>
-      {item.map(name => {
+      {item.map((name) => {
         const info = seenMap[name];
         const seen = !!info;
         const times = info?.timesSeen ?? 0;
+        const wished = wishlist.has(name);
         return (
           <View key={name} style={[styles.tile, seen ? styles.tileSeen : styles.tileUnseen]}>
             <Text
@@ -151,6 +176,18 @@ export default function DexScreen() {
             >
               {name}
             </Text>
+            <Pressable
+              onPress={() => toggleWishlist(name)}
+              style={styles.starButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel={wished ? `Remove ${name} from wishlist` : `Add ${name} to wishlist`}
+            >
+              <Ionicons
+                name={wished ? 'star' : 'star-outline'}
+                size={18}
+                color={wished ? palette.sun : palette.muted}
+              />
+            </Pressable>
             {seen && times > 1 && (
               <View style={styles.countBadge}>
                 <Text style={styles.countBadgeText}>×{times}</Text>
@@ -164,7 +201,7 @@ export default function DexScreen() {
           <View key={`spacer-${i}`} style={styles.tileSpacer} />
         ))}
     </View>
-  ), [seenMap]);
+  ), [seenMap, wishlist, toggleWishlist]);
 
   const renderSectionHeader = useCallback(({ section }: { section: Section }) => (
     <View style={styles.sectionHeader}>
@@ -213,8 +250,9 @@ export default function DexScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipsRow}
         >
-          <Chip label="All" active={!showOnlySeen} onPress={() => setShowOnlySeen(false)} />
-          <Chip label="Seen" active={showOnlySeen} onPress={() => setShowOnlySeen(true)} />
+          <Chip label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
+          <Chip label="Seen" active={filter === 'seen'} onPress={() => setFilter('seen')} />
+          <Chip label="Wishlist" active={filter === 'wishlist'} onPress={() => setFilter('wishlist')} />
           <Chip label={`Region · ${regionsLabel}`} active={false} onPress={() => setRegionsModalOpen(true)} />
         </ScrollView>
       </View>
@@ -480,7 +518,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 13.2,
     letterSpacing: -0.3,
-    paddingRight: 4,
+    paddingRight: 22,
+  },
+  starButton: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tileNameSeen: {
     fontWeight: '700',
