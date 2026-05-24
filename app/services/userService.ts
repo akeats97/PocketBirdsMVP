@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 
 // Type definitions
@@ -16,65 +16,43 @@ export async function searchUsers(usernameQuery: string, maxResults = 10): Promi
   }
 
   try {
-    console.log('Searching for usernames starting with:', usernameQuery);
-    
-    // Get usernames that match the query
+    const queryLower = usernameQuery.toLowerCase();
+    console.log('Searching for usernames starting with (case-insensitive):', queryLower);
+
+    // Firestore document IDs are case-sensitive, so a range query on __name__ misses
+    // any username whose case differs from the query. Fetch the collection and filter
+    // in JS instead. Fine at our scale (handful of users; revisit past a few thousand).
     const usernameRef = collection(db, 'usernames');
-    
-    // Since usernames are document IDs in Firestore, we query by document ID
-    // using the special field '__name__'
-    const q = query(
-      usernameRef,
-      where('__name__', '>=', usernameQuery),
-      where('__name__', '<=', usernameQuery + '\uf8ff'),
-      limit(maxResults)
-    );
-    
-    console.log('Query parameters:', {
-      collection: 'usernames',
-      start: usernameQuery,
-      end: usernameQuery + '\uf8ff',
-      limit: maxResults
-    });
-    
-    const usernameSnapshot = await getDocs(q);
-    
-    console.log(`Found ${usernameSnapshot.size} username matches for: "${usernameQuery}"`);
-    
-    if (usernameSnapshot.empty) {
-      console.log('No usernames found matching the query');
+    const usernameSnapshot = await getDocs(usernameRef);
+
+    const matches = usernameSnapshot.docs
+      .filter(d => d.id.toLowerCase().startsWith(queryLower))
+      .slice(0, maxResults);
+
+    console.log(`Found ${matches.length} username matches for: "${usernameQuery}"`);
+
+    if (matches.length === 0) {
       return [];
     }
-    
-    // Map to get full user details
+
     const users = await Promise.all(
-      usernameSnapshot.docs.map(async (usernameDoc) => {
-        // Username is the document ID
+      matches.map(async (usernameDoc) => {
         const username = usernameDoc.id;
         const uid = usernameDoc.data().uid;
-        
-        console.log(`Processing username: "${username}" with uid: ${uid}`);
-        
         const userDoc = await getDoc(doc(db, 'users', uid));
-        
+
         if (userDoc.exists()) {
-          console.log(`User data found for ${username}`);
           return {
             uid,
-            username, // Ensure username is included
+            username,
             ...userDoc.data(),
           } as UserProfile;
         }
-        
-        console.log(`No user data found for ${username}`);
         return null;
       })
     );
 
-    const filteredUsers = users.filter(user => user !== null) as UserProfile[];
-    console.log(`Returning ${filteredUsers.length} valid user results`);
-    
-    return filteredUsers;
+    return users.filter(user => user !== null) as UserProfile[];
   } catch (error) {
     console.error('Error searching users:', error);
     throw error;
