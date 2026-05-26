@@ -6,6 +6,12 @@ The prompts are written to be standalone — Claude Code can act on them without
 
 ---
 
+## Next Play Store build — verifications outstanding
+
+- **Bug 3 cold-start repro** (offline data loss, fixed May 26 2026, commits `0d9653a` / `13b759a` / `1d803ea`). The dev client can't verify the literal cold-start-while-offline path because it needs Metro to launch. Online regression, offline write + online sync, and logout/login were all verified on the dev client. **Next production build:** install it, run the original repro — airplane mode → log 3 sightings → force-quit the app → reopen while still in airplane mode → confirm all 3 sightings are still there → turn airplane mode off → confirm they sync to Firestore.
+
+---
+
 ## Bugs
 
 Listed in rough priority order. Bug 3 (offline data loss) is the only one that should be treated as drop-everything urgent — the others can ship in a batch.
