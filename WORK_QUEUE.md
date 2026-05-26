@@ -566,20 +566,27 @@ Verification: deploy the function (`firebase deploy --only functions:onFollowAdd
 
 ### Feature 4 — Per-friend notification preferences (YouTube bell)
 
-**What we want:** Next to each friend in your friends list, a bell icon that cycles through three modes (or opens a small menu), exactly like YouTube's subscribe-bell:
-- **All** — push for every sighting (current default behavior).
-- **Highlights** — push only for new-species sightings (a species the friend has never logged before) and major milestones (level-up, hitting their annual species goal).
+**What we want:** Next to each friend in your friends list, a bell icon that opens a picker with three modes — exactly like YouTube's subscribe-bell:
+- **All** — push for every sighting the friend logs.
+- **Highlights** — push only when the sighting is a new species for the friend (a species they've never logged before) OR when it triggers an existing species-count milestone (5, 10, 25, 50, 100, 150, 200, ... — same thresholds as the in-app milestone celebration popup).
 - **None** — silent. Sightings still appear in your feed; you just don't get pushed.
 
+**Default:** "Highlights" for new friend relationships. Existing follows that have no pref doc also resolve to "Highlights." (Loud-but-not-too-loud — users still get the moments worth interrupting them for, without buzz fatigue.)
+
 **Design considerations:**
-- **Where preference lives:** Firestore subcollection on the *follower's* user doc — `users/{followerUid}/notificationPrefs/{followedUid}: { mode: "all" | "highlights" | "none" }`. Default to "all" if no doc exists (existing behavior).
-- **Cloud Function check:** When a sighting is logged, the existing function iterates followers. For each follower, look up their pref for this poster. Skip "none." For "highlights," check whether the sighting introduces a new species for the poster (already needed by Feature 1) or whether it triggered a milestone for the poster.
-- **What counts as "highlights":** New species for the poster, level-ups (via Feature 2), and hitting the annual species goal (via PRD §7). These are the moments worth interrupting a friend for.
-- **UI:** Bell icon in the friends list row, three states with different icons (bell-filled = all, bell-outline = highlights, bell-slash = none). Tap → small action sheet / menu with the three options and a one-line description of each. Don't cycle on plain tap — too easy to mis-set and not realize.
+- **Where preference lives:** Firestore subcollection on the *follower's* user doc — `users/{followerUid}/notificationPrefs/{followedUid}: { mode: "all" | "highlights" | "none", updatedAt }`. Absence of the doc resolves to "highlights" (the new default).
+- **Existing milestone logic to re-use:** `app/constants/milestones.ts` already has `isMilestone(count)` — true for 5, 10, 25, then every 50 from 50 onward. The Cloud Function should use the same thresholds so the push aligns with the in-app celebration popup the user is seeing.
+- **What counts as "highlights" in this v1:** Just two things — (a) new species for the poster, (b) species-count milestone for the poster (per `isMilestone`). Nothing else for now. See "v2 deferred" below.
+- **UI:** Bell icon in each friends-list row. Three icon states (filled = all, outline = highlights, slashed = none). Tap → small action sheet / bottom modal with the three options and a one-line description. Don't cycle on plain tap — too easy to mis-set and not realize.
+
+**v2 deferred (intentionally out of scope for the first version):**
+- Push when the friend levels up (depends on Feature 2 / leveling system).
+- Push when the friend hits their annual species goal (depends on the Goodreads-style annual goal data model from PRD §7, which isn't built yet).
+- Both of these belong in the "highlights" bucket logically and should be added once those upstream features exist.
 
 **Open questions / calls I made:**
-- **Default is "All".** This preserves current behavior and matches the "loud by default, let users mute" philosophy.
-- **"Highlights" = new species + level-ups + goal-hits.** I drew that line; you might want to expand (first-of-year? first-of-month?) or narrow (just new species).
+- **Default changed to "Highlights"** (per Alex's call). This is silently quieter than today's behavior for users who have existing follows — they'll suddenly receive fewer pushes. That's intentional and aligned with PRD §5's "no daily-streak guilt trap" thinking, but worth flagging as a behavior change for current users.
+- **No code-sharing with the client.** `functions/` has its own `node_modules` and package.json, so reaching into `app/constants/milestones.ts` from the Cloud Function isn't free. The prompt below tells Claude Code to copy the small `isMilestone` helper into `functions/` with a sync comment, rather than building infrastructure to share it.
 - **Bell lives in the friends list, not on individual sighting cards.** Subscription-level setting, not per-sighting. YouTube model.
 
 **Prompt for Claude Code:**
@@ -588,52 +595,84 @@ Verification: deploy the function (`firebase deploy --only functions:onFollowAdd
 Add per-friend notification preferences with a YouTube-style bell UI.
 
 Three modes, set per-friend by the follower:
-- "all": push for every sighting the friend logs (current default).
-- "highlights": push only when the sighting is a new species for that friend OR when it triggers a milestone (level-up or annual goal hit).
-- "none": no push. Sighting still appears in the friend's feed.
+- "all": push for every sighting the followed friend logs.
+- "highlights": push only when the sighting is a new species for that friend (a species they've never logged before) OR when it triggers a species-count milestone (5, 10, 25, then every 50 from 50 onward — same thresholds as the existing in-app celebration popup).
+- "none": no push. Sighting still appears in the follower's feed.
 
-Data:
-- Firestore subcollection: users/{followerUid}/notificationPrefs/{followedUid} with shape { mode: "all" | "highlights" | "none", updatedAt }.
-- Absence of the document means default "all" — do NOT eagerly create docs for every existing friend pair on first read.
+Default mode for any friend with no pref doc: "highlights". This is a behavior change from today (today = effectively "all" for everyone). That is intentional. Do not migrate existing users to explicit "all" docs — just let absence-of-doc resolve to "highlights".
+
+Data model:
+- Firestore subcollection: users/{followerUid}/notificationPrefs/{followedUid} with shape:
+    { mode: "all" | "highlights" | "none", updatedAt: Timestamp }
+- Absence resolves to "highlights".
+- Do NOT eagerly create docs for every existing friend pair on first read.
 
 Client UI:
-- In app/(tabs)/friends.tsx, add a bell icon to each friend row.
-- Icon states:
-  - "all" → Ionicons "notifications" (filled bell)
-  - "highlights" → Ionicons "notifications-outline" (outline bell)
-  - "none" → Ionicons "notifications-off" (slashed bell)
-- Tap → open a small action sheet / bottom modal with the three options and a one-line description each:
-  - "All sightings — push every time"
-  - "Highlights only — push for new species and milestones"
-  - "Nothing — silent, but still in your feed"
-- After selection, write to the subcollection optimistically and revert on error.
+
+1. Add a bell icon to each friend row in app/(tabs)/friends.tsx.
+
+2. Icon states (use @expo/vector-icons Ionicons):
+   - "all" → "notifications" (filled bell)
+   - "highlights" → "notifications-outline" (outline bell)
+   - "none" → "notifications-off" (slashed bell)
+
+3. Tap the bell → open a small action sheet / bottom modal with three options and one-line descriptions:
+   - "All sightings — push every time"
+   - "Highlights only — push for new species and milestones" (this is the default)
+   - "Nothing — silent, but still in your feed"
+
+4. After selection, optimistic write to the subcollection; revert on error.
 
 New service:
-- app/services/notificationPrefsService.ts — getPref(followedUid), setPref(followedUid, mode), and a hook subscribeToPrefs() that listens to the subcollection.
+- app/services/notificationPrefsService.ts with:
+  - getPref(followerUid, followedUid) → Promise<Mode>  (returns "highlights" if no doc)
+  - setPref(followerUid, followedUid, mode) → Promise<void>
+  - subscribeToPrefs(followerUid) → unsub  (real-time listener that hydrates a local map for UI)
 
 Cloud Function (functions/index.js):
-- In the existing onSightingAdded function (the one that pushes to followers), for each follower:
-  1. Look up the follower's pref doc for this poster. If missing or mode === "all", proceed as today.
-  2. If mode === "none", skip.
-  3. If mode === "highlights":
-     - Push if the sighting introduces a new species for the poster (compare against poster's existing seen-species — denormalize a `seenSpecies` array on the poster's user doc if not present; coordinate this with Feature 2's denormalization need).
-     - Push if the sighting triggered a level-up (compare species count before vs after against the levels table from Feature 2).
-     - Push if the sighting hit the poster's annual species goal (from the PRD §7 Goodreads-style goal — if that data model isn't in place yet, treat this branch as a no-op and add a TODO).
-     - Otherwise, skip.
+
+1. Locate the existing function that fires push when a sighting is added (per CLAUDE.md it's onSightingAdded). For each follower it currently pushes to:
+
+   a. Look up users/{followerUid}/notificationPrefs/{posterUid}.
+   b. Resolve mode: if doc missing → "highlights". Else use doc.mode.
+   c. If mode === "none": skip.
+   d. If mode === "all": send (existing behavior).
+   e. If mode === "highlights":
+      - Determine if this sighting is a NEW SPECIES for the poster. Query sightings where userId == posterUid AND species == sighting.species. If the result count is 1 (just this one), it's a new species → send.
+      - If not new species, check if the sighting triggered a MILESTONE. Compute the poster's distinct species count AFTER this sighting (query distinct species for posterUid). If isMilestone(count) returns true, send.
+      - Otherwise, skip.
+
+2. The milestone helper — DO NOT try to import from app/constants/milestones.ts. functions/ has its own node_modules. Copy the helper into functions/lib/milestones.js (or inline at the top of index.js) with this comment:
+
+     // KEEP IN SYNC with app/constants/milestones.ts.
+     // Milestones: 5, 10, 25, then every 50 from 50 onward.
+
+   Copy the isMilestone function verbatim — it's tiny.
+
+3. For the new-species and milestone checks: be efficient about reads. One Firestore query per check is fine at our scale. Do not iterate every sighting.
 
 DO NOT:
-- Push more than once per sighting per follower (always single message).
-- Apply the pref to the follow-event push (Feature 3) — that's a separate event type.
-- Cache the pref doc; always read fresh inside the Cloud Function trigger. The volume is tiny.
+- Send more than one push per sighting per follower.
+- Apply this pref to the follow-event push from Feature 3 (different event type).
+- Cache pref docs across function invocations.
+- Add a level-up check or annual-goal check. Those are v2 and depend on features that don't exist yet.
 
 Acceptance criteria:
-- Tapping the bell on a friend row opens the picker.
-- Selecting a mode persists across app restarts.
-- After setting a friend to "none", logging a sighting from that friend does not push. (Verify with a real device.)
-- After setting to "highlights", logging a duplicate species does not push, but logging a new-to-them species does.
-- Regression: friends with no pref set still receive every sighting (the "all" default).
+- A new follow defaults to "highlights" with no pref doc created.
+- Existing follows (no pref doc today) resolve to "highlights" — verify by logging a non-milestone repeat species from a friend and confirming the follower gets no push.
+- Tapping the bell on a friend row opens the picker. Selecting a mode persists across app restarts.
+- "all" mode: every sighting pushes.
+- "highlights" mode: new-to-friend species pushes; repeat species does not push; sighting that brings the friend to 5 / 10 / 25 / 50 / 100 etc. species pushes even if the species itself isn't new.
+- "none" mode: no push for any sighting from that friend; sightings still appear in the follower's feed.
+- The follow-event push (Feature 3) is unaffected.
 
-If Feature 2 (levels) or the annual goal data model isn't merged yet, gracefully handle their absence — log a TODO and treat those branches as no-ops, but ship the new-species check.
+Manual test plan:
+1. Two test accounts, A follows B.
+2. Without changing any prefs (so A is at default "highlights"), have B log a NEW species — A receives push. Good.
+3. Have B log the SAME species again — A does NOT receive push.
+4. Get B to 4 distinct species (no pushes since they're repeats or already-seen). Have B log species #5 — A receives push (milestone) AND it's a new species. Single push, not two.
+5. Set A's pref for B to "all". Repeat steps 2–4. Every sighting pushes.
+6. Set A's pref for B to "none". Log anything from B. A receives no push.
 ```
 
 ---
@@ -849,14 +888,114 @@ Compatibility: this PR coexists with Feature 1 (activity grid). If Feature 1 has
 
 ---
 
+### Feature 8 - Hoots and comments on friend sightings
+
+**What we want:** Social engagement on a friend's sighting, in two layers:
+
+1. **Hoot** : the signature one-tap reaction, PocketBirds' version of Strava Kudos. "Give a hoot" doubles as the idiom for caring and the owl sound, and in Canadian slang chirping/hooting is also good-natured ribbing, so it fits the playful brand voice perfectly. One hoot per user per sighting, toggle on/off. The card shows a hoot count and who hooted.
+2. **Comments** : flat (non-threaded) text replies under a sighting, so a friend can say more than one tap's worth. Author, text, timestamp. The card shows a comment count; tapping opens the thread.
+
+Both fire a quiet push back to the original sighter.
+
+**Design considerations:**
+
+- *Storage (call I made):* use subcollections, not array fields on the sighting doc.
+  - `sightings/{sightingId}/hoots/{uid}` : `{ createdAt }`. One doc per reacting user, doc id IS the uid. Makes the security rule trivial (a user can only touch a doc whose id equals their own uid) and gives the Cloud Function a clean `onCreate` trigger to push from.
+  - `sightings/{sightingId}/comments/{commentId}` : `{ authorUid, authorName, text, createdAt }`. Flat list, ordered by createdAt ascending.
+  - This diverges from Feature 6's array-field approach (`coObserverIds`) on purpose: hoots and comments both need per-user security and a clean push trigger, which arrays make awkward.
+- *Denormalized counts:* keep `hootCount` and `commentCount` integers on the sighting doc, maintained ONLY by the Cloud Function (increment on create, decrement on delete). The feed reads these directly so it never fans out a subcollection read per card.
+- *Own vs friend cards:* `SightingCard` is shared. On your own Field Journal cards, hide the Hoot button (no self-hoot, mirrors Strava) but still show hoots/comments you received and let you reply. On friend feed cards, Hoot and the comment input are fully interactive. This is the same own-vs-friend distinction Feature 6 needs, so build them back to back.
+- *Push back to the sighter:* Hoot fires "{name} gave a hoot for your {species}"; comment fires "{name} commented on your {species}: {preview}". These go to the sighting's OWNER, a different direction from Feature 4's bell (which controls a follower's inbound feed pushes). So they are a NEW notification type, default on, NOT gated by the bell. A future settings toggle can mute them. Never push a user about action on their own sighting.
+- *Voice:* lean into the friendly-heckle double meaning. First-time tooltip: "A hoot is half cheer, half heckle. Use responsibly." Keep copy short and warm.
+
+**Open questions / calls I made:**
+- Subcollections over arrays (above). Push back if you'd rather keep parity with Feature 6's arrays at the cost of messier security and triggers.
+- Comments are flat for v1. Threading is a v2 concern that will almost certainly never matter at 5 to 20 friends.
+- Hoot/comment pushes are their own notification type, default on, NOT folded into the Feature 4 bell. Flag if you'd rather the bell control them.
+- No comment editing in v1 (delete + re-add). Author can delete their own comment; the sighting owner can delete any comment on their sighting (light moderation).
+- Hoots and comments can ship as separate commits. If you want Hoots alone for v1 and comments as a fast-follow, say so and I'll split the prompt.
+
+**Prompt for Claude Code:**
+
+```
+Add "Hoots" (a one-tap reaction) and comments to friend sightings.
+
+CONTEXT (read CLAUDE.md first for file layout + push setup). A "Hoot" is PocketBirds' version of Strava Kudos: a single signature reaction, one per user per sighting, toggle on/off. Comments are flat text replies under a sighting. Both notify the original sighter.
+
+PHASE 0 - investigate and report BEFORE coding:
+- How are sightings stored in Firestore? One shared collection or per-user? Can a follower currently read AND write to another user's sighting doc / its subcollections? Check app/services/sightingService.ts and the Firestore security rules (firestore.rules, or export from the Firebase console).
+- How is SightingCard rendered in (a) the friends feed and (b) the user's own Field Journal? Is there a prop/context telling it which mode it's in? (Feature 6 needs the same distinction - reuse it or add a minimal `context` prop.)
+- How does onSightingAdded look up a user's expoPushToken and send via Expo Push? Reuse that exact send path.
+Report findings before writing code.
+
+DATA MODEL:
+- sightings/{sightingId}/hoots/{uid}  ->  { createdAt: Timestamp }   (doc id IS the reacting user's uid)
+- sightings/{sightingId}/comments/{commentId}  ->  { authorUid, authorName, text, createdAt: Timestamp }
+- Denormalized counters on the sighting doc: hootCount: number, commentCount: number.
+  Maintained ONLY by the Cloud Function (increment on create, decrement on delete). Clients never write these.
+
+SECURITY RULES (add/adjust firestore.rules):
+- A signed-in user may create/delete sightings/{id}/hoots/{uid} only when uid == request.auth.uid.
+- Any signed-in user who can read the sighting may create a comment. A comment may be deleted by its author OR by the sighting owner.
+- Clients may NOT write hootCount / commentCount (function-owned).
+
+CLIENT SERVICE - new file app/services/engagementService.ts:
+- toggleHoot(sightingId, uid): create or delete the hoot doc; return new local state.
+- subscribeHoots(sightingId, cb): realtime listener -> array of uids.
+- addComment(sightingId, { authorUid, authorName, text }): create a comment doc.
+- deleteComment(sightingId, commentId): delete it.
+- subscribeComments(sightingId, cb): realtime listener -> ordered comment array.
+Keep reads cheap: the collapsed feed card uses the denormalized hootCount/commentCount on the sighting doc; only subscribe to the subcollections when a card's thread / hooter list is expanded.
+
+UI - components/SightingCard.tsx:
+- Footer row: a Hoot control (owl glyph + count) and a comment control (comment glyph + count).
+- Hoot button: tappable on FRIEND cards only. Default label "Hoot"; active/filled state once the current user has hooted. Optimistic toggle, revert on error. Buzz haptic on a fresh hoot.
+- On the user's OWN cards: hide the Hoot button, but still show "{n} hoots" and the comment control so they see and can reply to engagement.
+- Hooters line when count > 0: "Alex", "Alex and Sam", "Alex, Sam and 3 others". Resolve uids -> display names from whatever user source is already loaded; fall back to "Someone".
+- Comment control tap: expand an inline thread (or a light modal/sheet) showing comments (author name, text, relative time) plus a text input + send. New comment appears optimistically.
+- First time the hoot affordance is seen, show a one-time tooltip: "A hoot is half cheer, half heckle. Use responsibly." Keep all copy short and warm (PRD voice rules).
+
+CLOUD FUNCTIONS (functions/index.js) - follow the onSightingAdded pattern and Expo Push send path:
+- onHootCreated (trigger: create of sightings/{sightingId}/hoots/{uid}):
+    increment parent sighting's hootCount; if hooter != owner, push to owner: title "PocketBirds", body "{hooterName} gave a hoot for your {species}".
+- onHootDeleted: decrement hootCount. No push.
+- onCommentCreated (trigger: create of sightings/{sightingId}/comments/{commentId}):
+    increment commentCount; if commenter != owner, push to owner: body "{authorName} commented on your {species}: {first ~60 chars}".
+- onCommentDeleted: decrement commentCount. No push.
+- These are a NEW notification type. Do NOT gate them on the Feature 4 per-friend bell (that controls inbound feed pushes; this is engagement on the user's OWN sighting). Default on. Never push a user about their own action.
+- Resolve the owner's expoPushToken from their user doc; skip silently if absent.
+
+DO NOT:
+- Use array fields on the sighting doc for hooters/comments - use the subcollections above.
+- Let the client write hootCount / commentCount.
+- Add comment threading/replies, comment editing, or reactions-on-comments (all v2).
+- Push to yourself for action on your own sighting.
+- Touch the Feature 4 bell logic.
+
+ACCEPTANCE CRITERIA:
+- Friend feed card shows a Hoot button + count and a comment count.
+- Tapping Hoot toggles it, updates the count optimistically, and the owner gets a push within ~10s.
+- Tapping Hoot again un-hoots (count decrements, no second push).
+- Your own Field Journal cards show received hoots/comments but no Hoot button on yourself.
+- Adding a comment shows it immediately and pushes the owner.
+- hootCount / commentCount stay correct across add/remove (function-maintained).
+- Security: a user cannot create a hoot doc under someone else's uid, and cannot delete a comment that isn't theirs unless they own the sighting.
+- Existing sighting-add push and the rest of the feed are unaffected.
+
+Commit in revertible steps: (1) security rules + data model, (2) engagementService, (3) SightingCard UI, (4) Cloud Functions. Verify on the dev client with two accounts; deploy functions with `firebase deploy --only functions`.
+```
+
+---
+
 ## Suggested build order
 
-These are independent enough that you can pick freely, but here's a sequencing that minimizes risk:
+Updated after the Feature 4 rewrite — Feature 4 no longer depends on Feature 2 (levels) or the annual goal model, so it's free to ship first.
 
-1. **Feature 7 (group Field Journal by day)** — small, contained, satisfying. Good warm-up.
-2. **Feature 3 (follow push notification)** — small Cloud Function change. Tests the deploy pipeline.
-3. **Feature 1 (activity grid)** — pure UI, no data model changes. Visible win.
-4. **Feature 6 ("I was there")** — small schema change, meaningful UX win. Get the social mechanic in early to start collecting feedback.
-5. **Feature 2 (levels)** — bigger UI lift but no risky data work. Sets up Feature 4.
-6. **Feature 4 (per-friend notification prefs)** — depends on Feature 2's species-count denormalization. Do it second-to-last.
-7. **Feature 5 (account creation rethink)** — two-phase (audit + build). Save for when you have a clean stretch since the migration touches existing users.
+1. **Feature 4 (per-friend notification prefs)** — Alex wants this first. No dependencies after the rewrite. Touches Cloud Function + Friends UI.
+2. **Feature 7 (group Field Journal by day)** — small, contained, satisfying. Good follow-up.
+3. **Feature 3 (follow push notification)** — small Cloud Function change. Tests the deploy pipeline.
+4. **Feature 1 (activity grid)** — pure UI, no data model changes. Visible win.
+5. **Feature 6 ("I was there")** — small schema change, meaningful UX win. Get the social mechanic in early to start collecting feedback.
+6. **Feature 8 (Hoots + comments)** - social engagement on sightings. Pairs with Feature 6: both touch SightingCard and need the same own-vs-friend card distinction, so build them back to back.
+7. **Feature 2 (levels)** — bigger UI lift but no risky data work. Once it lands, retrofit Feature 4's "highlights" mode to also push on level-ups (the v2 deferred item).
+8. **Feature 5 (account creation rethink)** — two-phase (audit + build). Save for when you have a clean stretch since the migration touches existing users.
