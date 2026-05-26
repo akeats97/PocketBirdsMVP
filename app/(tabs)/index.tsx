@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { SectionList, StyleSheet, Text, View } from 'react-native';
 import SightingCard, { HardShadow } from '../../components/SightingCard';
 import { palette, recipes, space, type } from '../../constants/Colors';
 import { useSightings } from '../context/SightingsContext';
+import { groupSightingsByDay } from '../utils/groupSightingsByDay';
 
 function JournalHeader() {
   const { sightings } = useSightings();
@@ -39,10 +40,12 @@ function EmptyState() {
 export default function LogScreen() {
   const { sightings, isNewSpeciesForUser } = useSightings();
 
+  const sections = useMemo(() => groupSightingsByDay(sightings), [sightings]);
+
   return (
     <View style={styles.container}>
-      <FlatList
-        data={sightings}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <SightingCard
@@ -50,6 +53,15 @@ export default function LogScreen() {
             isNewSpecies={isNewSpeciesForUser(item.birdName, item.date)}
           />
         )}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.dayHeader}>
+            <Text style={styles.dayTitle}>{section.title}</Text>
+            <Text style={styles.dayCounts}>
+              {section.sightingCount} {section.sightingCount === 1 ? 'sighting' : 'sightings'} · {section.speciesCount} {section.speciesCount === 1 ? 'species' : 'species'}
+            </Text>
+          </View>
+        )}
+        stickySectionHeadersEnabled={false}
         ListHeaderComponent={JournalHeader}
         ListEmptyComponent={EmptyState}
         contentContainerStyle={
@@ -85,6 +97,23 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: space.xl,
+  },
+  dayHeader: {
+    paddingHorizontal: space.xl,
+    paddingTop: space.lg,
+    paddingBottom: space.sm,
+    backgroundColor: palette.cream,
+  },
+  dayTitle: {
+    ...type.h3,
+    color: palette.ink,
+    fontWeight: '700',
+  },
+  dayCounts: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    marginTop: 2,
+    fontWeight: '500',
   },
   emptyListContent: {
     flexGrow: 1,
