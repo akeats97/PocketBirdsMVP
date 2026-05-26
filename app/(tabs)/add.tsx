@@ -120,13 +120,36 @@ export default function AddSightingScreen() {
     Keyboard.dismiss();
     let granted = await hasLocationPermission();
     if (!granted) granted = await requestLocationPermission();
-    if (!granted) return;
+    if (!granted) {
+      Alert.alert(
+        'Location permission needed',
+        'Enable location access in Settings to use the locate button.'
+      );
+      return;
+    }
     const result = await getCurrentLocationWithLabel();
-    if (!result) return;
+    if (!result) {
+      Alert.alert(
+        "Couldn't get your location",
+        "Make sure GPS is on and you have signal. If you're offline, type the location manually."
+      );
+      return;
+    }
     setShouldAutocompleteLocation(false);
     setPlaceSuggestions([]);
-    setLocation(result.label);
     setLocationCoords(result.coordinates);
+    if (result.label) {
+      setLocation(result.label);
+      return;
+    }
+    // Got a GPS fix but reverse-geocode came back empty — usually means we're
+    // offline (the native geocoder needs network). Coords are still attached;
+    // nudge the user to type the place name.
+    Alert.alert(
+      'Coordinates saved',
+      "We got your location, but we're offline so we couldn't look up the place name. Type the name of this spot and your coordinates will stay attached.",
+      [{ text: 'OK', onPress: () => locationInputRef.current?.focus() }]
+    );
   };
 
   const handlePlaceSuggestionSelect = async (suggestion: PlaceSuggestion) => {
