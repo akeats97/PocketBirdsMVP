@@ -110,9 +110,11 @@ Run these from `/Users/alexkeats/Desktop/PocketBirds4/`.
 
 For iterating on code changes, use the **Expo dev client on Alex's phone**, NOT the Play Store flow. The Play Store flow is for shipping releases to Alex and Victoria; the dev client is "save code on laptop, see it on phone in 2 seconds."
 
-### One-time setup (already done as of May 20 2026)
+### One-time setup (updated May 24 2026)
 - `expo-dev-client` is installed (in `package.json` deps).
-- The dev-client APK has been built via EAS and installed on Alex's phone. It appears as a separate app icon alongside the normal Play Store version of PocketBirds.
+- **The dev client and the Play Store build install side-by-side as two separate apps** on Android. Setup: `android/app/build.gradle` sets `applicationIdSuffix '.dev'` on the `debug` buildType, so the dev client uses `com.akeats97.pocketbirds.dev` and the Play Store build uses `com.akeats97.pocketbirds`. Android treats them as distinct apps so neither overwrites the other. The dev client is labeled `PocketBirds (dev)` via `android/app/src/debug/res/values/strings.xml`.
+- `android/app/google-services.json` contains BOTH client entries (production package and `.dev` package), so FCM push works on both builds. If you regenerate `google-services.json`, make sure the new file still has both clients before committing.
+- Earliest side-by-side build: pending (see below). Prior dev-client builds shared the production package id and overwrote the Play Store install. Anyone reproducing the previous behavior is on an outdated dev client APK.
 
 ### Daily loop
 1. Phone and laptop must be on the **same wifi**.
@@ -306,7 +308,7 @@ Sightings can now carry optional GPS coordinates alongside the freeform location
 
 **Google Places API setup:**
 - Key lives in `.env` (gitignored) as `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY`. Loaded by Expo at build time.
-- GCP project is `pocketbirds` (same as Firebase). Key restricted by Android package `com.akeats97.pocketbirds` + SHA-1 of the EAS keystore.
+- GCP project is `pocketbirds` (same as Firebase). **The key is currently UNRESTRICTED in GCP** (confirmed May 24 2026). Open TODO in `WORK_QUEUE.md` to lock it down. When restricted, both `com.akeats97.pocketbirds` (production) and `com.akeats97.pocketbirds.dev` (dev client) need allowlist entries, both signed with EAS keystore SHA-1 `9F:80:48:66:0E:82:8F:1B:85:6D:1D:9B:3A:C5:0F:55:2A:CA:6C:85`.
 - Only the **classic** "Places API" is enabled (NOT "Places API (New)" — the placesService code uses the classic endpoints).
 - For EAS production/dev builds, also need: `eas env:create --scope project --visibility plaintext --name EXPO_PUBLIC_GOOGLE_PLACES_API_KEY --value '<key>'`. Local `.env` only covers `npx expo start`.
 

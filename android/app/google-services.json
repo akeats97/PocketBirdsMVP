@@ -16,6 +16,31 @@
       "api_key": [
         {
           "current_key": "AIzaSyBKGi1CliKDE9fhji_zGHjQM8hBH8iXUec"
+        },
+        {
+          "current_key": "AIzaSyD9e-YDJHoqtSS7_U9s9GqG1D5zSKlspDg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:854699399919:android:04b2444a6b169d00cf591a",
+        "android_client_info": {
+          "package_name": "com.akeats97.pocketbirds.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKGi1CliKDE9fhji_zGHjQM8hBH8iXUec"
+        },
+        {
+          "current_key": "AIzaSyD9e-YDJHoqtSS7_U9s9GqG1D5zSKlspDg"
         }
       ],
       "services": {

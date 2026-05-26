@@ -1,0 +1,856 @@
+# PocketBirds — Work Queue
+
+Bugs and feature requests captured from a real-world testing day (May 23 2026). Each item has a write-up of what's going on and a self-contained prompt you can paste into Claude Code.
+
+The prompts are written to be standalone — Claude Code can act on them without reading this doc, but they all assume the agent has read `CLAUDE.md` (file layout, push setup, conventions).
+
+---
+
+## Bugs
+
+Listed in rough priority order. Bug 3 (offline data loss) is the only one that should be treated as drop-everything urgent — the others can ship in a batch.
+
+---
+
+### Bug 1 — Friend search is case-sensitive
+
+**What's happening:** In the Friends tab, typing `vic` does not match a user named `Victoria`. Search only matches when the case matches exactly. Users expect search to be case-insensitive.
+
+**Likely root cause:** Either a Firestore `where(..., '==', ...)` query against the username field (Firestore is case-sensitive by design), or a client-side `.includes()` / `===` filter that compares raw strings.
+
+**Two implementation paths:**
+- **(a) Lowercase-at-write.** Store a `usernameLower` field on each user doc, query against it. Most scalable, but requires a one-time migration for existing users.
+- **(b) Client-side filter.** Fetch the candidate user list (already loaded for the friends-already-following display), filter in JS with `.toLowerCase()` on both sides. Simpler, no migration, fine at PocketBirds' scale.
+
+**Recommendation:** Go with (b) for now. Revisit if the user base ever exceeds a few thousand and the load becomes meaningful.
+
+**Open questions:** None.
+
+**Prompt for Claude Code:**
+
+```
+Make friend search case-insensitive in the Friends tab.
+
+Currently typing 'vic' doesn't match a user named 'Victoria' — search requires exact case. Fix this with a client-side filter, no Firestore schema or migration changes.
+
+Files to investigate:
+- app/(tabs)/friends.tsx (the search UI and probably the filter)
+- app/services/userService.ts (Firestore user/friend management)
+
+Approach:
+- If the comparison is happening client-side, lowercase both sides before comparing.
+- If the comparison is happening in a Firestore query, switch to fetching the candidate list and filtering in JS using .toLowerCase() on both the input and the candidate field.
+- Keep the existing match behavior otherwise (substring vs prefix — whatever it does today, keep it).
+
+Acceptance criteria:
+- Typing 'vic' matches a user named 'Victoria'
+- Typing 'VIC' matches 'Victoria'
+- Typing 'Victoria' still matches 'victoria'
+- Typing the empty string returns the same default list as before
+- No Firestore writes; this is a read-side fix only
+
+Verify in the dev client by searching with mixed case and confirming matches. Report which file and line you changed.
+```
+
+---
+
+### Bug 2 — Android push notification icon renders as a generic circle
+
+**What's happening:** When a friend logs a sighting and the recipient gets a push notification on Android, the small icon in the system tray (top status bar) is a blank/generic circle — not a PocketBirds icon. The user can't tell at a glance which app the notification is from. iOS uses the app icon for notification badges so iOS is unaffected; this is Android-only.
+
+**Root cause (confirmed by inspecting the repo):** The eagle silhouette PNG already exists at `assets/images/notification-icon.png` and `app.json` already references it via the `expo-notifications` plugin:
+
+```json
+["expo-notifications", { "icon": "./assets/images/notification-icon.png", "color": "#4A90E2" }]
+```
+
+But because this is a **bare workflow** Expo app (per CLAUDE.md), the `app.json` plugin config does **not** propagate to native code automatically. Native is the source of truth. And native isn't wired up:
+
+- `android/app/src/main/AndroidManifest.xml` has **no** `<meta-data android:name="com.google.firebase.messaging.default_notification_icon" .../>` tag. Without that meta-data, FCM (and therefore Expo Push) doesn't know which drawable to use, so Android falls back to its default circle.
+- `android/app/src/main/res/drawable-*/` has no `notification_icon.png`. The PNG is sitting in JS-land assets, not as a native Android drawable resource.
+
+Two additional cosmetic notes worth fixing in the same change:
+- The configured tint color in `app.json` is `#4A90E2` (a generic Expo blue), not the brand palette. Should be brand gold to match PRD §10.
+- The icon PNG itself appears to be white-on-transparent (correct for Android), but worth double-checking once the wiring is done — if the tray icon shows up as a solid white blob instead of the eagle shape, the PNG has non-transparent pixels and needs to be re-exported.
+
+**Important constraints:**
+- This is a **native change.** The current dev client APK won't pick up the new drawable until it's rebuilt (`eas build --profile development --platform android --non-interactive`). Alex needs to rebuild the dev client to test, OR jump straight to a production build.
+- Do **not** run `expo prebuild` — that would regenerate the entire android/ directory and overwrite the manual customizations already in place (push setup, Gradle plugin, etc., per CLAUDE.md).
+
+**Open questions:** None — the silhouette already exists, just needs to be wired into the native build.
+
+**Prompt for Claude Code:**
+
+```
+Fix the Android push notification icon. Currently it renders as a generic circle in the status bar because the existing eagle silhouette is sitting in JS assets but isn't wired into the native Android build.
+
+Repo state (already confirmed):
+- assets/images/notification-icon.png exists (eagle silhouette, looks like white-on-transparent).
+- app.json has the expo-notifications plugin config pointing at it with color #4A90E2.
+- AndroidManifest.xml has NO default_notification_icon meta-data.
+- android/app/src/main/res/drawable-*/ has no notification_icon.png.
+
+This is a bare workflow Expo app, so app.json plugin config does NOT propagate to native — we wire it manually.
+
+DO NOT run `expo prebuild` or `expo prebuild --clean`. That would blow away the customizations in android/ (Firebase google-services plugin, push setup, etc.). Treat android/ as hand-maintained source code.
+
+Work to do:
+
+1. RESIZE and place the notification icon as a native drawable resource. Take assets/images/notification-icon.png and produce these density-bucketed copies, written to android/app/src/main/res/:
+   - drawable-mdpi/notification_icon.png — 24x24
+   - drawable-hdpi/notification_icon.png — 36x36
+   - drawable-xhdpi/notification_icon.png — 48x48
+   - drawable-xxhdpi/notification_icon.png — 72x72
+   - drawable-xxxhdpi/notification_icon.png — 96x96
+
+   Use ImageMagick (`magick` or `convert`) or sharp via Node to resize. Preserve transparency. The PNG must remain white-on-transparent — do NOT bake in a background color, and do NOT add color to the silhouette itself.
+
+   If you cannot run image-processing tooling, stop here and ask me to drop in the resized files manually. Do not skip ahead with placeholders.
+
+2. EDIT android/app/src/main/AndroidManifest.xml. Inside the <application> tag (after the existing expo.modules.updates meta-data lines, before the <activity>), add:
+
+     <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/notification_icon" />
+     <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/notification_icon_color" />
+
+3. CREATE android/app/src/main/res/values/colors.xml (or edit if it exists) and add:
+
+     <color name="notification_icon_color">#C89A2B</color>
+
+   Check constants/Colors.ts and design_handoff_pocket_dex/ for the exact brand gold hex first — use that value if different. The point is to match the cream-and-gold brand palette (PRD §10), not the generic Expo blue currently in app.json.
+
+4. UPDATE app.json's expo-notifications plugin entry to match the same brand gold color (so the managed-workflow config doesn't drift from the manifest). Change "color": "#4A90E2" to the brand gold hex. Leave the icon path as-is — it's still useful for any future prebuild/managed-workflow tooling.
+
+5. DO NOT change anything else:
+   - app/services/notificationService.ts — leave it
+   - functions/index.js (the Cloud Function) — leave it
+   - The Expo Push send payload — leave it
+   - app/_layout.tsx — leave it
+
+   The manifest default is the right layer. We do NOT need per-notification _icon overrides.
+
+6. Verification. The dev client APK won't pick up native drawable changes without a rebuild, so the verification flow is:
+
+   a. Rebuild the dev client: `eas build --profile development --platform android --non-interactive`
+   b. Install the new APK on Alex's phone (uninstall the old dev client first).
+   c. Have Victoria's account log a sighting (or trigger a push manually via the curl recipe in CLAUDE.md → "Layer 3 — Expo push API").
+   d. Pull down the notification shade on Alex's phone. The small icon next to the title should be the eagle silhouette, tinted gold.
+
+   If the eagle is invisible (white-on-white in light mode), the source PNG has non-transparent pixels and needs to be re-exported as a true silhouette.
+
+Acceptance criteria:
+- Drawables exist in all 5 density folders.
+- AndroidManifest.xml has both meta-data tags.
+- colors.xml has notification_icon_color.
+- app.json color matches the manifest color.
+- Existing push pipeline is untouched (verifiable: send a push BEFORE the rebuild and confirm it still arrives normally).
+- After dev client rebuild and a test push, the eagle silhouette appears in the status bar tinted in brand gold.
+
+Commit each step as a separate commit (drawables, manifest, colors.xml + app.json) so any one step can be reverted in isolation.
+```
+
+---
+
+### Bug 3 — Offline mode drops sightings (DATA LOSS, priority)
+
+**What's happening:** Reproducible flow that Vic hit today:
+1. Open the app online. Sightings load.
+2. Turn on airplane mode.
+3. Close the app.
+4. Reopen the app while still in airplane mode → **feed is empty.**
+5. Log several sightings while still offline.
+6. Close the app again.
+7. Reopen → those sightings are not visible.
+8. Turn off airplane mode and the sightings logged in step 5 never sync to Firestore — they're permanently lost.
+
+**Why this is the top-priority bug:** Data loss is the only class of bug that erodes trust irrecoverably. A user who has watched their bird logs disappear once stops trusting the app, and going forward they won't log offline at all — which kills the trip-driven cadence the product depends on (§6 of `PRD.md`).
+
+**Likely root causes (need to confirm with instrumentation before fixing):**
+1. **Cold-start ordering.** On startup, `SightingsContext` may be awaiting a Firestore fetch that hangs/fails silently when offline, leaving the in-memory list empty instead of falling back to the AsyncStorage cache.
+2. **Write path doesn't tolerate offline.** When a sighting is logged, `sightingService` may attempt the Firestore write first and only persist to AsyncStorage on success — meaning offline writes are dropped entirely.
+3. **No pending-sync queue.** There may be no concept of "this sighting was created offline and needs to be flushed when we have a connection." If so, offline-created sightings live nowhere durable.
+4. **Migration brittleness.** Per CLAUDE.md there's an AsyncStorage migration for the old `lastLocation` shape. If a similar legacy shape is encountered and the migration throws, the cache read may bail and return empty.
+5. **ID reconciliation.** Offline sightings probably need a local UUID at creation, then reconcile with Firestore's generated ID on sync. If the reconciliation logic is missing, you get duplicates or drops.
+
+**Open questions:**
+- None at the requirements level. The fix needs investigation before code changes — Claude Code should report what it found before patching.
+
+**Prompt for Claude Code:**
+
+```
+HIGH PRIORITY BUG — Data loss in offline mode. Treat this as a careful patch, not a rewrite.
+
+Repro (confirmed by a real user today):
+1. Open app online — sightings load.
+2. Turn on airplane mode.
+3. Close the app.
+4. Reopen the app while still offline → feed is empty (BUG).
+5. Log 3 sightings while offline.
+6. Close app, reopen → those sightings are gone (BUG).
+7. Turn off airplane mode → the sightings logged in step 5 never sync. They are permanently lost (BUG).
+
+Files involved:
+- app/context/SightingsContext.tsx (sightings state — syncs Firestore + AsyncStorage)
+- app/services/sightingService.ts (Firestore read/write)
+- Possibly app/_layout.tsx (auth/init ordering)
+
+PHASE 1 — Investigate and report BEFORE changing logic.
+Add temporary console.log instrumentation to:
+- SightingsContext on mount: what does it read from AsyncStorage? What does it read from Firestore? In what order? Does it block on Firestore?
+- sightingService write path: does an offline write hit AsyncStorage? Does it queue anywhere? Does the Firestore promise reject silently?
+- Any sync/flush routine that runs on connectivity-restore: does one exist? What does it do?
+
+Reproduce the bug manually (or by simulating offline in a test) and report what you find. List which of these is true:
+- (a) Cold start awaits Firestore and never falls back to cache.
+- (b) Offline writes don't persist to AsyncStorage.
+- (c) There's no pending-sync queue, so offline writes are not flushed on reconnect.
+- (d) A migration / parse error is throwing on cache read.
+- (e) Something else.
+
+Show me your findings before writing the fix.
+
+PHASE 2 — Fix design (propose, then implement after I confirm).
+Target behavior:
+1. Cold start: ALWAYS hydrate UI from AsyncStorage immediately. Then, if online, refresh from Firestore and reconcile. If offline, stay on the cache and listen for connectivity.
+2. Offline write: persist to AsyncStorage with a pending-sync flag (e.g., { ...sighting, _pendingSync: true, _localId: uuid }) and show it in the UI immediately.
+3. Connectivity restored: flush pending-sync items to Firestore in chronological order. On success, replace the local record's _localId with the Firestore-assigned id and clear _pendingSync. On failure, KEEP the pending flag — do not drop.
+4. Never delete a sighting from AsyncStorage as a side effect of a Firestore read returning fewer items. The Firestore list is a source of truth for synced sightings only.
+
+PHASE 3 — Acceptance criteria.
+- Repro the bug WITHOUT the fix first and confirm you can reproduce it. (Use NetInfo / airplane mode / a mocked offline state — whichever is fastest.)
+- After the fix: airplane mode → log 3 sightings → close & reopen app → all 3 appear. Turn airplane mode off → wait → all 3 appear in Firestore with their original timestamps.
+- Online-only behavior is unchanged. Existing online users see no regression.
+- No data is silently overwritten. If a Firestore document with the same Firestore id already exists, prefer the server copy and log a warning.
+
+DO NOT delete or refactor SightingsContext or sightingService as a whole. Treat any change as a localized patch. Commit phase-by-phase so a single bad commit is easy to revert.
+```
+
+---
+
+### Bug 4 — Friend search dropdown doesn't reappear after type+delete
+
+**What's happening:**
+1. Tap the friend search input → dropdown of all friends appears. Good.
+2. Type a friend's name → dropdown filters down. Good.
+3. Delete the typed text (input back to empty) → dropdown disappears. Bad.
+4. Tap the input again to refocus → dropdown does not reappear. Bad.
+
+**Likely root cause:** The dropdown's visibility predicate is probably `searchText.length > 0` (or similar) when it should be `(isFocused || searchText.length > 0)`. After typing-then-deleting, the input may still be focused, but the predicate is false; and on subsequent re-focus, the focus state may not be updating because React Native's `TextInput` focus handlers are subtle.
+
+**Where:** `app/(tabs)/friends.tsx`, probably a `showDropdown` boolean or a JSX conditional render.
+
+**Watch out for:** The classic React Native gotcha where `onBlur` fires before `onPress` on a dropdown item, dismissing the dropdown before the tap registers. The fix needs to preserve whatever debounce/delay handles that case today.
+
+**Open questions:** None.
+
+**Prompt for Claude Code:**
+
+```
+Fix the friend search dropdown visibility bug.
+
+Repro:
+1. Tap the friends search input → dropdown shows all friends. GOOD.
+2. Type → dropdown filters. GOOD.
+3. Delete the typed text → dropdown disappears. BUG.
+4. Tap the input again → dropdown does not reappear. BUG.
+
+File: app/(tabs)/friends.tsx (or wherever the friend search UI lives — check there first).
+
+Likely cause: the dropdown's visibility predicate is gated on `searchText.length > 0` instead of `(isFocused || searchText.length > 0)`. Fix it to show whenever the input is focused, regardless of text content.
+
+Watch out for the React Native onBlur-before-onPress gotcha: if the dropdown hides on blur, tapping a friend in the dropdown may register a blur before the press, dismissing the dropdown without selecting. If there's existing logic that handles this (a setTimeout on blur, or onPressIn instead of onPress), preserve it.
+
+Acceptance criteria:
+- Focus input (no text) → dropdown shows full friend list
+- Type → dropdown filters
+- Delete text → dropdown still shows full list (still focused)
+- Blur input (tap outside) → dropdown hides
+- Tap a friend in the dropdown → selection still works, no race condition
+
+Show me the diff. This should be a small change.
+```
+
+---
+
+### Bug 5 — App display name is "PocketBirds4" instead of "PocketBirds"
+
+**What's happening:** On Alex's phone home screen, the app label under the icon reads "PocketBirds4" — the scaffolding name from `expo init` that never got cleaned up. It should just be "PocketBirds."
+
+**Where the wrong name lives (confirmed by inspecting the repo):**
+- `app.json` → `expo.name`: `"PocketBirds4"` (line 3)
+- `android/app/src/main/res/values/strings.xml` → `<string name="app_name">PocketBirds4</string>` (line 2) — this is what Android actually reads for the home-screen label
+- `ios/PocketBirds4/Info.plist` → `CFBundleDisplayName`: `PocketBirds4` (line 10) — this is what iOS reads
+
+**What NOT to change (intentionally leave alone):**
+- `expo.slug` (`"PocketBirds4"` in app.json) — this is tied to the EAS project. Changing it can disconnect the project from EAS credentials and the existing build pipeline. Slug is internal; not user-visible. Leave it.
+- `expo.scheme` (`"pocketbirds4"` in app.json) and the matching `<data android:scheme="pocketbirds4"/>` in `AndroidManifest.xml` and `CFBundleURLSchemes` in `Info.plist`. Changing the deep-link scheme would break any in-flight invite links and break push-notification deep linking (which is a planned feature per CLAUDE.md backlog). Defer this decision — it's a separate change with its own coordination cost.
+- Directory names (`ios/PocketBirds4/`, `ios/PocketBirds4.xcodeproj/`, etc.) — renaming Xcode project source dirs is fiddly and not worth doing just for cosmetics. The user never sees these.
+
+**Important constraints:**
+- This is a **native change** for both platforms (strings.xml on Android, Info.plist on iOS). Requires rebuilds — the home-screen label only updates after the app is reinstalled from a new build.
+- After the rebuild, Alex should uninstall the old "PocketBirds4" app from his phone before installing the new one, otherwise both icons may briefly coexist.
+
+**Open questions:** None.
+
+**Prompt for Claude Code:**
+
+```
+The app's display name on the phone home screen is "PocketBirds4" — the scaffolding name from `expo init`. It should be "PocketBirds". Fix all three places:
+
+1. app.json:
+   - "expo.name": "PocketBirds4" → "PocketBirds"
+   - Leave "expo.slug" alone — it's tied to the EAS project and must stay "PocketBirds4".
+   - Leave "expo.scheme" alone — changing the deep-link scheme would break invite links and push deep links (planned feature). That's a separate decision.
+
+2. android/app/src/main/res/values/strings.xml:
+   - <string name="app_name">PocketBirds4</string> → <string name="app_name">PocketBirds</string>
+
+3. ios/PocketBirds4/Info.plist:
+   - <key>CFBundleDisplayName</key><string>PocketBirds4</string> → <string>PocketBirds</string>
+   - Leave CFBundleURLSchemes alone — same reasoning as expo.scheme above.
+
+DO NOT:
+- Rename any directories (ios/PocketBirds4/, ios/PocketBirds4.xcodeproj/, android source paths, etc.). The user never sees these.
+- Run `expo prebuild` — it would regenerate android/ and lose customizations (Firebase google-services plugin, push setup, etc., per CLAUDE.md).
+- Touch CLAUDE.md path references — they refer to the on-disk project location which we're not changing.
+
+Acceptance criteria:
+- All three files changed as above and nothing else.
+- A grep for "PocketBirds4" in the repo (excluding node_modules, build artifacts, ios/PocketBirds4* directory names, EAS slug references, and CLAUDE.md) returns only legitimate path/slug/scheme references.
+- After Alex rebuilds (`eas build --profile development --platform android --non-interactive` and `eas build --profile development --platform ios --non-interactive`), reinstalls the apps, and looks at his home screen, the label reads "PocketBirds".
+
+Commit as a single small commit since the three changes are atomically one logical fix.
+```
+
+---
+
+## Operations / Security
+
+### Lock down the Google Places API key (HIGH PRIORITY)
+
+**What's happening:** The `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY` used for the Add Sighting location autocomplete has **no application restrictions** in GCP. It's `EXPO_PUBLIC_*`, which means it ships embedded in the JS bundle of every released APK / AAB. Anyone who pulls the APK off the Play Store can extract the key and use it against the `pocketbirds` GCP project.
+
+**Why this matters:** The Maps Platform free tier is $200/month. A motivated attacker (or an indexed-online key) can burn through that in hours and start billing real money. CLAUDE.md's claim that the key is restricted is currently wrong, which is how it slipped past for so long.
+
+**Fix:** Add Android app restrictions in <https://console.cloud.google.com/apis/credentials?project=pocketbirds>. Add TWO allowed entries (one per package id, both signed with the same EAS keystore SHA-1):
+
+```
+Package: com.akeats97.pocketbirds       SHA-1: 9F:80:48:66:0E:82:8F:1B:85:6D:1D:9B:3A:C5:0F:55:2A:CA:6C:85
+Package: com.akeats97.pocketbirds.dev   SHA-1: 9F:80:48:66:0E:82:8F:1B:85:6D:1D:9B:3A:C5:0F:55:2A:CA:6C:85
+```
+
+Restrictions take ~5 min to propagate. Once applied: only APKs signed by the EAS keystore (i.e., our own production + dev client builds) can use the key.
+
+**API restriction (separate):** Also worth tightening the *API* restriction to only "Places API" (classic) so a leaked key can't be used against other Maps endpoints. Already may be set this way; verify in the same console.
+
+**Verify after applying:** Open Add Sighting in the dev client, type into the location field. If autocomplete returns suggestions, restrictions are correctly configured. If suggestions stop coming, double-check the SHA-1 and package strings are exactly right (no trailing spaces, hex separated by `:`).
+
+**Open questions:** None.
+
+---
+
+## Features
+
+Same format as bugs above. Each feature has a description, design considerations, open questions where I've made calls worth re-examining, and a self-contained Claude Code prompt.
+
+A suggested build order is at the end of this section.
+
+---
+
+### Feature 1 — GitHub-style activity grid
+
+**What we want:** A grid of colored squares, one per week, showing your birding activity over time. Gray for inactive weeks, shades of green for weeks with sightings, with some visual mark on weeks where you logged a new species. Visually similar to the GitHub contribution graph but week-granularity instead of day.
+
+**Design considerations:**
+- **Granularity:** Weeks, not days (per Alex's note). One row of ~52 weeks for a rolling 1-year view fits nicely on a phone screen.
+- **Color scheme:** 4 tiers of green based on sightings-in-week count, plus a "new species" overlay (a thin gold border or dot in the corner). Suggested: 0 sightings = gray, 1–2 = light green, 3–5 = medium green, 6+ = dark green. Brand palette will tune the specific hues.
+- **Where it lives:** Best placement is a header card on the Field Journal screen. Field Journal is already "your birding life" — adding a heat-map header makes it feel like a meaningful personal page. Alternative is a new "You" / Profile screen, but that's a bigger lift.
+- **Interaction:** Tap a square → small modal/tooltip showing that week's sightings (count + species list). Pure read-only.
+- **Data:** Fully derived from existing `sightings` collection client-side. No Firestore schema changes.
+- **Friend view:** Not in v1. This is personal-only for now. (Mirrors PRD §4 #4 — soft visibility of progress, not rank.)
+
+**Open questions / calls I made:**
+- I put this on the Field Journal as a header card. If you'd rather it live on a separate profile screen, easy to change.
+- I picked 52 weeks rolling (always shows the last year). Alternative: calendar year (Jan–Dec) which resets cleanly Jan 1 and pairs nicely with the Goodreads-style annual species goal from PRD §7.
+
+**Prompt for Claude Code:**
+
+```
+Build a GitHub-style activity grid for the Field Journal.
+
+What it is:
+- A horizontal row of ~52 squares above the existing sightings list on the Field Journal screen.
+- Each square represents one calendar week.
+- Color tiers:
+  - Gray (no sightings that week)
+  - Light green (1–2 sightings)
+  - Medium green (3–5 sightings)
+  - Dark green (6+ sightings)
+- A small gold dot/badge in the corner of any week where the user logged a species they hadn't seen before.
+- Tap a square → modal showing that week's date range, sighting count, species count, and a list of the sightings.
+
+Files involved:
+- New component: components/ActivityGrid.tsx
+- Mount it as a header in app/(tabs)/index.tsx (the Field Journal screen)
+- Helpers: app/utils/activityGrid.ts for the week-bucketing + color-tier logic
+
+Data:
+- Read from the existing SightingsContext. No Firestore schema changes.
+- "Week" = ISO week (Monday-to-Sunday) for consistency. Use date-fns helpers if available, or hand-roll if not.
+- To detect "new species that week," sort all sightings by date and walk through them, tracking species seen so far. A week is a "new species" week if any sighting in it introduced a never-before-logged species. Compute this once and cache.
+
+Color values: use the brand palette from constants/Colors.ts. If there's no existing green ramp, propose 4 hexes that work with the cream + gold theme and ask me before committing — don't just pick green from thin air.
+
+Acceptance criteria:
+- Field Journal shows the activity row at the top, above the sightings list.
+- Squares display correct colors based on the rules above.
+- New-species weeks have the gold dot.
+- Tapping a square opens a modal with the week's date range and sighting list.
+- Empty state (new user with no sightings) shows the grid with all gray squares — does not crash.
+- Performance: must not re-compute the grid on every render. Memoize.
+
+Out of scope:
+- Showing this grid on a friend's profile (personal-only for now).
+- A separate profile/me screen (Field Journal is the host for now).
+- Year-based view; we're doing 52-weeks-rolling for v1.
+
+Keep the existing Field Journal sightings list and behavior unchanged. The grid is purely additive.
+```
+
+---
+
+### Feature 2 — Levels based on sightings
+
+**What we want:** Progressive tiers a user climbs as they see more species. Similar to Google Maps Local Guide or Duolingo XP levels — each level harder than the last, with named tiers that feel rewarding.
+
+**Design considerations:**
+- **Metric:** Unique species (lifetime) is the right metric, not raw sighting count. Aligns with the "noticing" principle (PRD §4 #5) better than rewarding volume of taps.
+- **Curve:** Should be roughly exponential — easy to hit Level 2, very hard to hit Level 10. Curve below is a starting point.
+- **Naming:** This is the fun part. Names should match the brand voice (playful + slightly cheeky, respectful of the birds — PRD §10). Proposed names below.
+- **Display:** A small badge next to your name on the Field Journal header, on friends' feed cards next to your name, and as a prominent stat on your profile.
+- **Progression UI:** Tap your level badge → modal showing current level, species count, what level you'd reach at X species (motivational).
+- **Naming + thresholds are the most opinionated thing here.** Below is a strawman.
+
+**Proposed strawman — 10 levels, species-based:**
+
+| Level | Name | Species threshold |
+|---|---|---|
+| 1 | Curious | 1 |
+| 2 | Backyard Watcher | 5 |
+| 3 | Park Strider | 15 |
+| 4 | Trail Spotter | 30 |
+| 5 | Field Birder | 50 |
+| 6 | Habitat Hopper | 100 |
+| 7 | Migration Tracker | 200 |
+| 8 | Lifer Hunter | 400 |
+| 9 | Pelagic Wanderer | 700 |
+| 10 | Lifelong Birder | 1000 |
+
+**Open questions / calls I made:**
+- **Metric:** unique species, not sighting count. Push back if you want both (e.g., level requires species count AND total sightings).
+- **Names + thresholds above are my strawman.** Iterate freely. "Pelagic Wanderer" is cheeky bird-nerd vocabulary — feels on-brand but worth confirming.
+- **Should level be visible to friends?** I'd say yes, small badge on profile + next to name in feed. Soft visibility, not rank. Push back if you want it private.
+- **Capped at 10?** Above 1000 species is rare-air birding. Could be uncapped with a final "you are unhinged" level, but 10 is a clean ceiling.
+
+**Prompt for Claude Code:**
+
+```
+Add a leveling system based on unique species count.
+
+Spec:
+- Metric: number of unique species the user has logged (lifetime), not total sightings.
+- 10 levels with the names and thresholds in the table below.
+- Display: a small level badge (number + name) shown in three places:
+  1. Field Journal header — large, prominent.
+  2. Profile / friends list rows — small chip.
+  3. Friend feed cards — micro pill next to the friend's name on each SightingCard.
+- Tap any level badge → modal showing current level, species count toward next level, and a list of all 10 levels with check marks for completed ones.
+
+Levels (start with these — Alex may iterate the names later):
+  1: Curious — 1 species
+  2: Backyard Watcher — 5 species
+  3: Park Strider — 15 species
+  4: Trail Spotter — 30 species
+  5: Field Birder — 50 species
+  6: Habitat Hopper — 100 species
+  7: Migration Tracker — 200 species
+  8: Lifer Hunter — 400 species
+  9: Pelagic Wanderer — 700 species
+  10: Lifelong Birder — 1000 species
+
+Files:
+- constants/levels.ts — the level table (array of {level, name, threshold}).
+- app/utils/level.ts — getLevel(speciesCount) → {level, name, nextThreshold, progressToNext}.
+- New component: components/LevelBadge.tsx — renders the chip/pill/large badge based on a size prop.
+- Mount in:
+  - app/(tabs)/index.tsx (Field Journal header, size="large")
+  - components/SightingCard.tsx (next to user name, size="micro")
+  - app/(tabs)/friends.tsx in the friends list rows (size="small")
+
+For other users' levels (friends), use their species count from whatever already-loaded source the friends list uses. If friend species count isn't currently denormalized, you'll need to either fetch it lazily or denormalize it onto the user doc — propose an approach and ask me before adding a Cloud Function or migration.
+
+Brand voice:
+- The level names are playful and slightly cheeky. Keep the modal copy in the same register — short, warm, never patronizing. "You're 12 species away from Habitat Hopper" — not "Just 12 more to unlock!"
+- See PRD §10 for voice rules.
+
+Acceptance criteria:
+- All three placements render the correct badge for the current user.
+- Friend-feed cards show the friend's level badge correctly.
+- Tap → modal with full ladder + progress works.
+- Level 1 user (just signed up with 0 species) shows "Get your first sighting to reach Curious" or similar empty-state copy in the badge.
+- No regressions on existing Field Journal, Friends, or SightingCard layouts.
+
+Out of scope (don't build these yet):
+- Sorting Friends list by level.
+- Push notification when a level is reached (that's a separate milestone-push feature).
+- Different metrics (sighting count, photo count, etc.).
+```
+
+---
+
+### Feature 3 — Push notification when someone follows you
+
+**What we want:** When User B follows User A, A gets a push notification: "Victoria started following you on PocketBirds." Simple, single-event, no rate limiting needed for v1.
+
+**Design considerations:**
+- Cloud Function trigger on creation of a follow doc.
+- Push payload should ideally deep-link to the new follower's profile, but per CLAUDE.md backlog, push deep-linking isn't implemented yet for sighting pushes either. Ship without deep link for now — tap just opens the app.
+- Copy: keep short and warm. "Victoria started following you" is plenty.
+
+**Open questions / calls I made:**
+- **No rate-limiting.** If someone unfollows and refollows, they'll get another push. Edge case unlikely to matter for a friend-graph app of 5–20 people. Re-evaluate if it becomes a problem.
+- **No deep-linking yet.** Coordinate with the planned push-deep-link feature in CLAUDE.md backlog — when that lands, retrofit this notification to deep-link to the follower's profile.
+
+**Prompt for Claude Code:**
+
+```
+Add a push notification fired when a user gets a new follower.
+
+Trigger:
+- Fires when a new follow document is created (whatever shape userService.ts uses today — investigate first).
+- The recipient is the user being followed.
+- The actor is the user who initiated the follow.
+
+Copy:
+- Title: "PocketBirds"
+- Body: "{actor.username} started following you"
+  (Use display name if set, otherwise username. If neither is available, use "Someone".)
+
+Implementation:
+- Add a new Cloud Function in functions/index.js, following the pattern of the existing onSightingAdded function (see CLAUDE.md "Push Notifications — Working Setup" for the working architecture).
+- Use the same Expo Push send path as the existing sighting-push code — do not introduce a new transport.
+- Read the recipient's expoPushToken from their user doc.
+- If the recipient has no token, skip silently (log a warning).
+- If the Expo Push call fails, log the error — don't retry for v1.
+
+DO NOT:
+- Add a per-friend notification preference check here. (That's Feature 4 and will gate this call later.)
+- Add deep-linking on tap. (Out of scope until the general push deep-link feature lands.)
+- Send the actor any "follow successful" confirmation push (the UI already shows it).
+
+Acceptance criteria:
+- Create a test follow → recipient device receives the push within ~10s.
+- Push title is "PocketBirds", body is "{name} started following you".
+- Existing sighting-add push still works (regression check).
+- Follow with no recipient token does not error in logs.
+
+Verification: deploy the function (`firebase deploy --only functions:onFollowAdded`), then have a test account follow Alex's account and confirm the push lands on his phone.
+```
+
+---
+
+### Feature 4 — Per-friend notification preferences (YouTube bell)
+
+**What we want:** Next to each friend in your friends list, a bell icon that cycles through three modes (or opens a small menu), exactly like YouTube's subscribe-bell:
+- **All** — push for every sighting (current default behavior).
+- **Highlights** — push only for new-species sightings (a species the friend has never logged before) and major milestones (level-up, hitting their annual species goal).
+- **None** — silent. Sightings still appear in your feed; you just don't get pushed.
+
+**Design considerations:**
+- **Where preference lives:** Firestore subcollection on the *follower's* user doc — `users/{followerUid}/notificationPrefs/{followedUid}: { mode: "all" | "highlights" | "none" }`. Default to "all" if no doc exists (existing behavior).
+- **Cloud Function check:** When a sighting is logged, the existing function iterates followers. For each follower, look up their pref for this poster. Skip "none." For "highlights," check whether the sighting introduces a new species for the poster (already needed by Feature 1) or whether it triggered a milestone for the poster.
+- **What counts as "highlights":** New species for the poster, level-ups (via Feature 2), and hitting the annual species goal (via PRD §7). These are the moments worth interrupting a friend for.
+- **UI:** Bell icon in the friends list row, three states with different icons (bell-filled = all, bell-outline = highlights, bell-slash = none). Tap → small action sheet / menu with the three options and a one-line description of each. Don't cycle on plain tap — too easy to mis-set and not realize.
+
+**Open questions / calls I made:**
+- **Default is "All".** This preserves current behavior and matches the "loud by default, let users mute" philosophy.
+- **"Highlights" = new species + level-ups + goal-hits.** I drew that line; you might want to expand (first-of-year? first-of-month?) or narrow (just new species).
+- **Bell lives in the friends list, not on individual sighting cards.** Subscription-level setting, not per-sighting. YouTube model.
+
+**Prompt for Claude Code:**
+
+```
+Add per-friend notification preferences with a YouTube-style bell UI.
+
+Three modes, set per-friend by the follower:
+- "all": push for every sighting the friend logs (current default).
+- "highlights": push only when the sighting is a new species for that friend OR when it triggers a milestone (level-up or annual goal hit).
+- "none": no push. Sighting still appears in the friend's feed.
+
+Data:
+- Firestore subcollection: users/{followerUid}/notificationPrefs/{followedUid} with shape { mode: "all" | "highlights" | "none", updatedAt }.
+- Absence of the document means default "all" — do NOT eagerly create docs for every existing friend pair on first read.
+
+Client UI:
+- In app/(tabs)/friends.tsx, add a bell icon to each friend row.
+- Icon states:
+  - "all" → Ionicons "notifications" (filled bell)
+  - "highlights" → Ionicons "notifications-outline" (outline bell)
+  - "none" → Ionicons "notifications-off" (slashed bell)
+- Tap → open a small action sheet / bottom modal with the three options and a one-line description each:
+  - "All sightings — push every time"
+  - "Highlights only — push for new species and milestones"
+  - "Nothing — silent, but still in your feed"
+- After selection, write to the subcollection optimistically and revert on error.
+
+New service:
+- app/services/notificationPrefsService.ts — getPref(followedUid), setPref(followedUid, mode), and a hook subscribeToPrefs() that listens to the subcollection.
+
+Cloud Function (functions/index.js):
+- In the existing onSightingAdded function (the one that pushes to followers), for each follower:
+  1. Look up the follower's pref doc for this poster. If missing or mode === "all", proceed as today.
+  2. If mode === "none", skip.
+  3. If mode === "highlights":
+     - Push if the sighting introduces a new species for the poster (compare against poster's existing seen-species — denormalize a `seenSpecies` array on the poster's user doc if not present; coordinate this with Feature 2's denormalization need).
+     - Push if the sighting triggered a level-up (compare species count before vs after against the levels table from Feature 2).
+     - Push if the sighting hit the poster's annual species goal (from the PRD §7 Goodreads-style goal — if that data model isn't in place yet, treat this branch as a no-op and add a TODO).
+     - Otherwise, skip.
+
+DO NOT:
+- Push more than once per sighting per follower (always single message).
+- Apply the pref to the follow-event push (Feature 3) — that's a separate event type.
+- Cache the pref doc; always read fresh inside the Cloud Function trigger. The volume is tiny.
+
+Acceptance criteria:
+- Tapping the bell on a friend row opens the picker.
+- Selecting a mode persists across app restarts.
+- After setting a friend to "none", logging a sighting from that friend does not push. (Verify with a real device.)
+- After setting to "highlights", logging a duplicate species does not push, but logging a new-to-them species does.
+- Regression: friends with no pref set still receive every sighting (the "all" default).
+
+If Feature 2 (levels) or the annual goal data model isn't merged yet, gracefully handle their absence — log a TODO and treat those branches as no-ops, but ship the new-species check.
+```
+
+---
+
+### Feature 5 — Account creation rethink (design discussion first)
+
+**What we want:** Alex flagged this as a question, not a spec: *"Should we be using user names? handles? full name? do we need an email involved?"*
+
+The PRD already takes a position on this in §9. Quoting:
+
+> Users sign up with email + password. Identity in the app is a username (handle). Real name is not required. Optional profile photo. Optional display name.
+
+So the work isn't to *decide* the model — that's settled. The work is to (a) audit what the app does today and (b) build whatever's missing to match §9.
+
+**Why this model:**
+- **Keep email** for password reset and account recovery. The cost of losing your account permanently is unacceptable, and password reset requires a verified channel. Email is the dull, durable answer.
+- **Username (handle)** as the unique public identifier. Familiar from Twitter/Instagram. Enables friend search and @-mentions later if we add comments.
+- **Display name** (optional, separate from handle) so a user can be "Vic" in the UI while their handle is `victoria_k`. Cheap to add, big UX win.
+- **No required real name.** A friend-graph product doesn't need real names — the social proof comes from friend invites, not from "this user is verifiably Alex Keats." Keeps onboarding friction low and preserves privacy.
+
+**Design considerations:**
+- The first task is an audit: does the app today have usernames? Display names? Where is identity stored?
+- After the audit, the gap-closing work is probably a mix of (a) add username field to signup, (b) make username unique-enforced, (c) add display name optional field, (d) show username everywhere the user is currently identified by email.
+- Migration concern: existing users (Alex, Victoria, any test accounts) need usernames assigned. Probably a one-time client-side prompt: "pick a username" on first launch after the update.
+
+**Open questions / calls I made:**
+- I'm assuming the PRD §9 model is the destination. If you've changed your mind on real-names-required, say so.
+- The migration path for existing users (the "pick a username on next launch" prompt) is a design point I'm making for you — yell if you'd rather assign auto-generated handles or something else.
+
+**Prompt for Claude Code:**
+
+```
+This is a two-phase task. Phase 1 is investigation + proposal — DO NOT write code until I've approved the proposal.
+
+PHASE 1 — Audit and propose.
+
+The target identity model is documented in PRD.md §9. Summary:
+- Sign in: email + password (Firebase Auth). No change here.
+- Public identity: unique username (handle). Required.
+- Display name: optional, separate from username, can be edited.
+- Profile photo: optional. Initials fallback if missing.
+- Real name: NOT collected, NOT stored.
+
+Audit:
+1. Read app/services/userService.ts, components/LoginScreen.tsx, the Firestore user document shape, and any place a user's identity is rendered in the app.
+2. For each of the four PRD §9 fields (username, display name, profile photo, real name), report:
+   - Is it currently collected at signup?
+   - Is it stored on the user doc?
+   - Is it displayed anywhere in the app?
+   - Is uniqueness enforced (for username)?
+3. List existing users (the 2–10 who have accounts). What identity data does each have today?
+4. Identify the gap between current state and PRD §9. Be specific — file paths, field names, missing UI, missing validation.
+
+Proposal:
+Based on the audit, propose the change plan as a short list of work items:
+- Schema changes (Firestore user doc fields to add).
+- Signup flow changes (LoginScreen, userService).
+- Migration for existing users (probably a "pick a username" prompt on first launch after the update — propose the exact UX).
+- Display changes (replace email-based identifiers with username-based ones across the app — list each touchpoint).
+- Validation rules (username format: lowercase + digits + underscore, 3–20 chars, unique).
+
+STOP after the proposal. Show it to me and wait for approval.
+
+PHASE 2 — Implement (only after I approve Phase 1).
+
+Once I've signed off on the proposal, implement it in this order, committing after each:
+1. Schema + validation.
+2. Signup flow.
+3. Migration prompt for existing users.
+4. Display updates.
+
+DO NOT:
+- Touch Firebase Auth itself (we're keeping email+password as the sign-in method).
+- Add OAuth providers, social login, magic links, or any other auth method.
+- Add real-name collection. PRD §9 explicitly excludes it.
+```
+
+---
+
+### Feature 6 — "I was there!" tag-along
+
+**What we want:** When two people go birding together, only one needs to log the sightings. The other taps "I was there!" on each of their friend's sightings to have them counted in their own journal.
+
+**Design considerations:**
+- **Two implementation models:**
+  - *Model A — Pure copy:* Tap creates a fresh sighting in your account with copied data. No link back to the original. Simple, durable.
+  - *Model B — Reference only:* Tap creates a "co-observer" relationship; your Dex sees it but you don't own a copy.
+  - *Model A+ (recommended):* Pure copy, but with a `coObserverOf` field pointing back to the original. Both cards can show "with [other person]" for the shared moment, and if the original is deleted your copy persists with a "(original deleted)" indicator.
+- **UI:** A binoculars-icon button on the friend's SightingCard. Label: "I was there." Tap → confirmation dialog ("Add this Belted Kingfisher to your journal?") → optimistic insert into your own sightings. Button state changes to "✓ In your journal."
+- **Notification back to the original poster:** "Victoria says she saw your Belted Kingfisher too." Nice touch but optional for v1.
+- **Privacy/coordinate fuzzing:** If the original sighting has fuzzed coords (sensitive species per PRD §8), the copy should NOT inherit the exact coords — the fuzzing rule must apply to the copy too.
+- **Edge case — duplicate detection:** If the user already has a sighting of that species on that day, prompt: "You already have this species today. Add anyway?"
+
+**Open questions / calls I made:**
+- **Model A+ (copy with backref).** Push back if you want pure copy or reference-only.
+- **Notification back is opt-in nice-to-have for v1.** I left it out of the prompt to keep scope tight.
+- **Co-observers visible on the original card:** I had this say "yes — both cards show 'with [other person]'." That's a small but meaningful social moment. Push back if you want it invisible.
+
+**Prompt for Claude Code:**
+
+```
+Add an "I was there" tag-along on friends' sightings.
+
+Use case: Alex and Victoria go birding together. Alex logs 15 sightings. Victoria taps "I was there" on each — those 15 birds should count toward her Dex, year goal, and Field Journal too.
+
+Model: copy-with-backref. Tapping creates a brand-new sighting in the tapper's account with copied data, plus a coObserverOf field pointing to the original sighting ID. Pure ownership, but a thin link for display.
+
+Schema (app/types.ts):
+- Add optional field to Sighting: coObserverOf?: string (the original sighting's ID).
+- Add optional field: coObserverIds?: string[] (on the original — list of users who've tagged along). Maintained as a Firestore arrayUnion when someone taps the button.
+
+UI:
+- In components/SightingCard.tsx, when the card is rendered in the friends feed (not the user's own Field Journal), add a small "I was there" button below the existing info.
+- Use a binoculars Ionicon (or eye icon — pick one and use it consistently).
+- States:
+  - Default: "I was there"
+  - After tap: "✓ In your journal" (disabled / different style)
+- If the current user is already a co-observer (their uid is in coObserverIds), render the button in the "already tagged" state.
+
+Behavior on tap:
+1. Show a confirmation dialog: "Add this {species} to your journal?"
+2. On confirm:
+   a. Check if the user already has a sighting of the same species on the same calendar day. If yes, second confirm: "You already have a {species} logged for {date}. Add anyway?"
+   b. Create a new sighting in the user's account with:
+      - species, date, location label copied from the original
+      - coordinates copied ONLY IF the original isn't a fuzzed sensitive-species sighting (see PRD §8 — when the IUCN status work lands, coordinate fuzzing rules apply to copies too)
+      - coObserverOf: original sighting ID
+      - photo: NOT copied — Victoria didn't take Alex's photo. (She can add her own later.)
+      - notes: NOT copied.
+   c. Add the current user's uid to the original's coObserverIds via arrayUnion.
+
+Display:
+- On any sighting card (in any context), if coObserverIds.length > 0, show a small footer line: "with {name1}" or "with {name1} and {name2}" or "with {name1} and 3 others".
+- On the tagger's own copy (where coObserverOf is set), show "tagged along on {original poster}'s sighting" — small text, low emphasis.
+
+DO NOT:
+- Fire a push notification back to the original poster (separate v2 feature).
+- Copy the photo from the original (Victoria can take her own).
+- Allow tagging along on your own sighting (no-op + hidden button).
+- Allow tagging along on a sighting older than 30 days (sanity guardrail; configurable later).
+
+Acceptance criteria:
+- "I was there" button visible on friend feed cards only.
+- Tap → confirmation → sighting appears in tapper's Field Journal with copied species/date/location.
+- Tapper's Dex updates (species counts toward their total).
+- Original card now shows "with {tapper}".
+- Tapping again is idempotent (button is disabled in already-tagged state).
+- Duplicate-day species prompt works.
+- The coObserverOf backref is queryable for later features (e.g., "show me trips with Victoria").
+
+Out of scope:
+- Co-observer push notifications back to original poster.
+- Bulk tag-along ("add all of Alex's sightings from today").
+- Editing a co-observed sighting separately from the original.
+```
+
+---
+
+### Feature 7 — Field Journal grouped by day with daily counts (big day support)
+
+**What we want:** Restructure the Field Journal screen so sightings are grouped under date headers. Each header shows the date, total sightings that day, and total unique species that day. This is the "big day" use case birders care about — *how many species did I see on Saturday?*
+
+**Design considerations:**
+- **Header format:** `Saturday, May 23 — 8 sightings · 6 species`. Compact, scannable. For days with 1 sighting: `Friday, May 22 — 1 sighting · 1 species` (no special casing, consistency wins).
+- **Ordering:** Days reverse-chronological (most recent at top). Within a day, sightings also reverse-chronological.
+- **Sticky headers:** Optional nice-to-have. Probably not for v1 — adds complexity, marginal value on a phone-sized screen.
+- **Empty state:** No change. If user has zero sightings, the empty state stays as-is.
+- **Interaction with Feature 1:** Activity grid lives above the day-grouped list. No interaction between them.
+- **Performance:** Compute groupings client-side, memoize. Existing list is already in memory.
+
+**Open questions / calls I made:**
+- **Sticky headers off for v1.** Easy to add later if the day list gets long.
+- **No filter / search inside Field Journal yet** (e.g., "show me only days with new species"). That's a separate feature.
+
+**Prompt for Claude Code:**
+
+```
+Restructure the Field Journal screen to group sightings by day, with a per-day header that shows daily totals.
+
+Goal: surface the "big day" pattern — birders go out for a day and want to see how many species they saw that day.
+
+Spec:
+- Header format: "{Weekday}, {Month} {Day} — {N} sightings · {M} species"
+  - e.g., "Saturday, May 23 — 8 sightings · 6 species"
+  - For 1 sighting: "Friday, May 22 — 1 sighting · 1 species" (singular form is correct; don't special-case beyond that)
+- Days ordered reverse-chronological (most recent on top).
+- Within a day, sightings ordered reverse-chronological (most recent on top).
+- Day boundary: calendar day in the user's local timezone.
+
+Files:
+- app/(tabs)/index.tsx (the Field Journal screen).
+- Helper: app/utils/groupSightingsByDay.ts — pure function from Sighting[] → [{ date, sightings[], sightingCount, speciesCount }, ...].
+
+Approach:
+- Replace the existing flat FlatList with SectionList (built-in React Native), or compute grouped data and feed a FlatList of mixed item types (header | sighting). SectionList is cleaner — use it unless there's a strong reason not to.
+- Memoize the grouping with useMemo keyed on the sightings array reference.
+
+DO NOT:
+- Add sticky headers (out of scope for v1).
+- Add a search/filter UI.
+- Change the SightingCard component itself.
+- Change the empty state.
+
+Acceptance criteria:
+- Field Journal renders date headers above each day's sightings.
+- Each header shows correct sighting and species counts.
+- Headers are correct around timezone edges (a sighting at 11:55 PM local time and one at 12:05 AM local time fall on different days).
+- Scrolling performance is unchanged or better (memoization in place).
+- All existing interactions (long-press to delete, tap to view, etc.) still work on each sighting.
+
+Compatibility: this PR coexists with Feature 1 (activity grid). If Feature 1 has already shipped, the activity grid stays as the header above the SectionList. If not, no change.
+```
+
+---
+
+## Suggested build order
+
+These are independent enough that you can pick freely, but here's a sequencing that minimizes risk:
+
+1. **Feature 7 (group Field Journal by day)** — small, contained, satisfying. Good warm-up.
+2. **Feature 3 (follow push notification)** — small Cloud Function change. Tests the deploy pipeline.
+3. **Feature 1 (activity grid)** — pure UI, no data model changes. Visible win.
+4. **Feature 6 ("I was there")** — small schema change, meaningful UX win. Get the social mechanic in early to start collecting feedback.
+5. **Feature 2 (levels)** — bigger UI lift but no risky data work. Sets up Feature 4.
+6. **Feature 4 (per-friend notification prefs)** — depends on Feature 2's species-count denormalization. Do it second-to-last.
+7. **Feature 5 (account creation rethink)** — two-phase (audit + build). Save for when you have a clean stretch since the migration touches existing users.
