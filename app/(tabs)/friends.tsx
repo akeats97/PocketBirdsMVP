@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
 import { HardShadow } from '../../components/SightingCard';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
@@ -47,6 +47,10 @@ export default function FriendsScreen() {
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notificationPreferences, setNotificationPreferences] = useState<Record<string, boolean>>({});
+  const searchInputRef = useRef<TextInput>(null);
+  // Stores the pending blur-close timer so refocusing the input can cancel it
+  // (e.g. when the X button refocuses after clearing the search).
+  const blurCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filteredFriends = useMemo(() => {
     if (!searchQuery) return friends;
@@ -163,21 +167,37 @@ export default function FriendsScreen() {
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={18} color={palette.inkSoft} style={styles.searchIcon} />
           <TextInput
+            ref={searchInputRef}
             style={styles.searchInput}
             placeholder="Filter by friend..."
             placeholderTextColor={palette.muted}
             value={searchQuery}
-            onChangeText={text => {
-              setSearchQuery(text);
-              setShowFriendsList(text.length > 0);
+            onChangeText={setSearchQuery}
+            onFocus={() => {
+              if (blurCloseTimerRef.current) {
+                clearTimeout(blurCloseTimerRef.current);
+                blurCloseTimerRef.current = null;
+              }
+              setShowFriendsList(true);
             }}
-            onFocus={() => setShowFriendsList(true)}
+            onBlur={() => {
+              // Delay so taps inside the dropdown (friend row, X button) can
+              // refocus the input before the dropdown disappears. onFocus
+              // cancels the timer if a refocus happens first.
+              blurCloseTimerRef.current = setTimeout(() => {
+                setShowFriendsList(false);
+                blurCloseTimerRef.current = null;
+              }, 150);
+            }}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity
               onPress={() => {
                 setSearchQuery('');
-                setShowFriendsList(false);
+                // User is still in search mode — keep the dropdown open and
+                // the input focused so they can pick another friend or type
+                // a new filter. Refocusing also cancels any pending blur-close.
+                searchInputRef.current?.focus();
               }}
               style={styles.clearButton}
             >
@@ -219,11 +239,13 @@ export default function FriendsScreen() {
                   <FlatList
                     data={filteredFriends}
                     keyExtractor={(item) => item.id}
+                    keyboardShouldPersistTaps="handled"
                     renderItem={({ item }) => (
                       <View style={styles.friendRow}>
                         <Pressable
                           style={styles.friendRowContent}
                           onPress={() => {
+                            Keyboard.dismiss();
                             setSearchQuery(item.name);
                             setShowFriendsList(false);
                           }}
