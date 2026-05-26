@@ -34,6 +34,28 @@ const STORAGE_KEY = 'birdSightings';
 const LOCATION_KEY = 'lastLocation';
 const PENDING_DELETIONS_KEY = 'pendingDeletions';
 
+// Combine the authoritative server list with whatever local rows are still
+// unsynced. Synced rows in `prev` are discarded — Firebase is source of truth
+// for them. If a local pending row shares an id with a server row (shouldn't
+// happen since pending ids are local timestamps, but defensive), the server
+// copy wins.
+function mergeFirebaseSightings(
+  prev: Sighting[],
+  firebaseSightings: Sighting[],
+): Sighting[] {
+  const firebaseIds = new Set(firebaseSightings.map(s => s.id));
+  const keptLocal: Sighting[] = [];
+  for (const s of prev) {
+    if (s.syncStatus === 'synced') continue;
+    if (firebaseIds.has(s.id)) {
+      console.warn(`Sighting id collision for ${s.id}; preferring server copy.`);
+      continue;
+    }
+    keptLocal.push(s);
+  }
+  return [...keptLocal, ...firebaseSightings];
+}
+
 export function SightingsProvider({ children }: { children: React.ReactNode }) {
   const [sightings, setSightings] = useState<Sighting[]>([]);
   const [lastLocation, setLastLocation] = useState<LastLocation>({ label: '' });
@@ -199,12 +221,23 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
         console.log('Processing pending deletions before loading Firebase data...');
         await processPendingDeletions();
       }
-      
+
+      // Don't even try the fetch if we're offline — the throw would just be
+      // caught and logged, but it's cleaner to short-circuit. The connectivity
+      // listener will re-run sync on reconnect.
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected) {
+        console.log('Offline on startup — keeping cached sightings, skipping Firebase fetch.');
+        return;
+      }
+
       console.log('Fetching sightings from Firebase...');
       const firebaseSightings = await getUserSightingsFromFirebase();
       console.log(`Loaded ${firebaseSightings.length} sightings from Firebase`);
-      setSightings(firebaseSightings);
+      setSightings(prev => mergeFirebaseSightings(prev, firebaseSightings));
     } catch (error) {
+      // getUserSightingsFromFirebase now throws on network/auth errors; catching
+      // here means the local cache is left intact when the fetch fails.
       console.error('Error loading Firebase data:', error);
     }
   };
@@ -382,23 +415,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
 
       // After syncing pending sightings, fetch latest from Firebase
       const firebaseSightings = await getUserSightingsFromFirebase();
-      
-      // Merge Firebase sightings with local sightings
-      // Keep local pending/error sightings, but update synced ones
-      setSightings(prev => {
-        const localPending = prev.filter(s => s.syncStatus !== 'synced');
-        const merged = [...localPending];
-        
-        // Add Firebase sightings, avoiding duplicates
-        firebaseSightings.forEach(fbSighting => {
-          const existingIndex = merged.findIndex(s => s.id === fbSighting.id);
-          if (existingIndex === -1) {
-            merged.push(fbSighting);
-          }
-        });
-        
-        return merged;
-      });
+      setSightings(prev => mergeFirebaseSightings(prev, firebaseSightings));
     } catch (error) {
       console.error('Error during sync:', error);
     } finally {
