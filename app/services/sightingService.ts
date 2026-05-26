@@ -98,8 +98,11 @@ export async function getUserSightingsFromFirebase(): Promise<Sighting[]> {
       return sighting;
     });
   } catch (error) {
+    // Re-throw so callers can distinguish "offline / network error" from
+    // "user has no sightings". Swallowing this caused offline cold-start to
+    // overwrite the local cache with [].
     console.error('Error getting user sightings from Firebase:', error);
-    return [];
+    throw error;
   }
 }
 
