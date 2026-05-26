@@ -65,6 +65,12 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   // toggles on (isConnected, isInternetReachable, type all change). Without
   // this guard, syncSightings runs in parallel and creates duplicate docs.
   const isSyncingRef = useRef(false);
+  // Defense in depth against the offline data-loss bug: the autosave effect
+  // refuses to write [] to AsyncStorage unless something explicitly opted in
+  // by setting this flag. Set before any setSightings call that's expected
+  // to legitimately result in empty (delete, clear, successful Firebase
+  // fetch). Reset after each successful persist.
+  const allowNextEmptyPersistRef = useRef(false);
 
   // Load sightings data from AsyncStorage on startup
   useEffect(() => {
@@ -147,9 +153,18 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    if (!isLoading) {
-      saveSightings();
+    if (isLoading) return;
+
+    if (sightings.length === 0 && !allowNextEmptyPersistRef.current) {
+      console.warn(
+        'SightingsContext: refusing to persist empty sightings — no explicit clear/fetch was performed. ' +
+        'Possible regression in fetch/load code paths.'
+      );
+      return;
     }
+
+    saveSightings();
+    allowNextEmptyPersistRef.current = false;
   }, [sightings, isLoading]);
 
   // Save lastLocation to AsyncStorage whenever it changes
@@ -234,6 +249,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       console.log('Fetching sightings from Firebase...');
       const firebaseSightings = await getUserSightingsFromFirebase();
       console.log(`Loaded ${firebaseSightings.length} sightings from Firebase`);
+      allowNextEmptyPersistRef.current = true;
       setSightings(prev => mergeFirebaseSightings(prev, firebaseSightings));
     } catch (error) {
       // getUserSightingsFromFirebase now throws on network/auth errors; catching
@@ -329,6 +345,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       const wasLastOfSpecies = sightingsOfSameSpecies.length === 1;
 
       // Remove from local state immediately
+      allowNextEmptyPersistRef.current = true;
       setSightings(prev => prev.filter(s => s.id !== sightingId));
 
       // Handle Firebase deletion based on sync status and network connectivity
@@ -415,6 +432,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
 
       // After syncing pending sightings, fetch latest from Firebase
       const firebaseSightings = await getUserSightingsFromFirebase();
+      allowNextEmptyPersistRef.current = true;
       setSightings(prev => mergeFirebaseSightings(prev, firebaseSightings));
     } catch (error) {
       console.error('Error during sync:', error);
@@ -428,6 +446,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.removeItem(STORAGE_KEY);
       await AsyncStorage.removeItem(LOCATION_KEY);
       await AsyncStorage.removeItem(PENDING_DELETIONS_KEY);
+      allowNextEmptyPersistRef.current = true;
       setSightings([]);
       setLastLocation({ label: '' });
       setPendingDeletions([]);
