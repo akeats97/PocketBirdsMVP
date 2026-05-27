@@ -1,5 +1,6 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
+import { NEW_FOLLOW_MODE, setPref } from './notificationPrefsService';
 
 // Type definitions
 export interface UserProfile {
@@ -76,7 +77,16 @@ export async function followUser(targetUserId: string): Promise<void> {
     await setDoc(followingRef, {
       timestamp: new Date(),
     });
-    
+
+    // New relationships default to "highlights" (quieter). Existing follows
+    // have no pref doc and resolve to "all", so current users are unaffected.
+    // Best-effort: a failure here must not fail the follow itself.
+    try {
+      await setPref(currentUser.uid, targetUserId, NEW_FOLLOW_MODE);
+    } catch (prefError) {
+      console.warn('Follow succeeded but failed to set default notification pref:', prefError);
+    }
+
     console.log(`Now following user: ${targetUserId}`);
   } catch (error) {
     console.error('Error following user:', error);

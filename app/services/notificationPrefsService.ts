@@ -10,10 +10,17 @@ import { db } from '../../config/firebaseConfig';
 
 export type NotificationMode = 'all' | 'highlights' | 'none';
 
-// Absence of a pref doc resolves to this. "Highlights" = new species and
-// species-count milestones only. Quieter than pushing every sighting, but
-// still surfaces the moments worth interrupting someone for.
-export const DEFAULT_MODE: NotificationMode = 'highlights';
+// Absence of a pref doc resolves to this. Kept at "all" so relationships that
+// predate this feature (no doc) keep getting every sighting, i.e. existing
+// users see no change. New follows are created with an explicit pref of
+// NEW_FOLLOW_MODE instead, so only new relationships default to the quieter
+// mode.
+export const DEFAULT_MODE: NotificationMode = 'all';
+
+// Mode written when a brand-new follow is created. "Highlights" = new species
+// and species-count milestones only: loud enough to matter, quiet enough to
+// avoid buzz fatigue for people building fresh friend graphs.
+export const NEW_FOLLOW_MODE: NotificationMode = 'highlights';
 
 function prefDoc(followerUid: string, followedUid: string) {
   return doc(db, `users/${followerUid}/notificationPrefs/${followedUid}`);

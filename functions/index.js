@@ -118,10 +118,12 @@ exports.onSightingAdded = onDocumentCreated('sightings/{sightingId}', async (eve
     const isHighlight = isNewSpecies || milestone !== null;
 
     // Collect push tokens for followers whose per-friend preference allows
-    // this sighting. Absence of a pref doc resolves to "highlights".
+    // this sighting. Absence of a pref doc resolves to "all": relationships
+    // that predate this feature keep getting every sighting. New follows are
+    // created with an explicit "highlights" doc by the client.
     const pushTokens = [];
     for (const followerId of followerIds) {
-      let mode = 'highlights';
+      let mode = 'all';
       try {
         const prefSnap = await admin.firestore()
           .doc(`users/${followerId}/notificationPrefs/${sighting.userId}`)
