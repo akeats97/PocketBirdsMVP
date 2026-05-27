@@ -1,19 +1,42 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
 import { HardShadow } from '../../components/SightingCard';
+import { auth } from '../../config/firebaseConfig';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useSightings } from '../context/SightingsContext';
+import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../services/notificationPrefsService';
 import { UserProfile, followUser, isFollowing, searchUsers, unfollowUser } from '../services/userService';
 
 interface SearchResultUser extends UserProfile {
   isFollowing?: boolean;
-  notificationsEnabled?: boolean;
 }
 
 const AVATAR_COLORS = [palette.sky, palette.leaf, palette.coral];
+
+// Bell icon + tint for each notification mode.
+function bellIconProps(mode: NotificationMode): {
+  name: keyof typeof Ionicons.glyphMap;
+  color: string;
+} {
+  switch (mode) {
+    case 'all':
+      return { name: 'notifications', color: palette.sun };
+    case 'none':
+      return { name: 'notifications-off', color: palette.muted };
+    case 'highlights':
+    default:
+      return { name: 'notifications-outline', color: palette.ink };
+  }
+}
+
+const PREF_OPTIONS: { mode: NotificationMode; title: string; sub: string }[] = [
+  { mode: 'all', title: 'All sightings', sub: 'Push every time.' },
+  { mode: 'highlights', title: 'Highlights only', sub: 'New species and milestones.' },
+  { mode: 'none', title: 'Nothing', sub: 'Silent, but still in your feed.' },
+];
 
 function avatarColor(seed: string): string {
   let h = 0;
@@ -46,7 +69,8 @@ export default function FriendsScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [notificationPreferences, setNotificationPreferences] = useState<Record<string, boolean>>({});
+  const [notificationPrefs, setNotificationPrefs] = useState<Record<string, NotificationMode>>({});
+  const [prefPickerFor, setPrefPickerFor] = useState<{ uid: string; name: string } | null>(null);
   const searchInputRef = useRef<TextInput>(null);
   // Stores the pending blur-close timer so refocusing the input can cancel it
   // (e.g. when the X button refocuses after clearing the search).
@@ -92,7 +116,6 @@ export default function FriendsScreen() {
             return {
               ...user,
               isFollowing: following,
-              notificationsEnabled: notificationPreferences[user.uid] || false,
             };
           })
         );
@@ -138,13 +161,29 @@ export default function FriendsScreen() {
     }
   };
 
-  const handleNotificationToggle = (userId: string) => {
-    setNotificationPreferences(prev => ({ ...prev, [userId]: !prev[userId] }));
-    setSearchResults(prev =>
-      prev.map(user =>
-        user.uid === userId ? { ...user, notificationsEnabled: !notificationPreferences[userId] } : user
-      )
-    );
+  // Keep a live map of the current user's per-friend notification modes.
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    return subscribeToPrefs(uid, setNotificationPrefs);
+  }, []);
+
+  const modeFor = (uid: string): NotificationMode => notificationPrefs[uid] ?? DEFAULT_MODE;
+
+  const handleSelectMode = async (followedUid: string, mode: NotificationMode) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const previous = notificationPrefs[followedUid];
+    // Optimistic: update the map and close the picker, revert on failure.
+    setNotificationPrefs(prev => ({ ...prev, [followedUid]: mode }));
+    setPrefPickerFor(null);
+    try {
+      await setPref(uid, followedUid, mode);
+    } catch (error) {
+      console.error('Failed to save notification preference:', error);
+      setNotificationPrefs(prev => ({ ...prev, [followedUid]: previous ?? DEFAULT_MODE }));
+      Alert.alert('Error', "Couldn't save that preference. Please try again.");
+    }
   };
 
   return (
@@ -255,13 +294,9 @@ export default function FriendsScreen() {
                         </Pressable>
                         <Pressable
                           style={styles.bellButton}
-                          onPress={() => handleNotificationToggle(item.id)}
+                          onPress={() => setPrefPickerFor({ uid: item.id, name: item.name })}
                         >
-                          <Ionicons
-                            name={notificationPreferences[item.id] ? 'notifications' : 'notifications-outline'}
-                            size={18}
-                            color={notificationPreferences[item.id] ? palette.sun : palette.muted}
-                          />
+                          <Ionicons {...bellIconProps(modeFor(item.id))} size={18} />
                         </Pressable>
                       </View>
                     )}
@@ -390,13 +425,9 @@ export default function FriendsScreen() {
                             {item.isFollowing && (
                               <Pressable
                                 style={styles.bellButton}
-                                onPress={() => handleNotificationToggle(item.uid)}
+                                onPress={() => setPrefPickerFor({ uid: item.uid, name: item.username })}
                               >
-                                <Ionicons
-                                  name={item.notificationsEnabled ? 'notifications' : 'notifications-outline'}
-                                  size={20}
-                                  color={item.notificationsEnabled ? palette.sun : palette.muted}
-                                />
+                                <Ionicons {...bellIconProps(modeFor(item.uid))} size={20} />
                               </Pressable>
                             )}
                             <Pressable
@@ -437,6 +468,39 @@ export default function FriendsScreen() {
             </View>
           </HardShadow>
         </View>
+      </Modal>
+
+      {/* Per-friend notification preference picker */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={prefPickerFor !== null}
+        onRequestClose={() => setPrefPickerFor(null)}
+      >
+        <Pressable style={styles.prefBackdrop} onPress={() => setPrefPickerFor(null)}>
+          <Pressable style={styles.prefSheet} onPress={() => {}}>
+            <Text style={styles.prefTitle} numberOfLines={1}>
+              Notifications from {prefPickerFor?.name}
+            </Text>
+            {PREF_OPTIONS.map(opt => {
+              const active = prefPickerFor ? modeFor(prefPickerFor.uid) === opt.mode : false;
+              return (
+                <Pressable
+                  key={opt.mode}
+                  style={[styles.prefOption, active && styles.prefOptionActive]}
+                  onPress={() => prefPickerFor && handleSelectMode(prefPickerFor.uid, opt.mode)}
+                >
+                  <Ionicons {...bellIconProps(opt.mode)} size={22} style={styles.prefOptionIcon} />
+                  <View style={styles.prefOptionTextWrap}>
+                    <Text style={styles.prefOptionTitle}>{opt.title}</Text>
+                    <Text style={styles.prefOptionSub}>{opt.sub}</Text>
+                  </View>
+                  {active && <Ionicons name="checkmark" size={20} color={palette.leaf} />}
+                </Pressable>
+              );
+            })}
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -770,5 +834,52 @@ const styles = StyleSheet.create({
     ...type.body,
     color: palette.inkSoft,
     textAlign: 'center',
+  },
+
+  // Notification preference picker
+  prefBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(26, 36, 23, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  prefSheet: {
+    ...recipes.card,
+    padding: space.lg,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  prefTitle: {
+    ...type.h3,
+    color: palette.ink,
+    marginBottom: space.md,
+  },
+  prefOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.md,
+    borderRadius: radius.input,
+  },
+  prefOptionActive: {
+    backgroundColor: palette.card,
+    ...border.thick,
+  },
+  prefOptionIcon: {
+    width: 24,
+    textAlign: 'center',
+  },
+  prefOptionTextWrap: {
+    flex: 1,
+  },
+  prefOptionTitle: {
+    ...type.bodyL,
+    color: palette.ink,
+    fontWeight: '700',
+  },
+  prefOptionSub: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    marginTop: 1,
   },
 });

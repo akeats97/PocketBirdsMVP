@@ -87,43 +87,83 @@ exports.onSightingAdded = onDocumentCreated('sightings/{sightingId}', async (eve
     }
     
     console.log(`Found ${followerIds.length} followers`);
-    
+
     if (followerIds.length === 0) {
       console.log('No followers found for user:', sighting.userId);
       return;
     }
-    
-    // Get push tokens for all followers
+
+    // Compute once whether this sighting is a "highlight" for the poster: a
+    // brand-new species for them, or a save that crossed a species-count
+    // milestone. Followers on "highlights" only get pushed for these.
+    let isNewSpecies = false;
+    try {
+      const speciesSnap = await admin.firestore()
+        .collection('sightings')
+        .where('userId', '==', sighting.userId)
+        .where('birdName', '==', sighting.birdName)
+        .get();
+      // The triggering sighting is already written, so size === 1 means this
+      // is the only sighting of the species for this user (i.e. new species).
+      isNewSpecies = speciesSnap.size === 1;
+    } catch (error) {
+      console.error('New-species check failed; treating as not new:', error);
+    }
+
+    // milestoneCrossed is stamped on the doc by the client when this save
+    // crossed a species-count threshold, so reuse it instead of recomputing.
+    const milestone = typeof sighting.milestoneCrossed === 'number'
+      ? sighting.milestoneCrossed
+      : null;
+    const isHighlight = isNewSpecies || milestone !== null;
+
+    // Collect push tokens for followers whose per-friend preference allows
+    // this sighting. Absence of a pref doc resolves to "highlights".
     const pushTokens = [];
     for (const followerId of followerIds) {
+      let mode = 'highlights';
+      try {
+        const prefSnap = await admin.firestore()
+          .doc(`users/${followerId}/notificationPrefs/${sighting.userId}`)
+          .get();
+        if (prefSnap.exists && prefSnap.data().mode) {
+          mode = prefSnap.data().mode;
+        }
+      } catch (error) {
+        console.error(`Pref read failed for follower ${followerId}; defaulting to highlights:`, error);
+      }
+
+      if (mode === 'none') {
+        console.log(`Follower ${followerId} muted this friend; skipping.`);
+        continue;
+      }
+      if (mode === 'highlights' && !isHighlight) {
+        console.log(`Follower ${followerId} on highlights; sighting is not a highlight; skipping.`);
+        continue;
+      }
+
       const followerDoc = await admin.firestore()
         .collection('users')
         .doc(followerId)
         .get();
-      
+
       if (followerDoc.exists) {
         const followerData = followerDoc.data();
         if (followerData.expoPushToken) {
           pushTokens.push(followerData.expoPushToken);
-          console.log(`Found push token for follower: ${followerId}`);
+          console.log(`Eligible follower ${followerId} (mode: ${mode})`);
         } else {
           console.log(`No push token for follower: ${followerId}`);
         }
       }
     }
-    
+
     if (pushTokens.length === 0) {
-      console.log('No push tokens found for followers');
+      console.log('No eligible followers with push tokens');
       return;
     }
-    
+
     console.log(`Sending notifications to ${pushTokens.length} followers`);
-    
-    // If this save crossed a species-count milestone, swap in a richer
-    // congratulations message so followers feel the moment too.
-    const milestone = typeof sighting.milestoneCrossed === 'number'
-      ? sighting.milestoneCrossed
-      : null;
 
     const baseTitle = `🐦 ${username} spotted a bird!`;
     const baseBody = `${sighting.birdName} at ${sighting.location}`;
