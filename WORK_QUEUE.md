@@ -354,6 +354,38 @@ Restrictions take ~5 min to propagate. Once applied: only APKs signed by the EAS
 
 ---
 
+### Lock down Firestore security rules (CRITICAL)
+
+**What's happening:** The project's Firestore security rules are wide open. The active ruleset (fetched May 26 2026 via the Rules API) is:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+`if true` means anyone, signed in or not, can read, modify, or delete every document: all `users` (including each user's `expoPushToken`), all `sightings`, `following`, `usernames`, and the new `notificationPrefs`.
+
+**Why this matters:** A Firebase web config is not a secret. It ships in every APK (in the JS bundle and `android/app/google-services.json`), so anyone who pulls the app off the Play Store can extract `projectId` + `apiKey` and call Firestore directly. The only thing protecting the data is security rules, which are currently off. Someone could wipe every sighting or harvest push tokens.
+
+**Fix (its own careful task, not a quick toggle):** Write per-collection rules and test them so the app keeps working. Sketch:
+- `users/{uid}`: readable by any signed-in user (friend search and profiles need it); writable only by the owner (`request.auth.uid == uid`). Same for `users/{uid}/notificationPrefs/{any}`.
+- `usernames/{name}`: readable by signed-in users; writes constrained to claiming an unused handle for yourself.
+- `sightings/{id}`: writable only by the owner; readable by the owner and followers (see open question).
+- `following/{follower}/following/{followed}`: writable only by `follower`.
+- Default-deny everything else.
+
+**Before deploying:** a rules deploy replaces the live ruleset wholesale, so develop against the Firestore emulator or a throwaway project first, exercise login / add-sighting / friends feed / follow / notification bell, THEN deploy. Keep the file in the repo (`firestore.rules` wired into `firebase.json`) so it's version-controlled from then on.
+
+**Open questions:** Should sightings be readable by any signed-in user, or restricted to followers only? The friends-feed query uses `where('userId','in', followedIds)`, so a followers-only read rule needs to stay compatible with that query shape.
+
+---
+
 ## Features
 
 Same format as bugs above. Each feature has a description, design considerations, open questions where I've made calls worth re-examining, and a self-contained Claude Code prompt.
