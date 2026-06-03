@@ -2,21 +2,26 @@ import React, { useMemo } from 'react';
 import { SectionList, StyleSheet, Text, View } from 'react-native';
 import SightingCard, { HardShadow } from '../../components/SightingCard';
 import { palette, recipes, space, type } from '../../constants/Colors';
+import { isReportEntry } from '../../constants/reportTypes';
 import { useSightings } from '../context/SightingsContext';
 import { groupSightingsByDay } from '../utils/groupSightingsByDay';
 
 function JournalHeader() {
   const { sightings } = useSightings();
-  const speciesCount = useMemo(
-    () => new Set(sightings.map((s) => s.birdName)).size,
+  const visible = useMemo(
+    () => sightings.filter((s) => !isReportEntry(s.birdName)),
     [sightings]
+  );
+  const speciesCount = useMemo(
+    () => new Set(visible.map((s) => s.birdName)).size,
+    [visible]
   );
 
   return (
     <View style={styles.header}>
       <Text style={styles.title}>Field Journal</Text>
       <Text style={styles.subtitle}>
-        {sightings.length} {sightings.length === 1 ? 'sighting' : 'sightings'} · {speciesCount} {speciesCount === 1 ? 'species' : 'species'}
+        {visible.length} {visible.length === 1 ? 'sighting' : 'sightings'} · {speciesCount} {speciesCount === 1 ? 'species' : 'species'}
       </Text>
     </View>
   );
@@ -40,7 +45,14 @@ function EmptyState() {
 export default function LogScreen() {
   const { sightings, isNewSpeciesForUser } = useSightings();
 
-  const sections = useMemo(() => groupSightingsByDay(sightings), [sightings]);
+  // Bug Report / Feature Request entries are hidden from the user's own
+  // Field Journal (they still appear in friends' feeds and Firestore).
+  const visible = useMemo(
+    () => sightings.filter((s) => !isReportEntry(s.birdName)),
+    [sightings]
+  );
+
+  const sections = useMemo(() => groupSightingsByDay(visible), [visible]);
 
   return (
     <View style={styles.container}>
@@ -65,7 +77,7 @@ export default function LogScreen() {
         ListHeaderComponent={JournalHeader}
         ListEmptyComponent={EmptyState}
         contentContainerStyle={
-          sightings.length === 0
+          visible.length === 0
             ? styles.emptyListContent
             : styles.listContent
         }

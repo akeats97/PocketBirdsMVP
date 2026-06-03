@@ -6,6 +6,7 @@ import { Alert, Animated, Dimensions, Image, Keyboard, KeyboardAvoidingView, Pla
 import { HardShadow } from '../../components/SightingCard';
 import { birdNamesAlpha, birdNamesAlphaLower } from '../../constants/birdNamesLower';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
+import { REPORT_TYPES, isReportEntry } from '../../constants/reportTypes';
 import MilestoneCelebration from '../components/MilestoneCelebration';
 import { useSightings } from '../context/SightingsContext';
 import { pickImage } from '../services/photoService';
@@ -28,6 +29,7 @@ export default function AddSightingScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isNewSpecies, setIsNewSpecies] = useState(false);
+  const [submittedReport, setSubmittedReport] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const textInputRef = useRef<TextInput>(null);
@@ -182,6 +184,11 @@ export default function AddSightingScreen() {
       const tier1: string[] = [];
       const tier2: string[] = [];
 
+      // Surface "Bug Report" / "Feature Request" as selectable suggestions so
+      // they can be committed like a bird (Save requires a tapped selection).
+      const reportMatches =
+        q.length >= 2 ? REPORT_TYPES.filter(rt => rt.toLowerCase().startsWith(q)) : [];
+
       for (let i = 0; i < birdNamesAlpha.length; i++) {
         const lower = birdNamesAlphaLower[i];
         if (lower.startsWith(q)) {
@@ -196,7 +203,7 @@ export default function AddSightingScreen() {
         if (tier0.length >= CAP) break;
       }
 
-      setSuggestions([...tier0, ...tier1, ...tier2].slice(0, CAP));
+      setSuggestions([...reportMatches, ...tier0, ...tier1, ...tier2].slice(0, CAP));
     }, 100);
     return () => clearTimeout(handle);
   }, [searchQuery, selectedBird]);
@@ -219,12 +226,33 @@ export default function AddSightingScreen() {
     }
   };
 
+  const playSuccessBanner = () => {
+    Animated.sequence([
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2000),
+      Animated.timing(slideAnim, {
+        toValue: -100,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowSuccess(false);
+      slideAnim.setValue(-100);
+    });
+  };
+
   const handleSave = () => {
     if (!selectedBird) {
       Alert.alert('Error', 'Please select a bird');
       return;
     }
-    if (!location) {
+    // Bug Report / Feature Request entries don't require a location.
+    const isReport = isReportEntry(selectedBird);
+    if (!isReport && !location) {
       Alert.alert('Error', 'Please enter a location');
       return;
     }
@@ -245,6 +273,18 @@ export default function AddSightingScreen() {
     setDate(new Date());
     setPhotoUri(null);
 
+    // Reports get their own thank-you banner — no milestone, new-species
+    // celebration, or haptic buzz.
+    if (isReport) {
+      setSubmittedReport(true);
+      setIsNewSpecies(false);
+      setShowSuccess(true);
+      playSuccessBanner();
+      return;
+    }
+
+    setSubmittedReport(false);
+
     if (milestone) {
       setMilestoneCount(milestone);
       return;
@@ -257,22 +297,7 @@ export default function AddSightingScreen() {
       Vibration.vibrate([0, 150, 100, 150, 100, 300]);
     }
 
-    Animated.sequence([
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.delay(2000),
-      Animated.timing(slideAnim, {
-        toValue: -100,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setShowSuccess(false);
-      slideAnim.setValue(-100);
-    });
+    playSuccessBanner();
   };
 
   const handleOutsidePress = () => {
@@ -308,16 +333,22 @@ export default function AddSightingScreen() {
             <View
               style={[
                 styles.successPopupContent,
-                isNewSpecies && styles.newSpeciesPopupContent,
+                (isNewSpecies || submittedReport) && styles.newSpeciesPopupContent,
               ]}
             >
-              <Ionicons
-                name={isNewSpecies ? 'star' : 'checkmark-circle'}
-                size={22}
-                color="#fff"
-              />
+              {!submittedReport && (
+                <Ionicons
+                  name={isNewSpecies ? 'star' : 'checkmark-circle'}
+                  size={22}
+                  color="#fff"
+                />
+              )}
               <Text style={styles.successPopupText}>
-                {isNewSpecies ? 'New species added to your dex!' : 'Sighting logged successfully!'}
+                {submittedReport
+                  ? 'thank you for your hep ❤️'
+                  : isNewSpecies
+                    ? 'New species added to your dex!'
+                    : 'Sighting logged successfully!'}
               </Text>
             </View>
           </HardShadow>

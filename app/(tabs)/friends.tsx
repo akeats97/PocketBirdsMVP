@@ -5,6 +5,7 @@ import FriendSightingCard from '../../components/FriendSightingCard';
 import { HardShadow } from '../../components/SightingCard';
 import { auth } from '../../config/firebaseConfig';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
+import { isReportEntry } from '../../constants/reportTypes';
 import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useSightings } from '../context/SightingsContext';
 import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../services/notificationPrefsService';
@@ -89,7 +90,9 @@ export default function FriendsScreen() {
 
   const friendStats = useMemo(() => {
     if (!searchQuery) return null;
-    const sightings = filterByFriend(searchQuery);
+    // Exclude Bug Report / Feature Request entries from the counts — they still
+    // show as cards in the feed, but aren't real sightings/species.
+    const sightings = filterByFriend(searchQuery).filter(s => !isReportEntry(s.birdName));
     const totalSightings = sightings.length;
     const uniqueSpecies = new Set(sightings.map(sighting => sighting.birdName)).size;
     return { totalSightings, uniqueSpecies };

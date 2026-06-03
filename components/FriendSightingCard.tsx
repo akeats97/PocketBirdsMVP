@@ -61,11 +61,15 @@ export default function FriendSightingCard({ sighting, isFirstSighting }: Friend
           </View>
 
           <View style={styles.metaRow}>
-            <View style={styles.metaItem}>
-              <Ionicons name="location" size={12} color={palette.muted} />
-              <Text style={styles.metaText} numberOfLines={1}>{sighting.location}</Text>
-            </View>
-            <Text style={styles.metaDivider}>·</Text>
+            {sighting.location ? (
+              <>
+                <View style={styles.metaItem}>
+                  <Ionicons name="location" size={12} color={palette.muted} />
+                  <Text style={styles.metaText} numberOfLines={1}>{sighting.location}</Text>
+                </View>
+                <Text style={styles.metaDivider}>·</Text>
+              </>
+            ) : null}
             <Text style={styles.metaText}>{formatRelativeDate(sighting.date)}</Text>
           </View>
 

@@ -5,6 +5,7 @@ import { Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput,
 import { HardShadow } from '../../components/SightingCard';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
+import { isReportEntry } from '../../constants/reportTypes';
 import { useSightings } from '../context/SightingsContext';
 import { useWishlist } from '../context/WishlistContext';
 
@@ -64,9 +65,16 @@ export default function DexScreen() {
     );
   };
 
+  // Exclude Bug Report / Feature Request entries — they aren't real species
+  // and shouldn't appear in the Dex or its stats.
+  const realSightings = useMemo(
+    () => sightings.filter(s => !isReportEntry(s.birdName)),
+    [sightings]
+  );
+
   const seenMap = useMemo(() => {
     const map: { [name: string]: SeenInfo } = {};
-    sightings.forEach(s => {
+    realSightings.forEach(s => {
       const entry = map[s.birdName] || { timesSeen: 0, lastSeen: '', hasPhoto: false };
       entry.timesSeen += 1;
       const d = s.date.toISOString().split('T')[0];
@@ -75,13 +83,13 @@ export default function DexScreen() {
       map[s.birdName] = entry;
     });
     return map;
-  }, [sightings]);
+  }, [realSightings]);
 
   const stats = useMemo(() => ({
-    totalSightings: sightings.length,
+    totalSightings: realSightings.length,
     uniqueSpecies: Object.keys(seenMap).length,
     photographedSpecies: Object.values(seenMap).filter(info => info.hasPhoto).length,
-  }), [sightings.length, seenMap]);
+  }), [realSightings.length, seenMap]);
 
   const sections = useMemo<Section[]>(() => {
     const q = searchQuery.trim().toLowerCase();

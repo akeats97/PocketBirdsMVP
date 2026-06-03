@@ -6,6 +6,7 @@ import { auth } from '../../config/firebaseConfig';
 import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase } from '../services/sightingService';
 import { uploadPhoto } from '../services/photoService';
 import { isMilestone } from '../constants/milestones';
+import { isReportEntry } from '../../constants/reportTypes';
 import { Coordinates, Sighting } from '../types';
 
 export interface AddSightingResult {
@@ -296,8 +297,15 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addSighting = (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>): AddSightingResult => {
+    // Bug Report / Feature Request entries ride this pipeline but aren't real
+    // species — they never count as a new species or toward milestones, and
+    // they're excluded from the species math so they don't inflate counts for
+    // real birds logged afterward.
+    const isReport = isReportEntry(sighting.birdName);
+    const realSightings = sightings.filter(s => !isReportEntry(s.birdName));
+
     // Check if this is a new species (case-insensitive match against existing).
-    const isNewSpecies = !sightings.some(existingSighting =>
+    const isNewSpecies = !isReport && !realSightings.some(existingSighting =>
       existingSighting.birdName.toLowerCase() === sighting.birdName.toLowerCase()
     );
 
@@ -306,7 +314,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     let milestone: number | null = null;
     if (isNewSpecies) {
       const uniqueBefore = new Set(
-        sightings.map(s => s.birdName.toLowerCase())
+        realSightings.map(s => s.birdName.toLowerCase())
       ).size;
       const uniqueAfter = uniqueBefore + 1;
       if (isMilestone(uniqueAfter)) {
@@ -322,10 +330,14 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       ...(milestone !== null ? { milestoneCrossed: milestone } : {}),
     };
     setSightings(prev => [newSighting, ...prev]);
-    setLastLocation({
-      label: sighting.location,
-      coordinates: sighting.coordinates,
-    });
+    // Don't remember an empty location (e.g. a report logged with no place),
+    // which would otherwise wipe the prefill for the next real sighting.
+    if (sighting.location) {
+      setLastLocation({
+        label: sighting.location,
+        coordinates: sighting.coordinates,
+      });
+    }
 
     return { isNewSpecies, milestone };
   };
