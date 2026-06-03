@@ -194,6 +194,13 @@ Goal: ship PocketBirds to friends' iPhones via TestFlight. Bundle ID `com.akeats
 - Builds expire 90 days after upload in TestFlight. Plan on a refresh build at least quarterly to keep external testers running.
 - Two .p8 secrets in 1Password: APNs (`AuthKey_6TBT96JT76.p8`) and ASC API (`AuthKey_GFYGV5D864.p8`). Restore from 1Password if EAS ever loses credentials.
 
+### Editing native iOS config — gotchas (learned Jun 3 2026)
+
+- **NEVER validate a plist with `plutil -extract <key> <fmt> <file>`.** Without `-o -`, `-extract` REWRITES the file in place with just the extracted value, silently destroying it. On Jun 3 2026 this collapsed `ios/PocketBirds4/Info.plist` to a single `["remote-notification"]` line, which got committed and broke the iOS build (`Failed to parse Info.plist`). For read-only checks use ONLY `plutil -lint <file>` or `plutil -p <file>`. To extract to stdout, you must pass `-o -`.
+- **Adding an iOS entitlement requires regenerating the provisioning profile.** When `aps-environment` was added to `PocketBirds4.entitlements`, the first build failed at codesign: the existing profile `V4H2K892QC` (generated May 22) didn't grant Push Notifications. A profile is a frozen snapshot; Xcode requires every declared entitlement to be granted by the profile. Fix: run an **interactive** `eas build -p ios --profile production` (or `eas credentials -p ios`) so EAS authenticates to Apple (Apple ID + 2FA), enables the capability on the App ID, and re-issues the profile. Non-interactive builds skip Apple auth and can't do this. One-time per new capability; EAS reuses the fixed profile afterward.
+- **`eas submit -p ios` needs `ascAppId` in `eas.json`** (`submit.production.ios.ascAppId = "6772308812"`). Without it the submit aborts asking for the ASC app id. The ASC API key itself is stored on EAS servers and used automatically.
+- Bare-workflow reminder: `app.json` `ios.infoPlist` and config-plugin permission strings are NOT applied unless `expo prebuild` runs (which we never do). The committed `ios/PocketBirds4/Info.plist` + `.entitlements` are the source of truth — edit them directly when adding native permissions/capabilities.
+
 ---
 
 ## Play Store Keystore — Recovery in progress (resolves May 23 2026)
