@@ -1,1 +1,1 @@
-export const CURRENT_RELEASE_NAME = 'Tody-Flycatcher';
+export const CURRENT_RELEASE_NAME = 'Emerald';
