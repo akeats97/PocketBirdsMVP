@@ -329,6 +329,42 @@ Commit as a single small commit since the three changes are atomically one logic
 
 ---
 
+### Bug 6 — iOS push notifications broken: missing `aps-environment` entitlement (priority)
+
+**Found:** June 3 2026, testing the Sheartail TestFlight build on a real iPhone.
+
+**What's happening:** On app open, iOS shows a popup notification error: `no valid "aps-environment" entitlement string found for application` (this fires when the app registers for push at startup — it is NOT triggered by the location button; the location crash is a separate bug, see Bug 7). Concrete user-visible symptom: cross-platform push is one-directional. When the iOS friend (username `evaloon`) logged a bird, the Android users got the push (iOS → Android works). But when an Android user logged a bird, `evaloon` on iOS got **nothing** (Android → iOS is dead).
+
+**Root cause:** The iOS build is missing the `aps-environment` entitlement. Without it, iOS refuses to register the app with APNs, so the device never obtains a valid push token. The Expo → FCM → APNs delivery path has nothing to deliver to. This directly contradicts the optimistic note in CLAUDE.md ("the EAS-generated provisioning profile should include the push entitlement, but it's untested") — it's now tested, and it's broken.
+
+**Why it's only one-directional:** Sending works fine from iOS because the *sender* doesn't need push entitlements; the Cloud Function runs server-side and pushes to the *recipient's* token. Android recipients have valid tokens, so iOS → Android lands. iOS recipients have no valid token (or a stale/invalid one), so Android → iOS fails.
+
+**Where to look:**
+- `app.json` ios block — needs `ios.entitlements` with `"aps-environment": "production"` (or rely on the Push Notifications capability being baked into the provisioning profile). Currently `infoPlist.UIBackgroundModes=["remote-notification"]` is set but that is NOT the same as the `aps-environment` entitlement.
+- EAS credentials / provisioning profile (`V4H2K892QC`) — confirm it was generated against an App ID that has the Push Notifications capability enabled. The App ID `com.akeats97.pocketbirds` was registered WITH Push Notifications (per CLAUDE.md), so the profile may just need regenerating so the entitlement is actually embedded in the build.
+- After fixing, re-verify with Firestore: log in on the iOS device → confirm `users/{uid}.expoPushToken` is populated and fresh → have an Android user log a sighting → push should land on iOS within ~10s. Use the layer-by-layer pipeline in CLAUDE.md's "Push Notifications — Working Setup" if it still fails.
+
+**Open questions:** Whether to set `aps-environment` explicitly in `app.json` `ios.entitlements` vs. fixing it at the provisioning-profile layer in EAS. Decide before next iOS build.
+
+---
+
+### Bug 7 — Location feature crashes the app on iOS
+
+**Found:** June 3 2026, same Sheartail TestFlight build on iPhone.
+
+**What's happening:** Tapping the **location button** (the crosshair "locate" icon in the Add Sighting location field) on iOS crashed the app. After force-relaunch, the app also showed the `aps-environment` notification popup from Bug 6 — but that popup is the startup push-registration error, unrelated to the location tap. The location crash itself is this bug.
+
+**Likely root cause:** Missing iOS location usage-description strings in `Info.plist` / `app.json`. iOS hard-crashes an app that calls `expo-location` without the required `NSLocationWhenInUseUsageDescription` (and/or `NSLocationAlwaysAndWhenInUseUsageDescription`) key present. CLAUDE.md records that `NSPhotoLibraryUsageDescription` was added for photos, but there is no mention of a location usage-description string being added — that omission lines up exactly with a crash-on-location.
+
+**Where to look:**
+- `app.json` ios `infoPlist` block — add `NSLocationWhenInUseUsageDescription` (a human-readable reason string). Compare against the existing `NSPhotoLibraryUsageDescription`.
+- `app/services/locationService.ts` — confirm permission request flow; on iOS the OS prompt only appears if the usage-description key exists, otherwise the call faults.
+- Reproduce on iOS: Add Sighting → tap the crosshair locate icon → should prompt for permission, not crash.
+
+**Open questions:** Confirm whether the crash is purely the missing usage-description string or also involves the Google Places autocomplete path (which is network/key-based, not OS-permission-based). The crosshair "locate" tap (GPS + reverse-geocode) is the most likely crash trigger.
+
+---
+
 ## Operations / Security
 
 ### Lock down the Google Places API key (HIGH PRIORITY)
