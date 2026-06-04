@@ -7,6 +7,7 @@ import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFrom
 import { uploadPhoto } from '../services/photoService';
 import { isMilestone } from '../constants/milestones';
 import { isReportEntry } from '../../constants/reportTypes';
+import { isUnknownEntry } from '../../constants/unknownBird';
 import { Coordinates, Sighting } from '../types';
 
 export interface AddSightingResult {
@@ -300,12 +301,17 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     // Bug Report / Feature Request entries ride this pipeline but aren't real
     // species — they never count as a new species or toward milestones, and
     // they're excluded from the species math so they don't inflate counts for
-    // real birds logged afterward.
+    // real birds logged afterward. "Mystery Bird" (unidentified) entries count
+    // as real sightings but likewise never add a species, so they're excluded
+    // from the species math here too.
     const isReport = isReportEntry(sighting.birdName);
-    const realSightings = sightings.filter(s => !isReportEntry(s.birdName));
+    const isUnknown = isUnknownEntry(sighting.birdName);
+    const speciesSightings = sightings.filter(
+      s => !isReportEntry(s.birdName) && !isUnknownEntry(s.birdName)
+    );
 
     // Check if this is a new species (case-insensitive match against existing).
-    const isNewSpecies = !isReport && !realSightings.some(existingSighting =>
+    const isNewSpecies = !isReport && !isUnknown && !speciesSightings.some(existingSighting =>
       existingSighting.birdName.toLowerCase() === sighting.birdName.toLowerCase()
     );
 
@@ -314,7 +320,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     let milestone: number | null = null;
     if (isNewSpecies) {
       const uniqueBefore = new Set(
-        realSightings.map(s => s.birdName.toLowerCase())
+        speciesSightings.map(s => s.birdName.toLowerCase())
       ).size;
       const uniqueAfter = uniqueBefore + 1;
       if (isMilestone(uniqueAfter)) {

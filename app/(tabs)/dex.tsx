@@ -6,6 +6,7 @@ import { HardShadow } from '../../components/SightingCard';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
+import { isUnknownEntry } from '../../constants/unknownBird';
 import { useSightings } from '../context/SightingsContext';
 import { useWishlist } from '../context/WishlistContext';
 
@@ -75,6 +76,10 @@ export default function DexScreen() {
   const seenMap = useMemo(() => {
     const map: { [name: string]: SeenInfo } = {};
     realSightings.forEach(s => {
+      // "Mystery Bird" entries are real sightings (they count in the sightings
+      // total above) but have no identified species, so they never get a Dex
+      // tile or feed into the species / photographed counts.
+      if (isUnknownEntry(s.birdName)) return;
       const entry = map[s.birdName] || { timesSeen: 0, lastSeen: '', hasPhoto: false };
       entry.timesSeen += 1;
       const d = s.date.toISOString().split('T')[0];

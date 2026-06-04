@@ -1,3 +1,4 @@
+import { isUnknownEntry } from '../../constants/unknownBird';
 import { Sighting } from '../types';
 
 export interface DaySection {
@@ -37,7 +38,10 @@ export function groupSightingsByDay(sightings: Sighting[]): DaySection[] {
       month: 'long',
       day: 'numeric',
     });
-    const speciesCount = new Set(data.map((s) => s.birdName.toLowerCase())).size;
+    // "Mystery Bird" entries count as sightings but not as a species.
+    const speciesCount = new Set(
+      data.filter((s) => !isUnknownEntry(s.birdName)).map((s) => s.birdName.toLowerCase())
+    ).size;
     sections.push({ key, title, date, data, sightingCount: data.length, speciesCount });
   }
 

@@ -7,6 +7,7 @@ import { HardShadow } from '../../components/SightingCard';
 import { birdNamesAlpha, birdNamesAlphaLower } from '../../constants/birdNamesLower';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { REPORT_TYPES, isReportEntry } from '../../constants/reportTypes';
+import { UNKNOWN_BIRD } from '../../constants/unknownBird';
 import MilestoneCelebration from '../components/MilestoneCelebration';
 import { useSightings } from '../context/SightingsContext';
 import { pickImage } from '../services/photoService';
@@ -177,6 +178,15 @@ export default function AddSightingScreen() {
     }
     const handle = setTimeout(() => {
       const q = searchQuery.toLowerCase();
+
+      // Typing "?" surfaces the "Mystery Bird" entry for logging a bird you
+      // saw but couldn't identify. Short-circuit before scanning the 11k-name
+      // list — no real bird name starts with "?".
+      if (q.startsWith('?')) {
+        setSuggestions([UNKNOWN_BIRD]);
+        return;
+      }
+
       const qSpace = ' ' + q;
       const qDash = '-' + q;
       const CAP = 20;
