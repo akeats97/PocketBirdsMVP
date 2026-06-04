@@ -18,11 +18,23 @@ The prompts are written to be standalone — Claude Code can act on them without
 
 ## Cosmetic — comment composer resting margin (low priority)
 
-**What's happening:** On the sighting detail screen (`app/sighting/[id].tsx`), the comment composer lifts correctly with the keyboard, but after the keyboard is dismissed there's a slightly-thicker-than-resting bottom margin (an extra nav-bar inset). Only appears after the first keyboard open; hides nothing.
+**Where:** sighting detail screen, `app/sighting/[id].tsx` (the comment composer pinned at the bottom).
 
-**Cause:** `KeyboardAvoidingView` `behavior="padding"` on Android edge-to-edge (Expo SDK 53) doesn't reset its keyboard-frame padding fully to 0 on dismiss — it settles at the nav-bar inset, which stacks on the composer's own bottom inset. Tried `keyboardVerticalOffset` (pushed the field into the keyboard) and a manual `Keyboard`-height listener (under-lifted) — neither was clean.
+**Symptom:** Composer lifts correctly with the keyboard and the text field is fully visible while typing. But after the keyboard is dismissed, the composer sits with a slightly-thicker-than-resting bottom margin (~one nav-bar inset of extra space). Only appears *after* the first keyboard open; hides nothing. Verified on Alex's Android device (dev client), Jun 4 2026.
 
-**Real fix:** swap to `react-native-keyboard-controller`'s `KeyboardAvoidingView`/`KeyboardStickyView` for proper edge-to-edge keyboard handling. It's a **native dependency**, so batch it with the next dev-client rebuild (`eas build --profile development`) rather than doing it standalone. Likely also improves keyboard handling on the Add Sighting / Friends search inputs.
+**Environment that makes this finicky:**
+- Expo SDK 53 → Android runs **edge-to-edge**. The window does NOT resize for the keyboard even though `android:windowSoftInputMode="adjustResize"` is set in `AndroidManifest.xml` — so relying on `adjustResize` alone leaves the keyboard covering the composer.
+- The root layout (`app/_layout.tsx`) wraps screens in **`SafeAreaView` from `react-native`**, which only insets on iOS and is a **no-op on Android**. That's why this screen has to apply `useSafeAreaInsets()` manually on Android (top for the nav bar, bottom for the composer). iOS gets insets from the root SafeAreaView, so the manual insets are gated to `Platform.OS === 'android'` to avoid double-padding.
+
+**Current (shipped, commit ac6e508):** `KeyboardAvoidingView behavior="padding"` (no offset) + composer `paddingBottom = bottomInset(android) + space.sm`. This is the best state found: correct lift, fully-usable input, only the cosmetic resting margin.
+
+**Approaches tried and what each did:**
+1. `behavior={Platform.OS==='ios' ? 'padding' : undefined}` (original) → Android keyboard **covered** the composer (adjustResize not firing under edge-to-edge).
+2. `behavior="padding"` both platforms, no offset, composer has own `insets.bottom` → **lift correct** ("fine and good"), but on dismiss KAV's hidden-keyboard frame settles at ~nav-bar inset and stacks on the composer's inset → **doubled resting margin**. ← current shipped behavior.
+3. `behavior="padding"` + `keyboardVerticalOffset={insets.bottom}` (android) → pushed the field **down into the keyboard** (only ~half the field visible). Offset subtracts from the lift always, so it hurt the up-state. Reverted.
+4. Manual `Keyboard` show/hide listener (no KAV), set composer `paddingBottom = kbHeight` when open / `insets.bottom` when closed → **under-lifted** (~half the field behind the keyboard). Couldn't model why from inspection; suspected misreported `endCoordinates.height` and/or partial adjustResize interaction under edge-to-edge. Reverted.
+
+**Real fix (do this, batched with a native rebuild):** swap to **`react-native-keyboard-controller`** (`KeyboardAvoidingView` / `KeyboardStickyView`), which is built for edge-to-edge and resets cleanly. It's a **native dependency**, so it needs a dev-client rebuild (`eas build --profile development`, then reinstall the dev APK) — don't do it standalone, batch with the next native change. Likely also improves the Add Sighting + Friends-search keyboard behavior. Validate the open→type→dismiss cycle on a gesture-nav Android device specifically (that's where the residual shows).
 
 ---
 
