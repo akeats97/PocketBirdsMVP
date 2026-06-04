@@ -16,6 +16,16 @@ The prompts are written to be standalone — Claude Code can act on them without
 
 ---
 
+## Cosmetic — comment composer resting margin (low priority)
+
+**What's happening:** On the sighting detail screen (`app/sighting/[id].tsx`), the comment composer lifts correctly with the keyboard, but after the keyboard is dismissed there's a slightly-thicker-than-resting bottom margin (an extra nav-bar inset). Only appears after the first keyboard open; hides nothing.
+
+**Cause:** `KeyboardAvoidingView` `behavior="padding"` on Android edge-to-edge (Expo SDK 53) doesn't reset its keyboard-frame padding fully to 0 on dismiss — it settles at the nav-bar inset, which stacks on the composer's own bottom inset. Tried `keyboardVerticalOffset` (pushed the field into the keyboard) and a manual `Keyboard`-height listener (under-lifted) — neither was clean.
+
+**Real fix:** swap to `react-native-keyboard-controller`'s `KeyboardAvoidingView`/`KeyboardStickyView` for proper edge-to-edge keyboard handling. It's a **native dependency**, so batch it with the next dev-client rebuild (`eas build --profile development`) rather than doing it standalone. Likely also improves keyboard handling on the Add Sighting / Friends search inputs.
+
+---
+
 ## Next Play Store build — verifications outstanding
 
 - **Bug 3 cold-start repro** (offline data loss, fixed May 26 2026, commits `0d9653a` / `13b759a` / `1d803ea`). The dev client can't verify the literal cold-start-while-offline path because it needs Metro to launch. Online regression, offline write + online sync, and logout/login were all verified on the dev client. **Next production build:** install it, run the original repro — airplane mode → log 3 sightings → force-quit the app → reopen while still in airplane mode → confirm all 3 sightings are still there → turn airplane mode off → confirm they sync to Firestore.

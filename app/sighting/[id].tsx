@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/social/Avatar';
 import { FacePile } from '../../components/social/FacePile';
 import { HootButton } from '../../components/social/HootButton';
@@ -52,6 +53,13 @@ export default function SightingDetailScreen() {
   const router = useRouter();
   const sightingId = String(id);
 
+  // The root layout wraps screens in react-native's SafeAreaView, which only
+  // insets on iOS. On Android it's a no-op (edge-to-edge), so apply the device
+  // insets ourselves there to clear the status bar (top) and nav bar (bottom).
+  const insets = useSafeAreaInsets();
+  const topInset = Platform.OS === 'android' ? insets.top : 0;
+  const bottomInset = Platform.OS === 'android' ? insets.bottom : 0;
+
   const { friendSightings } = useFriendSightings();
   const { sightings } = useSightings();
   const { hasHooted, hootCount, toggleHoot } = useHoots();
@@ -90,7 +98,7 @@ export default function SightingDetailScreen() {
   };
 
   const NavBar = (
-    <View style={styles.navBar}>
+    <View style={[styles.navBar, { paddingTop: topInset + space.sm }]}>
       <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
         <Ionicons name="chevron-back" size={22} color={palette.ink} />
       </Pressable>
@@ -117,7 +125,7 @@ export default function SightingDetailScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
       {NavBar}
 
@@ -195,7 +203,7 @@ export default function SightingDetailScreen() {
       </ScrollView>
 
       {/* Composer */}
-      <View style={styles.composer}>
+      <View style={[styles.composer, { paddingBottom: bottomInset + space.sm }]}>
         {me && <Avatar name={me.username} seed={me.uid} size={32} />}
         <TextInput
           style={styles.input}
