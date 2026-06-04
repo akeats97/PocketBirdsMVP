@@ -27,6 +27,7 @@ import { auth } from '../config/firebaseConfig';
 import { palette } from '../constants/Colors';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
 import FriendSightingsProvider from './context/FriendSightingsContext';
+import HootsProvider from './context/HootsContext';
 import { SightingsProvider, useSightings } from './context/SightingsContext';
 import { WishlistProvider } from './context/WishlistContext';
 import LoginScreen from '../components/LoginScreen';
@@ -113,6 +114,10 @@ function AuthenticatedApp() {
 
           if (data.type === 'friend_sighting') {
             router.push('/(tabs)/friends');
+          } else if (data.type === 'hoot') {
+            // Phase 2 will deep-link to the sighting detail:
+            // router.push(`/sighting/${data.sightingId}`)
+            router.push('/(tabs)/friends');
           }
         });
 
@@ -122,6 +127,10 @@ function AuthenticatedApp() {
           const data = lastResponse.notification.request.content.data;
           console.log('Notification tapped (cold start):', data);
           if (data.type === 'friend_sighting') {
+            router.push('/(tabs)/friends');
+          } else if (data.type === 'hoot') {
+            // Phase 2 will deep-link to the sighting detail:
+            // router.push(`/sighting/${data.sightingId}`)
             router.push('/(tabs)/friends');
           }
         }
@@ -253,6 +262,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SightingsProvider>
         <FriendSightingsProvider>
+          <HootsProvider>
           <WishlistProvider>
             {user ? (
               // User is logged in - show the main app with Stack navigation
@@ -271,6 +281,7 @@ export default function RootLayout() {
               </ThemeProvider>
             )}
           </WishlistProvider>
+          </HootsProvider>
         </FriendSightingsProvider>
       </SightingsProvider>
     </GestureHandlerRootView>

@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
 import { HardShadow } from '../../components/SightingCard';
+import { Avatar } from '../../components/social/Avatar';
 import { auth } from '../../config/firebaseConfig';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -14,8 +15,6 @@ import { UserProfile, followUser, isFollowing, searchUsers, unfollowUser } from 
 interface SearchResultUser extends UserProfile {
   isFollowing?: boolean;
 }
-
-const AVATAR_COLORS = [palette.sky, palette.leaf, palette.coral];
 
 // Bell icon + tint for each notification mode.
 function bellIconProps(mode: NotificationMode): {
@@ -38,26 +37,6 @@ const PREF_OPTIONS: { mode: NotificationMode; title: string; sub: string }[] = [
   { mode: 'highlights', title: 'Highlights only', sub: 'New species and milestones.' },
   { mode: 'none', title: 'Nothing', sub: 'Silent, but still in your feed.' },
 ];
-
-function avatarColor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-}
-
-function Avatar({ name, seed, size = 44 }: { name: string; seed: string; size?: number }) {
-  const letter = (name || '?').trim().charAt(0).toUpperCase() || '?';
-  return (
-    <View
-      style={[
-        styles.avatar,
-        { width: size, height: size, borderRadius: 12, backgroundColor: avatarColor(seed) },
-      ]}
-    >
-      <Text style={[styles.avatarLetter, { fontSize: size * 0.46 }]}>{letter}</Text>
-    </View>
-  );
-}
 
 export default function FriendsScreen() {
   const { friendSightings, friends, filterByFriend, isLoadingFriends, refreshFriends, isFirstSightingForFriend } = useFriendSightings();
@@ -550,19 +529,6 @@ const styles = StyleSheet.create({
   },
 
   // Avatar
-  avatar: {
-    borderWidth: 2,
-    borderColor: palette.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarLetter: {
-    fontFamily: font.displayBlack,
-    color: palette.cream,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-
   // Search bar
   searchContainer: {
     flexDirection: 'row',

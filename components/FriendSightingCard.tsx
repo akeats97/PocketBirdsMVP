@@ -1,13 +1,36 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useHoots } from '../app/context/HootsContext';
 import { FriendSighting } from '../app/types';
-import { border, palette, radius, recipes, space, type } from '../constants/Colors';
+import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { HardShadow } from './SightingCard';
+import { FacePile } from './social/FacePile';
+import { HootListSheet } from './social/HootListSheet';
+import { SocialFooter } from './social/SocialFooter';
 
 interface FriendSightingCardProps {
   sighting: FriendSighting;
   isFirstSighting?: boolean;
+}
+
+// "Victoria, Marco & 10 others hooted" — first two hooter names bold, rest
+// collapsed into a count. Caller guarantees count > 0 and at least one hooter.
+function HootSummaryText({
+  hooters,
+  count,
+}: {
+  hooters: { uid: string; username: string }[];
+  count: number;
+}) {
+  const names = hooters.slice(0, 2).map((h) => h.username);
+  const others = count - names.length;
+  return (
+    <Text style={styles.summaryText} numberOfLines={1}>
+      <Text style={styles.summaryName}>{names.join(', ')}</Text>
+      {others > 0 ? ` & ${others} other${others === 1 ? '' : 's'} hooted` : ' hooted'}
+    </Text>
+  );
 }
 
 function formatRelativeDate(date: Date): string {
@@ -21,7 +44,18 @@ function formatRelativeDate(date: Date): string {
 
 export default function FriendSightingCard({ sighting, isFirstSighting }: FriendSightingCardProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [showHootList, setShowHootList] = useState(false);
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const { hasHooted, hootCount, toggleHoot } = useHoots();
+
+  const hooted = hasHooted(sighting.id);
+  const count = hootCount(sighting);
+  const hooters = sighting.recentHooters ?? [];
+
+  const openDetail = () => {
+    // Phase 2: navigate to the sighting detail / comment thread.
+    // router.push(`/sighting/${sighting.id}`)
+  };
 
   return (
     <HardShadow style={styles.shadowWrap}>
@@ -36,7 +70,7 @@ export default function FriendSightingCard({ sighting, isFirstSighting }: Friend
           </Pressable>
         )}
 
-        <View style={styles.body}>
+        <Pressable style={styles.body} onPress={openDetail}>
           {/* Friend tag */}
           <View style={styles.friendTagRow}>
             <View style={styles.friendTag}>
@@ -76,8 +110,34 @@ export default function FriendSightingCard({ sighting, isFirstSighting }: Friend
           {sighting.notes && (
             <Text style={styles.notes} numberOfLines={2}>{sighting.notes}</Text>
           )}
+        </Pressable>
+
+        {/* Social footer — hoot summary (expanded) + the split action bar */}
+        <View style={styles.footer}>
+          {count > 0 && hooters.length > 0 && (
+            <Pressable style={styles.hootSummary} onPress={() => setShowHootList(true)}>
+              <FacePile
+                people={hooters.map((h) => ({ name: h.username, seed: h.uid }))}
+                max={3}
+                size={26}
+              />
+              <HootSummaryText hooters={hooters} count={count} />
+            </Pressable>
+          )}
+          <SocialFooter
+            hooted={hooted}
+            hootCount={count}
+            onlyReaction
+            onHoot={() => toggleHoot(sighting.id)}
+          />
         </View>
       </View>
+
+      <HootListSheet
+        sightingId={sighting.id}
+        visible={showHootList}
+        onClose={() => setShowHootList(false)}
+      />
 
       <Modal
         visible={isModalVisible}
@@ -198,6 +258,29 @@ const styles = StyleSheet.create({
     color: palette.inkSoft,
     marginTop: space.sm,
     fontStyle: 'italic',
+  },
+
+  // Social footer region — divided from the card body by the 2px ink rule.
+  footer: {
+    borderTopWidth: 2,
+    borderTopColor: palette.ink,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+  },
+  hootSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: space.md,
+  },
+  summaryText: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    flex: 1,
+  },
+  summaryName: {
+    color: palette.ink,
+    fontFamily: font.bodyBold,
   },
 
   // Photo zoom modal

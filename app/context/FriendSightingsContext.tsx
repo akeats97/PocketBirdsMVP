@@ -169,6 +169,10 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
                 syncStatus: 'synced' as const,
                 lastModified: data.lastModified ? data.lastModified.toDate() : data.date.toDate(),
                 photoUrl: data.photoUrl || undefined,
+                hootCount: data.hootCount ?? 0,
+                commentCount: data.commentCount ?? 0,
+                recentHooters: data.recentHooters ?? [],
+                topComment: data.topComment ?? undefined,
               };
               if (data.coordinates) {
                 friendSighting.coordinates = {

@@ -6,6 +6,20 @@ The prompts are written to be standalone — Claude Code can act on them without
 
 ---
 
+## SECURITY — Firestore rules are wide open (do right after Hoot Phase 1)
+
+**What's happening:** Production Firestore rules are still the default test-mode catch-all:
+```
+match /{document=**} { allow read, write: if true; }
+```
+The entire database is publicly readable and writable by anyone — the Firebase config ships in the app bundle, so all sightings, user docs (emails, push tokens), usernames, and follows are exposed and mutable by any actor. Discovered Jun 3 2026 during the Hoot & Comments build. Rules are NOT in the repo; they live only in the Firebase console.
+
+**Decision (Alex, Jun 3 2026):** the hoot feature works fine on these open rules, so finish Hoot Phase 1, then harden immediately as the next dedicated task.
+
+**Prompt:** Secure the PocketBirds Firestore database. It currently uses `allow read, write: if true`. (1) Map every collection in use: top-level `sightings` (+ `hoots`, and later `comments` subcollections), `users` (+ `notificationPrefs`, and later `activity` subcollections), `usernames`, `following/{follower}/following/{followed}`, plus anything from `wishlist` / report submissions. (2) Write a least-privilege ruleset (logged-in users; users write only their own docs; the hoots/comments rules from the Hoot data model). (3) Save it as a repo-tracked `firestore.rules` and add a `firestore` block to `firebase.json`. (4) Show Alex the full ruleset, deploy with `firebase deploy --only firestore:rules`, then test login, add-sighting, friends, and hoot on the dev client. Keep the open `if true` rules as an instant rollback if any flow breaks.
+
+---
+
 ## Next Play Store build — verifications outstanding
 
 - **Bug 3 cold-start repro** (offline data loss, fixed May 26 2026, commits `0d9653a` / `13b759a` / `1d803ea`). The dev client can't verify the literal cold-start-while-offline path because it needs Metro to launch. Online regression, offline write + online sync, and logout/login were all verified on the dev client. **Next production build:** install it, run the original repro — airplane mode → log 3 sightings → force-quit the app → reopen while still in airplane mode → confirm all 3 sightings are still there → turn airplane mode off → confirm they sync to Firestore.

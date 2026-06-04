@@ -20,6 +20,14 @@ export interface Sighting {
   // milestone (e.g. 5, 10, 25, 50, 100, then every 50). Cloud Function
   // reads this to send a richer push notification to followers.
   milestoneCrossed?: number;
+
+  // Social engagement, denormalized onto the sighting doc and maintained
+  // server-side by Cloud Functions (see Hoot & Comments data model). Missing
+  // is treated as zero/empty on older sightings.
+  hootCount?: number;
+  commentCount?: number;
+  recentHooters?: { uid: string; username: string }[];
+  topComment?: { uid: string; username: string; text: string };
 }
 
 export interface FriendSighting extends Sighting {

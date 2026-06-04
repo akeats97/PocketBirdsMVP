@@ -10,7 +10,8 @@
 const {setGlobalOptions} = require("firebase-functions");
 const admin = require('firebase-admin');
 const { Expo } = require('expo-server-sdk');
-const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentDeleted} = require("firebase-functions/v2/firestore");
+const { FieldValue } = require('firebase-admin/firestore');
 
 // For cost control, you can set the maximum number of containers that can be
 // running at the same time. This helps mitigate the impact of unexpected
@@ -217,5 +218,104 @@ exports.onSightingAdded = onDocumentCreated('sightings/{sightingId}', async (eve
     
   } catch (error) {
     console.error('Error in onSightingAdded function:', error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Hoot & Comments — social engagement
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Send a single push to the owner of a sighting for a social event (hoot /
+ * comment). Unlike sighting pushes, social pushes are NOT gated by the
+ * per-friend notificationPrefs: there is intentionally no way to mute them.
+ * Callers must skip the self-action case before calling.
+ */
+async function pushSocial(ownerUid, msg) {
+  try {
+    const ownerDoc = await admin.firestore().collection('users').doc(ownerUid).get();
+    if (!ownerDoc.exists) {
+      console.log('Owner not found for social push:', ownerUid);
+      return;
+    }
+    const token = ownerDoc.data().expoPushToken;
+    if (!token || !Expo.isExpoPushToken(token)) {
+      console.log('No valid push token for owner:', ownerUid);
+      return;
+    }
+    const messages = [{
+      to: token,
+      sound: 'default',
+      priority: 'high',
+      channelId: 'default',
+      title: msg.title,
+      body: msg.body,
+      data: msg.data,
+    }];
+    for (const chunk of expo.chunkPushNotifications(messages)) {
+      try {
+        const tickets = await expo.sendPushNotificationsAsync(chunk);
+        console.log('Social push tickets:', tickets);
+      } catch (error) {
+        console.error('Error sending social push:', error);
+      }
+    }
+  } catch (error) {
+    console.error('Error in pushSocial:', error);
+  }
+}
+
+// Recompute the last-3 face pile for a sighting from its hoots subcollection.
+async function recentHootersFor(sightingRef) {
+  const hootsSnap = await sightingRef
+    .collection('hoots')
+    .orderBy('createdAt', 'desc')
+    .limit(3)
+    .get();
+  return hootsSnap.docs.map(d => ({ uid: d.data().uid, username: d.data().username }));
+}
+
+exports.onHootAdded = onDocumentCreated('sightings/{sightingId}/hoots/{hooterUid}', async (event) => {
+  const { sightingId, hooterUid } = event.params;
+  const hoot = event.data.data();
+  const sightingRef = admin.firestore().doc(`sightings/${sightingId}`);
+
+  try {
+    const sightingSnap = await sightingRef.get();
+    if (!sightingSnap.exists) {
+      console.log('Sighting not found for hoot:', sightingId);
+      return;
+    }
+    const sighting = sightingSnap.data();
+
+    // 1) maintain denormalized summary on the sighting doc
+    const recentHooters = await recentHootersFor(sightingRef);
+    await sightingRef.update({ hootCount: FieldValue.increment(1), recentHooters });
+
+    // 2) push the sighting owner (never notify yourself)
+    if (sighting.userId === hooterUid) return;
+    await pushSocial(sighting.userId, {
+      title: `${hoot.username} gave you a hoot 🦉`,
+      body: `For your ${sighting.birdName} at ${sighting.location}`,
+      data: { type: 'hoot', sightingId, birdName: sighting.birdName },
+    });
+  } catch (error) {
+    console.error('Error in onHootAdded:', error);
+  }
+});
+
+exports.onHootRemoved = onDocumentDeleted('sightings/{sightingId}/hoots/{hooterUid}', async (event) => {
+  const { sightingId } = event.params;
+  const sightingRef = admin.firestore().doc(`sightings/${sightingId}`);
+
+  try {
+    const sightingSnap = await sightingRef.get();
+    // If the sighting itself was deleted, there's no counter to maintain.
+    if (!sightingSnap.exists) return;
+
+    const recentHooters = await recentHootersFor(sightingRef);
+    await sightingRef.update({ hootCount: FieldValue.increment(-1), recentHooters });
+  } catch (error) {
+    console.error('Error in onHootRemoved:', error);
   }
 });
