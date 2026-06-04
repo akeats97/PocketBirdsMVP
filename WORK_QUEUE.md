@@ -6,17 +6,13 @@ The prompts are written to be standalone — Claude Code can act on them without
 
 ---
 
-## SECURITY — Firestore rules are wide open (do right after Hoot Phase 1)
+## SECURITY — Firestore rules hardened ✅ (DONE Jun 4 2026, commit 5ed3a6e)
 
-**What's happening:** Production Firestore rules are still the default test-mode catch-all:
-```
-match /{document=**} { allow read, write: if true; }
-```
-The entire database is publicly readable and writable by anyone — the Firebase config ships in the app bundle, so all sightings, user docs (emails, push tokens), usernames, and follows are exposed and mutable by any actor. Discovered Jun 3 2026 during the Hoot & Comments build. Rules are NOT in the repo; they live only in the Firebase console.
+**Was:** production Firestore used the default test-mode catch-all `allow read, write: if true` — entire DB publicly readable/writable. Discovered Jun 3 2026 during the Hoot & Comments build; rules were not in the repo.
 
-**Decision (Alex, Jun 3 2026):** the hoot feature works fine on these open rules, so finish Hoot Phase 1, then harden immediately as the next dedicated task.
+**Now:** locked down and version-controlled at `firestore.rules` (wired into `firebase.json`). Least-privilege: signed-in reads, owner-only writes, hoot/comment engagement limited to own/followed sightings, immutable usernames (public single-doc get for the pre-auth signup check), counters/activity Cloud-Function-only. Validated against the Firestore emulator with `@firebase/rules-unit-testing` (18/18, including all security-boundary denials). Also fixed a pre-existing `FriendSightingsContext` listener leak that fired a permission error at logout under the strict rules.
 
-**Prompt:** Secure the PocketBirds Firestore database. It currently uses `allow read, write: if true`. (1) Map every collection in use: top-level `sightings` (+ `hoots`, and later `comments` subcollections), `users` (+ `notificationPrefs`, and later `activity` subcollections), `usernames`, `following/{follower}/following/{followed}`, plus anything from `wishlist` / report submissions. (2) Write a least-privilege ruleset (logged-in users; users write only their own docs; the hoots/comments rules from the Hoot data model). (3) Save it as a repo-tracked `firestore.rules` and add a `firestore` block to `firebase.json`. (4) Show Alex the full ruleset, deploy with `firebase deploy --only firestore:rules`, then test login, add-sighting, friends, and hoot on the dev client. Keep the open `if true` rules as an instant rollback if any flow breaks.
+**Note for future rules changes:** collection-group queries (e.g. `collectionGroup('hoots')`) require a recursive-wildcard rule (`/{path=**}/hoots/...`); re-validate any rule change in the emulator before deploying.
 
 ---
 
