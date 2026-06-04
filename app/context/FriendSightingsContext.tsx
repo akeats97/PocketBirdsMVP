@@ -1,5 +1,5 @@
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { auth, db } from '../../config/firebaseConfig';
 import { UserProfile, getFollowing } from '../services/userService';
@@ -92,7 +92,11 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
   const [friendSightings, setFriendSightings] = useState<FriendSighting[]>(initialFriendSightings);
   const [friends, setFriends] = useState<{ id: string; name: string }[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(true);
-  
+  // Holds the active sightings onSnapshot unsubscribe so we can tear it down on
+  // logout / re-fetch. Without this the listener leaks and, under the strict
+  // Firestore rules, fires a permission error the moment auth drops at logout.
+  const sightingsUnsubRef = useRef<(() => void) | null>(null);
+
   // Fetch following users and their sightings
   const fetchFollowing = async () => {
     if (!auth.currentUser) {
@@ -148,6 +152,9 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
         where('userId', 'in', userIds)
       );
       
+      // Tear down any previous sightings listener before creating a new one.
+      sightingsUnsubRef.current?.();
+
       // Set up a real-time listener for sightings
       const unsubscribe = onSnapshot(
         sightingsQuery,
@@ -205,8 +212,8 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
         }
       );
       
-      // Clean up the listener when the component unmounts
-      return () => unsubscribe();
+      // Remember it so logout / re-fetch / unmount can tear it down.
+      sightingsUnsubRef.current = unsubscribe;
     } catch (error) {
       console.error('Error setting up sightings listener:', error);
     }
@@ -218,14 +225,21 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         fetchFollowing();
       } else {
-        // If not logged in, use mock data
+        // Logged out: tear down the live sightings listener so it doesn't fire
+        // a permission error once auth drops, then clear state.
+        sightingsUnsubRef.current?.();
+        sightingsUnsubRef.current = null;
         setFriends([]);
         setFriendSightings([]);
         setIsLoadingFriends(false);
       }
     });
-    
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      sightingsUnsubRef.current?.();
+      sightingsUnsubRef.current = null;
+    };
   }, []);
   
   // Function to manually refresh friends list

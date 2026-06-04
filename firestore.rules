@@ -1,0 +1,107 @@
+rules_version = '2';
+
+// PocketBirds Firestore security rules.
+//
+// Replaces the old wide-open test-mode rules (allow read, write: if true).
+// Anything not matched below is denied by default. Cloud Functions use the
+// Admin SDK, which bypasses these rules, so server-maintained fields
+// (hootCount, recentHooters, commentCount, topComment, activity docs) are
+// written server-side and don't need client write permission here.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function myUid() { return request.auth.uid; }
+
+    // Collection-group read for hoots. HootsContext runs a
+    // collectionGroup('hoots') query, and collection-group queries are only
+    // authorized by a recursive-wildcard rule — the path-scoped rule nested
+    // under /sightings/{id}/hoots does NOT cover them. Writes stay governed by
+    // the nested rule below (which enforces doc-id == uid + canEngage).
+    match /{path=**}/hoots/{hooterUid} {
+      allow read: if isSignedIn();
+    }
+
+    // Username -> uid map. The availability check during signup runs BEFORE
+    // the new user is authenticated, so a single-doc read must be public.
+    // Bulk listing (friend search) requires auth. Usernames are immutable once
+    // claimed (an overwrite is an update, which is denied), which keeps them
+    // unique at the rules layer.
+    match /usernames/{username} {
+      allow get: if true;
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == myUid();
+      allow update: if false;
+      allow delete: if isSignedIn() && resource.data.uid == myUid();
+    }
+
+    // User profiles. Readable by any signed-in user (friends read each other's
+    // username/profile). Writable only by the owner.
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && uid == myUid();
+
+      // Per-friend notification preferences, owned by the {uid} user.
+      match /notificationPrefs/{followedUid} {
+        allow read, write: if isSignedIn() && uid == myUid();
+      }
+
+      // Activity inbox (Phase 2.5): written by Cloud Functions (Admin SDK).
+      // The owner may read it and flip the read flag; clients never create.
+      match /activity/{activityId} {
+        allow read, update, delete: if isSignedIn() && uid == myUid();
+        allow create: if false;
+      }
+    }
+
+    // Follow graph: following/{follower}/following/{followed}.
+    // You manage only your own following list.
+    match /following/{followerUid}/following/{followedUid} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && followerUid == myUid();
+    }
+
+    // Sightings (and the bug-report / feature-request entries that ride the
+    // same pipeline). Owner-only writes; any signed-in user may read (the app
+    // shows friends' sightings and filters by the follow graph client-side).
+    match /sightings/{sightingId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == myUid();
+      allow update, delete: if isSignedIn() && resource.data.userId == myUid();
+
+      function sightingOwner() {
+        return get(/databases/$(database)/documents/sightings/$(sightingId)).data.userId;
+      }
+      function followsOwner(ownerUid) {
+        return exists(/databases/$(database)/documents/following/$(myUid())/following/$(ownerUid));
+      }
+      // You may engage (hoot / comment) on your own sighting or one by someone
+      // you follow.
+      function canEngage() {
+        return isSignedIn() && (sightingOwner() == myUid() || followsOwner(sightingOwner()));
+      }
+
+      // Hoots: doc id == hooter's uid (one hoot per user, structurally).
+      match /hoots/{hooterUid} {
+        allow read: if isSignedIn();
+        allow create: if hooterUid == myUid()
+                      && request.resource.data.uid == myUid()
+                      && canEngage();
+        allow delete: if hooterUid == myUid();
+      }
+
+      // Comments (Phase 2): author posts on own/followed sightings; the author
+      // or the sighting owner may delete.
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if request.resource.data.uid == myUid()
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.text.size() <= 500
+                      && canEngage();
+        allow delete: if isSignedIn()
+                      && (resource.data.uid == myUid() || sightingOwner() == myUid());
+      }
+    }
+  }
+}
