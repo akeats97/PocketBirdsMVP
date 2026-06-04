@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useHoots } from '../app/context/HootsContext';
 import { FriendSighting } from '../app/types';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { HardShadow } from './SightingCard';
+import { Avatar } from './social/Avatar';
 import { FacePile } from './social/FacePile';
 import { HootListSheet } from './social/HootListSheet';
 import { SocialFooter } from './social/SocialFooter';
@@ -47,15 +49,15 @@ export default function FriendSightingCard({ sighting, isFirstSighting }: Friend
   const [showHootList, setShowHootList] = useState(false);
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const { hasHooted, hootCount, toggleHoot } = useHoots();
+  const router = useRouter();
 
   const hooted = hasHooted(sighting.id);
   const count = hootCount(sighting);
   const hooters = sighting.recentHooters ?? [];
+  const commentCount = sighting.commentCount ?? 0;
+  const topComment = sighting.topComment;
 
-  const openDetail = () => {
-    // Phase 2: navigate to the sighting detail / comment thread.
-    // router.push(`/sighting/${sighting.id}`)
-  };
+  const openDetail = () => router.push(`/sighting/${sighting.id}`);
 
   return (
     <HardShadow style={styles.shadowWrap}>
@@ -127,9 +129,26 @@ export default function FriendSightingCard({ sighting, isFirstSighting }: Friend
           <SocialFooter
             hooted={hooted}
             hootCount={count}
-            onlyReaction
+            commentCount={commentCount}
             onHoot={() => toggleHoot(sighting.id)}
+            onComment={openDetail}
           />
+
+          {/* Top-comment preview (expanded density) */}
+          {commentCount > 0 && topComment && (
+            <Pressable style={styles.commentPreview} onPress={openDetail}>
+              {commentCount > 1 && (
+                <Text style={styles.viewAll}>View all {commentCount} comments</Text>
+              )}
+              <View style={styles.previewRow}>
+                <Avatar name={topComment.username} seed={topComment.uid} size={24} />
+                <Text style={styles.previewText} numberOfLines={2}>
+                  <Text style={styles.previewName}>{topComment.username} </Text>
+                  {topComment.text}
+                </Text>
+              </View>
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -279,6 +298,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryName: {
+    color: palette.ink,
+    fontFamily: font.bodyBold,
+  },
+
+  // Top-comment preview below the action bar
+  commentPreview: {
+    marginTop: space.md,
+  },
+  viewAll: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    fontFamily: font.bodyBold,
+    marginBottom: space.sm,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: space.sm,
+  },
+  previewText: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    flex: 1,
+    lineHeight: 18,
+  },
+  previewName: {
     color: palette.ink,
     fontFamily: font.bodyBold,
   },

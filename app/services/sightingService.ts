@@ -85,7 +85,11 @@ export async function getUserSightingsFromFirebase(): Promise<Sighting[]> {
         notes: data.notes,
         photoUrl: data.photoUrl || undefined,
         lastModified: data.lastModified.toDate(),
-        syncStatus: 'synced'
+        syncStatus: 'synced',
+        hootCount: data.hootCount ?? 0,
+        commentCount: data.commentCount ?? 0,
+        recentHooters: data.recentHooters ?? [],
+        topComment: data.topComment ?? undefined,
       };
       if (data.coordinates) {
         sighting.coordinates = {

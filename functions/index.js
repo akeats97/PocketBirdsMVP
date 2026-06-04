@@ -319,3 +319,34 @@ exports.onHootRemoved = onDocumentDeleted('sightings/{sightingId}/hoots/{hooterU
     console.error('Error in onHootRemoved:', error);
   }
 });
+
+exports.onCommentAdded = onDocumentCreated('sightings/{sightingId}/comments/{commentId}', async (event) => {
+  const { sightingId } = event.params;
+  const comment = event.data.data();
+  const sightingRef = admin.firestore().doc(`sightings/${sightingId}`);
+
+  try {
+    const sightingSnap = await sightingRef.get();
+    if (!sightingSnap.exists) {
+      console.log('Sighting not found for comment:', sightingId);
+      return;
+    }
+    const sighting = sightingSnap.data();
+
+    // 1) maintain count + newest-comment preview on the sighting doc
+    await sightingRef.update({
+      commentCount: FieldValue.increment(1),
+      topComment: { uid: comment.uid, username: comment.username, text: comment.text },
+    });
+
+    // 2) push the sighting owner (never notify yourself)
+    if (sighting.userId === comment.uid) return;
+    await pushSocial(sighting.userId, {
+      title: `${comment.username} commented 🐦`,
+      body: comment.text.slice(0, 120),
+      data: { type: 'comment', sightingId, birdName: sighting.birdName },
+    });
+  } catch (error) {
+    console.error('Error in onCommentAdded:', error);
+  }
+});

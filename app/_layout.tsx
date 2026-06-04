@@ -114,10 +114,8 @@ function AuthenticatedApp() {
 
           if (data.type === 'friend_sighting') {
             router.push('/(tabs)/friends');
-          } else if (data.type === 'hoot') {
-            // Phase 2 will deep-link to the sighting detail:
-            // router.push(`/sighting/${data.sightingId}`)
-            router.push('/(tabs)/friends');
+          } else if ((data.type === 'hoot' || data.type === 'comment') && data.sightingId) {
+            router.push(`/sighting/${data.sightingId}`);
           }
         });
 
@@ -128,10 +126,8 @@ function AuthenticatedApp() {
           console.log('Notification tapped (cold start):', data);
           if (data.type === 'friend_sighting') {
             router.push('/(tabs)/friends');
-          } else if (data.type === 'hoot') {
-            // Phase 2 will deep-link to the sighting detail:
-            // router.push(`/sighting/${data.sightingId}`)
-            router.push('/(tabs)/friends');
+          } else if ((data.type === 'hoot' || data.type === 'comment') && data.sightingId) {
+            router.push(`/sighting/${data.sightingId}`);
           }
         }
 
@@ -191,6 +187,7 @@ function AuthenticatedApp() {
               ),
             }}
           />
+          <Stack.Screen name="sighting/[id]" options={{ headerShown: false }} />
         </Stack>
       </SafeAreaView>
     </ThemeProvider>
