@@ -119,9 +119,9 @@ exports.onSightingAdded = onDocumentCreated('sightings/{sightingId}', async (eve
     const isHighlight = isNewSpecies || milestone !== null;
 
     // Collect push tokens for followers whose per-friend preference allows
-    // this sighting. Absence of a pref doc resolves to "all": relationships
-    // that predate this feature keep getting every sighting. New follows are
-    // created with an explicit "highlights" doc by the client.
+    // this sighting. Absence of a pref doc resolves to "all", and new follows
+    // are created with an explicit "all" doc by the client — so by default a
+    // follower gets every sighting until they dial it down via the bell.
     const pushTokens = [];
     for (const followerId of followerIds) {
       let mode = 'all';
@@ -133,7 +133,7 @@ exports.onSightingAdded = onDocumentCreated('sightings/{sightingId}', async (eve
           mode = prefSnap.data().mode;
         }
       } catch (error) {
-        console.error(`Pref read failed for follower ${followerId}; defaulting to highlights:`, error);
+        console.error(`Pref read failed for follower ${followerId}; defaulting to "all":`, error);
       }
 
       if (mode === 'none') {

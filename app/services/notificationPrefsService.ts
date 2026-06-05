@@ -10,17 +10,15 @@ import { db } from '../../config/firebaseConfig';
 
 export type NotificationMode = 'all' | 'highlights' | 'none';
 
-// Absence of a pref doc resolves to this. Kept at "all" so relationships that
-// predate this feature (no doc) keep getting every sighting, i.e. existing
-// users see no change. New follows are created with an explicit pref of
-// NEW_FOLLOW_MODE instead, so only new relationships default to the quieter
-// mode.
+// Absence of a pref doc resolves to this. Also what relationships that predate
+// the preferences feature (no doc) keep getting.
 export const DEFAULT_MODE: NotificationMode = 'all';
 
-// Mode written when a brand-new follow is created. "Highlights" = new species
-// and species-count milestones only: loud enough to matter, quiet enough to
-// avoid buzz fatigue for people building fresh friend graphs.
-export const NEW_FOLLOW_MODE: NotificationMode = 'highlights';
+// Mode written when a brand-new follow is created. Default is "all" (every
+// sighting pushes) — louder by default so people don't miss a friend's
+// activity; they can dial it down to Highlights / None per-friend via the bell
+// if it gets noisy.
+export const NEW_FOLLOW_MODE: NotificationMode = 'all';
 
 function prefDoc(followerUid: string, followedUid: string) {
   return doc(db, `users/${followerUid}/notificationPrefs/${followedUid}`);

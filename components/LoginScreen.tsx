@@ -3,6 +3,7 @@ import { createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmail
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import React, { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { auth, db } from '../config/firebaseConfig';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { HardShadow } from './SightingCard';
@@ -143,7 +144,13 @@ export default function LoginScreen() {
   const primaryLabel = isLoading ? 'Processing...' : (isLoginMode ? 'Login' : 'Create Account');
 
   return (
-    <View style={styles.container}>
+    <KeyboardAwareScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      bottomOffset={24}
+    >
       <View style={styles.header}>
         <Text style={styles.title}>PocketBirds</Text>
         <Text style={styles.subtitle}>please don&apos;t put birds in your pockets</Text>
@@ -182,6 +189,8 @@ export default function LoginScreen() {
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
             editable={!isLoading}
+            returnKeyType="go"
+            onSubmitEditing={primaryAction}
           />
           <Pressable
             style={styles.eyeButton}
@@ -235,7 +244,7 @@ export default function LoginScreen() {
           </Pressable>
         )}
       </View>
-    </View>
+    </KeyboardAwareScrollView>
   );
 }
 
@@ -243,8 +252,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: palette.cream,
-    paddingHorizontal: space.xl,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: space.xl,
+    paddingVertical: space.xl,
   },
   header: {
     alignItems: 'center',

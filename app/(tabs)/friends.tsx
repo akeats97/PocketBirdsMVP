@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Keyboard, Modal, Pressable, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Keyboard, Modal, Pressable, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
 import { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
@@ -181,6 +181,17 @@ export default function FriendsScreen() {
     }
   };
 
+  // Close the friend-filter dropdown without picking anyone.
+  const dismissFriendDropdown = () => {
+    if (blurCloseTimerRef.current) {
+      clearTimeout(blurCloseTimerRef.current);
+      blurCloseTimerRef.current = null;
+    }
+    setShowFriendsList(false);
+    searchInputRef.current?.blur();
+    Keyboard.dismiss();
+  };
+
   // Keep a live map of the current user's per-friend notification modes.
   useEffect(() => {
     const uid = auth.currentUser?.uid;
@@ -319,6 +330,13 @@ export default function FriendsScreen() {
           <View style={styles.friendsListWrap}>
             <HardShadow borderRadius={radius.card}>
               <View style={styles.friendsList}>
+                <Pressable style={styles.dropdownHeader} onPress={dismissFriendDropdown}>
+                  <Text style={styles.dropdownHeaderLabel}>FRIENDS</Text>
+                  <View style={styles.dropdownCloseRow}>
+                    <Text style={styles.dropdownCloseText}>Close</Text>
+                    <Ionicons name="chevron-up" size={16} color={palette.inkSoft} />
+                  </View>
+                </Pressable>
                 {isLoadingFriends ? (
                   <View style={styles.loadingRow}>
                     <ActivityIndicator size="small" color={palette.leaf} />
@@ -727,8 +745,31 @@ const styles = StyleSheet.create({
     backgroundColor: palette.card,
     borderRadius: radius.card,
     ...border.thick,
-    maxHeight: 220,
+    maxHeight: 260,
     overflow: 'hidden',
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.rule,
+  },
+  dropdownHeaderLabel: {
+    ...type.label,
+    color: palette.inkSoft,
+  },
+  dropdownCloseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dropdownCloseText: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    fontWeight: '600',
   },
   friendRow: {
     flexDirection: 'row',
@@ -850,9 +891,12 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     ...recipes.card,
-    width: '100%',
-    maxWidth: 380,
-    height: '78%',
+    // Definite pixel width + height (not "100%" / "78%"). Percentage dimensions
+    // don't propagate through HardShadow's auto-sized wrappers, so the box ends
+    // up tracking its content — which made the white/black mismatch AND made the
+    // modal resize as you typed. Fixed values keep it stable and aligned.
+    width: Math.min(Dimensions.get('window').width - space.lg * 2, 380),
+    height: Math.round(Dimensions.get('window').height * 0.78),
     padding: space.lg,
   },
   modalHeader: {
