@@ -1,11 +1,13 @@
+import { isReportEntry } from '../../constants/reportTypes';
 import { isUnknownEntry } from '../../constants/unknownBird';
+import { isCustomSpecies } from '../../constants/customSpecies';
 import { Sighting } from '../types';
 
-export interface DaySection {
+export interface DaySection<T extends Sighting = Sighting> {
   key: string; // YYYY-MM-DD in the device's local time
   title: string; // e.g. "Saturday, May 23"
   date: Date; // local start-of-day for the bucket, used for sorting
-  data: Sighting[]; // that day's sightings, reverse-chronological
+  data: T[]; // that day's sightings, reverse-chronological
   sightingCount: number;
   speciesCount: number;
 }
@@ -19,8 +21,8 @@ function localDayKey(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-export function groupSightingsByDay(sightings: Sighting[]): DaySection[] {
-  const buckets = new Map<string, Sighting[]>();
+export function groupSightingsByDay<T extends Sighting>(sightings: T[]): DaySection<T>[] {
+  const buckets = new Map<string, T[]>();
   for (const s of sightings) {
     const key = localDayKey(s.date);
     const existing = buckets.get(key);
@@ -28,7 +30,7 @@ export function groupSightingsByDay(sightings: Sighting[]): DaySection[] {
     else buckets.set(key, [s]);
   }
 
-  const sections: DaySection[] = [];
+  const sections: DaySection<T>[] = [];
   for (const [key, items] of buckets) {
     const data = [...items].sort((a, b) => b.date.getTime() - a.date.getTime());
     const first = data[0].date;
@@ -38,11 +40,17 @@ export function groupSightingsByDay(sightings: Sighting[]): DaySection[] {
       month: 'long',
       day: 'numeric',
     });
-    // "Mystery Bird" entries count as sightings but not as a species.
+    // Bug Report / Feature Request entries still render as cards but aren't
+    // real sightings, so they're left out of the header counts. "Mystery Bird"
+    // counts as a sighting but never as a species; custom easter-egg species
+    // (e.g. Kelsey) also don't add to the species count.
+    const realSightings = data.filter((s) => !isReportEntry(s.birdName));
     const speciesCount = new Set(
-      data.filter((s) => !isUnknownEntry(s.birdName)).map((s) => s.birdName.toLowerCase())
+      realSightings
+        .filter((s) => !isUnknownEntry(s.birdName) && !isCustomSpecies(s.birdName))
+        .map((s) => s.birdName.toLowerCase())
     ).size;
-    sections.push({ key, title, date, data, sightingCount: data.length, speciesCount });
+    sections.push({ key, title, date, data, sightingCount: realSightings.length, speciesCount });
   }
 
   sections.sort((a, b) => b.date.getTime() - a.date.getTime());

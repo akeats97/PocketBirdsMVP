@@ -231,6 +231,24 @@ exports.onSightingAdded = onDocumentCreated('sightings/{sightingId}', async (eve
  * per-friend notificationPrefs: there is intentionally no way to mute them.
  * Callers must skip the self-action case before calling.
  */
+// Write an item into a user's in-app activity inbox
+// (users/{ownerUid}/activity). Read by the Activity screen + header bell.
+// Rules allow creates from the Admin SDK only. Best-effort: never throw.
+async function writeActivity(ownerUid, activity) {
+  try {
+    await admin.firestore()
+      .collection('users').doc(ownerUid)
+      .collection('activity')
+      .add({
+        ...activity,
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+  } catch (error) {
+    console.error('Error writing activity for', ownerUid, error);
+  }
+}
+
 async function pushSocial(ownerUid, msg) {
   try {
     const ownerDoc = await admin.firestore().collection('users').doc(ownerUid).get();
@@ -292,8 +310,15 @@ exports.onHootAdded = onDocumentCreated('sightings/{sightingId}/hoots/{hooterUid
     const recentHooters = await recentHootersFor(sightingRef);
     await sightingRef.update({ hootCount: FieldValue.increment(1), recentHooters });
 
-    // 2) push the sighting owner (never notify yourself)
+    // 2) record activity + push the sighting owner (never notify yourself)
     if (sighting.userId === hooterUid) return;
+    await writeActivity(sighting.userId, {
+      type: 'hoot',
+      actorUid: hooterUid,
+      actorUsername: hoot.username,
+      sightingId,
+      birdName: sighting.birdName,
+    });
     await pushSocial(sighting.userId, {
       title: `${hoot.username} gave you a hoot 🦉`,
       body: `For your ${sighting.birdName} at ${sighting.location}`,
@@ -339,8 +364,16 @@ exports.onCommentAdded = onDocumentCreated('sightings/{sightingId}/comments/{com
       topComment: { uid: comment.uid, username: comment.username, text: comment.text },
     });
 
-    // 2) push the sighting owner (never notify yourself)
+    // 2) record activity + push the sighting owner (never notify yourself)
     if (sighting.userId === comment.uid) return;
+    await writeActivity(sighting.userId, {
+      type: 'comment',
+      actorUid: comment.uid,
+      actorUsername: comment.username,
+      sightingId,
+      birdName: sighting.birdName,
+      commentText: comment.text.slice(0, 140),
+    });
     await pushSocial(sighting.userId, {
       title: `${comment.username} commented 🐦`,
       body: comment.text.slice(0, 120),
@@ -348,5 +381,25 @@ exports.onCommentAdded = onDocumentCreated('sightings/{sightingId}/comments/{com
     });
   } catch (error) {
     console.error('Error in onCommentAdded:', error);
+  }
+});
+
+// New follower → write an activity item for the followed user. (No push here;
+// a follow push is a separate, not-yet-approved feature. The header bell's
+// unread dot surfaces it in-app.)
+exports.onFollowCreated = onDocumentCreated('following/{followerUid}/following/{followedUid}', async (event) => {
+  const { followerUid, followedUid } = event.params;
+  if (followerUid === followedUid) return;
+
+  try {
+    const followerSnap = await admin.firestore().collection('users').doc(followerUid).get();
+    const actorUsername = followerSnap.exists ? (followerSnap.data().username || 'Someone') : 'Someone';
+    await writeActivity(followedUid, {
+      type: 'follow',
+      actorUid: followerUid,
+      actorUsername,
+    });
+  } catch (error) {
+    console.error('Error in onFollowCreated:', error);
   }
 });

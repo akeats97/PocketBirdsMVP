@@ -2,10 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
+import { Alert, Animated, Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { HardShadow } from '../../components/SightingCard';
 import { birdNamesAlpha, birdNamesAlphaLower } from '../../constants/birdNamesLower';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
+import { CUSTOM_SPECIES } from '../../constants/customSpecies';
 import { REPORT_TYPES, isReportEntry } from '../../constants/reportTypes';
 import { UNKNOWN_BIRD } from '../../constants/unknownBird';
 import MilestoneCelebration from '../components/MilestoneCelebration';
@@ -34,58 +36,13 @@ export default function AddSightingScreen() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const textInputRef = useRef<TextInput>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
   const notesInputRef = useRef<TextInput>(null);
   const locationInputRef = useRef<TextInput>(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const slideAnim = useRef(new Animated.Value(-100)).current;
 
-  useEffect(() => {
-    const keyboardWillShow = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-        const focusedInput = Platform.select({
-          ios: textInputRef.current?.isFocused() ? textInputRef.current :
-               notesInputRef.current?.isFocused() ? notesInputRef.current :
-               locationInputRef.current?.isFocused() ? locationInputRef.current : null,
-          android: textInputRef.current?.isFocused() ? textInputRef.current :
-                  notesInputRef.current?.isFocused() ? notesInputRef.current :
-                  locationInputRef.current?.isFocused() ? locationInputRef.current : null
-        });
-
-        if (focusedInput) {
-          setTimeout(() => {
-            focusedInput.measure((x, y, width, height, pageX, pageY) => {
-              const screenHeight = Dimensions.get('window').height;
-              const inputBottom = pageY + height;
-              const keyboardTop = screenHeight - e.endCoordinates.height;
-
-              if (inputBottom > keyboardTop) {
-                const scrollToY = pageY - (keyboardTop - inputBottom) - 100;
-                scrollViewRef.current?.scrollTo({
-                  y: Math.max(0, scrollToY),
-                  animated: true
-                });
-              }
-            });
-          }, 100);
-        }
-      }
-    );
-
-    const keyboardWillHide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardWillShow.remove();
-      keyboardWillHide.remove();
-    };
-  }, []);
+  // Keyboard avoidance (keeping the focused field above the keyboard, on both
+  // iOS and Android edge-to-edge) is handled by KeyboardAwareScrollView from
+  // react-native-keyboard-controller — no manual listener / measure / scroll.
 
   // Update location (label + coords) when lastLocation changes. Pre-fill should
   // never trigger Places autocomplete, so reset the flag.
@@ -199,6 +156,11 @@ export default function AddSightingScreen() {
       const reportMatches =
         q.length >= 2 ? REPORT_TYPES.filter(rt => rt.toLowerCase().startsWith(q)) : [];
 
+      // Custom easter-egg "species" (e.g. Kelsey) are selectable too. They're
+      // not in the IOC list, so surface them by prefix the same way.
+      const customMatches =
+        q.length >= 2 ? CUSTOM_SPECIES.filter(c => c.toLowerCase().startsWith(q)) : [];
+
       for (let i = 0; i < birdNamesAlpha.length; i++) {
         const lower = birdNamesAlphaLower[i];
         if (lower.startsWith(q)) {
@@ -213,7 +175,7 @@ export default function AddSightingScreen() {
         if (tier0.length >= CAP) break;
       }
 
-      setSuggestions([...reportMatches, ...tier0, ...tier1, ...tier2].slice(0, CAP));
+      setSuggestions([...reportMatches, ...customMatches, ...tier0, ...tier1, ...tier2].slice(0, CAP));
     }, 100);
     return () => clearTimeout(handle);
   }, [searchQuery, selectedBird]);
@@ -321,11 +283,7 @@ export default function AddSightingScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: palette.cream }}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-    >
+    <View style={{ flex: 1, backgroundColor: palette.cream }}>
       <MilestoneCelebration
         visible={milestoneCount !== null}
         count={milestoneCount}
@@ -365,14 +323,12 @@ export default function AddSightingScreen() {
         </Animated.View>
       )}
 
-      <ScrollView
-        ref={scrollViewRef}
+      <KeyboardAwareScrollView
         style={styles.container}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 },
-        ]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 }]}
         keyboardShouldPersistTaps="always"
+        keyboardDismissMode="interactive"
+        bottomOffset={20}
         onScrollBeginDrag={handleOutsidePress}
       >
         <Pressable onPress={handleOutsidePress} android_disableSound={true}>
@@ -568,8 +524,8 @@ export default function AddSightingScreen() {
             </View>
           </View>
         </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
+    </View>
   );
 }
 

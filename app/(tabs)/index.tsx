@@ -4,6 +4,7 @@ import SightingCard, { HardShadow } from '../../components/SightingCard';
 import { palette, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
 import { isUnknownEntry } from '../../constants/unknownBird';
+import { isCustomSpecies } from '../../constants/customSpecies';
 import { useSightings } from '../context/SightingsContext';
 import { groupSightingsByDay } from '../utils/groupSightingsByDay';
 
@@ -13,9 +14,14 @@ function JournalHeader() {
     () => sightings.filter((s) => !isReportEntry(s.birdName)),
     [sightings]
   );
-  // "Mystery Bird" entries count as sightings but not as a species.
+  // "Mystery Bird" entries count as sightings but not as a species; custom
+  // easter-egg species (e.g. Kelsey) likewise don't add to the species count.
   const speciesCount = useMemo(
-    () => new Set(visible.filter((s) => !isUnknownEntry(s.birdName)).map((s) => s.birdName)).size,
+    () => new Set(
+      visible
+        .filter((s) => !isUnknownEntry(s.birdName) && !isCustomSpecies(s.birdName))
+        .map((s) => s.birdName)
+    ).size,
     [visible]
   );
 

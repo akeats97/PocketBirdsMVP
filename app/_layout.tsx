@@ -21,11 +21,13 @@ import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { signOut, User } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
-import { Alert, SafeAreaView, StatusBar, TouchableOpacity } from 'react-native';
+import { Alert, SafeAreaView, StatusBar, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { auth } from '../config/firebaseConfig';
 import { palette } from '../constants/Colors';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
+import ActivityProvider, { useActivity } from './context/ActivityContext';
 import FriendSightingsProvider from './context/FriendSightingsContext';
 import HootsProvider from './context/HootsContext';
 import { SightingsProvider, useSightings } from './context/SightingsContext';
@@ -60,6 +62,44 @@ const theme = {
     notification: palette.coral,
   },
 };
+
+// Header bell → opens the Activity screen, with an unread dot.
+function HeaderBell() {
+  const { unreadCount } = useActivity();
+  return (
+    <TouchableOpacity
+      onPress={() => router.push('/activity')}
+      style={{
+        marginRight: 4,
+        padding: 8,
+        minWidth: 40,
+        minHeight: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 8,
+      }}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      accessibilityLabel={unreadCount > 0 ? `Activity, ${unreadCount} unread` : 'Activity'}
+    >
+      <Ionicons name="notifications-outline" size={24} color={palette.ink} />
+      {unreadCount > 0 && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            minWidth: 9,
+            height: 9,
+            borderRadius: 5,
+            backgroundColor: palette.coral,
+            borderWidth: 1,
+            borderColor: palette.cream,
+          }}
+        />
+      )}
+    </TouchableOpacity>
+  );
+}
 
 // Authenticated App Component
 function AuthenticatedApp() {
@@ -169,25 +209,28 @@ function AuthenticatedApp() {
               },
               headerShadowVisible: false,
               headerRight: () => (
-                <TouchableOpacity
-                  onPress={handleLogout}
-                  style={{
-                    marginRight: 15,
-                    padding: 8,
-                    minWidth: 40,
-                    minHeight: 40,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    borderRadius: 8,
-                  }}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Ionicons name="log-out-outline" size={24} color={palette.ink} />
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+                  <HeaderBell />
+                  <TouchableOpacity
+                    onPress={handleLogout}
+                    style={{
+                      padding: 8,
+                      minWidth: 40,
+                      minHeight: 40,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      borderRadius: 8,
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons name="log-out-outline" size={24} color={palette.ink} />
+                  </TouchableOpacity>
+                </View>
               ),
             }}
           />
           <Stack.Screen name="sighting/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="activity" options={{ headerShown: false }} />
         </Stack>
       </SafeAreaView>
     </ThemeProvider>
@@ -257,9 +300,11 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardProvider>
       <SightingsProvider>
         <FriendSightingsProvider>
           <HootsProvider>
+          <ActivityProvider>
           <WishlistProvider>
             {user ? (
               // User is logged in - show the main app with Stack navigation
@@ -278,9 +323,11 @@ export default function RootLayout() {
               </ThemeProvider>
             )}
           </WishlistProvider>
+          </ActivityProvider>
           </HootsProvider>
         </FriendSightingsProvider>
       </SightingsProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

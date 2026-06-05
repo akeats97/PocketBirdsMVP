@@ -4,6 +4,8 @@ import { Alert } from 'react-native';
 import { auth, db } from '../../config/firebaseConfig';
 import { UserProfile, getFollowing } from '../services/userService';
 import { FriendSighting } from '../types';
+import { isReportEntry } from '../../constants/reportTypes';
+import { isUnknownEntry } from '../../constants/unknownBird';
 
 // Still keeping these for initial state/fallback
 const initialFriendSightings: FriendSighting[] = [
@@ -257,6 +259,12 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isFirstSightingForFriend = (friendName: string, birdName: string, sightingDate: Date): boolean => {
+    // Bug Report / Feature Request and Mystery Bird entries aren't real
+    // identified species — never a "1ST".
+    if (isReportEntry(birdName) || isUnknownEntry(birdName)) {
+      return false;
+    }
+
     // Get all sightings from this friend for this bird species
     const friendSightingsForSpecies = friendSightings.filter(sighting => 
       sighting.friendName === friendName && 

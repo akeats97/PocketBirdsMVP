@@ -6,6 +6,62 @@ The prompts are written to be standalone — Claude Code can act on them without
 
 ---
 
+## User-reported (in-app Bug Report / Feature Request submissions, June 3–4 2026)
+
+Pulled from the `sightings` collection (entries with `birdName` = "Bug Report" / "Feature Request"). Submitters: alex, victoria, evaloon. Triaged below. Dupes of existing backlog items are cross-referenced rather than re-specced; jokes are recorded but parked.
+
+### UR-1 — Add Sighting keyboard covers the text field (evaloon) — BUG
+
+Two submissions, same root cause: a bug ("when keyboard pops up, the keyboard blocks the field where I am typing") and a feature ask ("swiping down on keyboard to close it, and text field moving up when keyboard pops up"). On Add Sighting, the on-screen keyboard overlaps the active input, and there's no swipe-to-dismiss.
+
+**Both platforms: migrated to `react-native-keyboard-controller` Jun 4 2026 (NATIVE DEP — needs a dev-client rebuild before it can be tested).** Superseded the earlier iOS-only `automaticallyAdjustKeyboardInsets` attempt. The Add screen's whole bespoke keyboard apparatus (inert KAV, manual `keyboardWillShow` measure+`scrollTo`, `keyboardHeight` state, paddingBottom math) was deleted and replaced with `<KeyboardAwareScrollView>` from `react-native-keyboard-controller` (edge-to-edge aware on Android, handles iOS too) with `keyboardDismissMode="interactive"` + `bottomOffset={20}`. App root wrapped in `<KeyboardProvider>` (`app/_layout.tsx`).
+
+**Infra note:** the repo had NO `babel.config.js`, and reanimated worklets had never actually run (only unimported template files used them). keyboard-controller is reanimated-worklet based, so a canonical `babel.config.js` (`presets: ['babel-preset-expo']`, which auto-includes the reanimated plugin) was added. Validated by force-compiling the Android bundle (HTTP 200, 13.2 MB, clean).
+
+**Verification (after a dev-client rebuild — `eas build --profile development --platform android`, then reinstall):** focus each field on Add Sighting (esp. Notes, lowest) and confirm it lifts clear of the keyboard on Android; confirm swipe-down dismiss. iOS path also now flows through the library — re-verify on the next TestFlight build for evaloon.
+
+### UR-2 — Can't see your own Bug Report / Feature Request submissions (evaloon) — BUG / UX ✅ DONE Jun 4 2026
+
+"I can't see my feature requests HEP." Addressed by the new **Hep** tab on the Friends screen (see UR-3): the feedback view includes the user's OWN reports (mapped to a friend-card shape with the tag "You"), so there's now a place to see what you submitted. They remain hidden from the Field Journal as designed. A post-submit confirmation banner ("thank you for your hep ❤️") already existed.
+
+### UR-3 — Filter the friends feed by type: sightings vs bugs/feature requests (victoria) — FEATURE ✅ DONE Jun 4 2026
+
+Shipped as two pill buttons on the Friends tab: **Sightings** (friends' real bird sightings, day-grouped) and **Hep** (all Bug Report / Feature Request entries — friends' + own, newest first). Reports no longer clutter the Sightings feed. `feedMode` state in `app/(tabs)/friends.tsx`; the species/sightings stats panel is gated to Sightings mode.
+
+### UR-4 — Friends help verify an unknown bird (alex + victoria) — FEATURE (part a done)
+
+Alex: "submit an unknown bird and have my friends help verify it." Victoria: "let me submit unknown birds" — already possible by typing "?" (Mystery Bird), so Victoria's ask is really a **discoverability** gap.
+
+- **(a) Mystery Bird discoverability — WON'T DO (Alex's call, Jun 4 2026).** A tappable "Couldn't ID it?" hint was tried and reverted. Alex wants the `?`-typed entry to remain the ONLY way to log a Mystery Bird — intentionally low-profile, not surfaced as an affordance. Leave it undiscoverable by design.
+- **(b) Friend verification — still open, needs design.** Let friends suggest/confirm an ID on a Mystery Bird sighting (lightweight comment-or-vote on the species). Real feature, scope with Alex. Ties into the Hoot/Comment data model already in place.
+
+### Already tracked (now also user-requested, no new entry needed)
+
+- **React / kudos on a friend's sighting** (victoria, "please let me react to friends sightings") → already in `CLAUDE.md` Feature Backlog ("Kudos on a friend's sighting").
+- **Edit a past sighting** (alex, "ability to edit sightings") → already in `CLAUDE.md` Feature Backlog ("Edit a past sighting").
+
+### Done
+
+- **Group friends log by date like the Dex** (victoria) → shipped Jun 4 2026; Friends feed now uses a `SectionList` grouped by day via `groupSightingsByDay`.
+- **Make Kelsey a species pls** (evaloon) → shipped Jun 4 2026. Added `constants/customSpecies.ts` (`CUSTOM_SPECIES = ['Kelsey']`, `isCustomSpecies`). Kelsey is selectable in Add Sighting (typing "ke…" surfaces her like the Mystery Bird / report specials), fires the full new-species celebration (haptic + popup) on first log, and gets a Dex tile under "Other" (orphan path). Per Alex she does NOT increment the unique-species count or trigger milestones — excluded from the species math in `SightingsContext.addSighting`, `dex.tsx` stats, Field Journal `index.tsx`, `groupSightingsByDay`, and `friends.tsx` friendStats.
+
+### Parked (not actionable)
+
+- "Please come home I miss you" (victoria) — not a product request.
+
+### Idea — log non-bird animals with a `*` prefix (noted Jun 4 2026, not scoped)
+
+Alex's idea, related to the Kelsey/custom-species mechanism: let users log real-but-not-bird sightings (e.g. a Leopard Frog) without encouraging it. Proposed UX: type `*Leopard Frog` in the Add Sighting search — the leading `*` flags "this isn't a bird." It shows in the Dex under "Other" and, unlike Kelsey, it DOES count toward the species total (it's a real animal, just not a bird).
+
+Open questions to work through before building:
+- Parsing/UX: strip the `*` for display, or keep a small "not a bird" marker on the tile/card? Where does the asterisk live on the stored `birdName`?
+- Counts: confirmed it counts in species totals (Alex). So it behaves like a normal species except it's user-authored and non-canonical (lands in the orphan "Other" path already used by the Dex).
+- Distinction from Kelsey: Kelsey = `isCustomSpecies` (curated easter egg, NOT counted). The `*` path = user-authored real non-bird (counted). These are two different categories; the new `constants/customSpecies.ts` is a reasonable home/pattern to extend, but the `*` items are open-ended (any string) rather than a fixed list, so they likely need their own predicate (e.g. `isNonBirdEntry(name) = name.startsWith('*')`) rather than a hardcoded set.
+- Validation/abuse: free-text `*anything` means users can log arbitrary strings as counted species. Decide whether that's fine (it's their personal Dex) or needs light guardrails.
+- Friends feed + verification: how do non-bird entries read on a friend's card? Ties into UR-4 (Mystery Bird verification).
+
+---
+
 ## SECURITY — Firestore rules hardened ✅ (DONE Jun 4 2026, commit 5ed3a6e)
 
 **Was:** production Firestore used the default test-mode catch-all `allow read, write: if true` — entire DB publicly readable/writable. Discovered Jun 3 2026 during the Hoot & Comments build; rules were not in the repo.
@@ -34,7 +90,7 @@ The prompts are written to be standalone — Claude Code can act on them without
 3. `behavior="padding"` + `keyboardVerticalOffset={insets.bottom}` (android) → pushed the field **down into the keyboard** (only ~half the field visible). Offset subtracts from the lift always, so it hurt the up-state. Reverted.
 4. Manual `Keyboard` show/hide listener (no KAV), set composer `paddingBottom = kbHeight` when open / `insets.bottom` when closed → **under-lifted** (~half the field behind the keyboard). Couldn't model why from inspection; suspected misreported `endCoordinates.height` and/or partial adjustResize interaction under edge-to-edge. Reverted.
 
-**Real fix (do this, batched with a native rebuild):** swap to **`react-native-keyboard-controller`** (`KeyboardAvoidingView` / `KeyboardStickyView`), which is built for edge-to-edge and resets cleanly. It's a **native dependency**, so it needs a dev-client rebuild (`eas build --profile development`, then reinstall the dev APK) — don't do it standalone, batch with the next native change. Likely also improves the Add Sighting + Friends-search keyboard behavior. Validate the open→type→dismiss cycle on a gesture-nav Android device specifically (that's where the residual shows).
+**Real fix — DONE Jun 4 2026 (pending dev-client rebuild to verify):** swapped this screen's RN `KeyboardAvoidingView` for the one from **`react-native-keyboard-controller`** (built for edge-to-edge, resets cleanly). Done together with the Add Sighting migration to `KeyboardAwareScrollView` and the root `KeyboardProvider` (see UR-1). It's a **native dependency**, so it needs a dev-client rebuild (`eas build --profile development --platform android`, then reinstall the dev APK). Validate the open→type→dismiss cycle on a gesture-nav Android device specifically (that's where the residual margin showed) and confirm the resting margin is gone.
 
 ---
 
@@ -92,7 +148,25 @@ Verify in the dev client by searching with mixed case and confirming matches. Re
 
 ---
 
-### Bug 2 — Android push notification icon renders as a generic circle
+### Bug 2 — Android push notification icon renders inconsistently across OEMs (UPDATED Jun 4 2026, deferred)
+
+**UPDATE Jun 4 2026 — the original "not wired up" diagnosis is STALE; the icon is now fully wired and the real issue is different.** Confirmed in the native project:
+- `AndroidManifest.xml` HAS both meta-data tags (`default_notification_icon` → `@drawable/notification_icon`, `default_notification_color` → `@color/notification_icon_color`).
+- `notification_icon.png` exists in all 5 density buckets (dated May 26 2026).
+- `colors.xml` has `notification_icon_color = #f5b800` (gold).
+- The drawables ARE correct white-silhouette-on-transparent format (RGB ~100% white, alpha = bird shape, ~60% transparent).
+
+**Actual symptom (reported by Alex Jun 4 2026):** with BOTH Alex and Vic on the same release (Emerald), Alex's device shows the gold bird correctly, but Vic's shows a generic circle, and sometimes "stacked rectangles." Version skew is ruled out (same build), so this is **device/OEM-specific small-icon rendering**, not a wiring bug.
+
+**Likely root cause:** the small drawables are heavily anti-aliased — the 24×24 `mdpi` is ~25% semi-transparent (feathered) pixels. Aggressive OEM skins (Samsung One UI, Xiaomi MIUI) render feathered/detailed monochrome icons inconsistently: some mask to a circle, some show a blob/rectangle, and stacked notifications amplify it. Android's guidance is a bold, simple, crisp silhouette.
+
+**Fix when picked up:** regenerate the density drawables from a cleaner, higher-contrast silhouette with minimal edge feathering (especially mdpi/hdpi) — fewer semi-transparent pixels, sharper alpha edges. Test specifically on Vic's device model (a Samsung/Xiaomi if that's what she has). The manifest/colors wiring below is already correct and does NOT need redoing.
+
+**Status:** DEFERRED (Alex's call Jun 4 2026 — cosmetic, not a regression).
+
+---
+
+**[Original write-up below — note the "not wired" parts are now DONE; kept for the icon-format + density-bucket detail.]**
 
 **What's happening:** When a friend logs a sighting and the recipient gets a push notification on Android, the small icon in the system tray (top status bar) is a blank/generic circle — not a PocketBirds icon. The user can't tell at a glance which app the notification is from. iOS uses the app icon for notification badges so iOS is unaffected; this is Android-only.
 

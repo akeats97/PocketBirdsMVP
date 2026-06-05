@@ -1,14 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Keyboard, Modal, Pressable, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
 import { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
 import { auth } from '../../config/firebaseConfig';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
+import { isCustomSpecies } from '../../constants/customSpecies';
 import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useSightings } from '../context/SightingsContext';
+import { groupSightingsByDay } from '../utils/groupSightingsByDay';
+import { FriendSighting } from '../types';
 import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../services/notificationPrefsService';
 import { UserProfile, followUser, isFollowing, searchUsers, unfollowUser } from '../services/userService';
 
@@ -40,8 +43,12 @@ const PREF_OPTIONS: { mode: NotificationMode; title: string; sub: string }[] = [
 
 export default function FriendsScreen() {
   const { friendSightings, friends, filterByFriend, isLoadingFriends, refreshFriends, isFirstSightingForFriend } = useFriendSightings();
-  const { isNewSpeciesForUser } = useSightings();
+  const { isNewSpeciesForUser, sightings: ownSightings } = useSightings();
   const [searchQuery, setSearchQuery] = useState('');
+  // 'sightings' = friends' bird sightings (day-grouped). 'feedback' = all Bug
+  // Report / Feature Request entries, including the user's own (which are
+  // hidden from their Field Journal but surfaced here).
+  const [feedMode, setFeedMode] = useState<'sightings' | 'feedback'>('sightings');
   const [showFriendsList, setShowFriendsList] = useState(false);
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
   const [modalSearchQuery, setModalSearchQuery] = useState('');
@@ -67,13 +74,44 @@ export default function FriendsScreen() {
     return filterByFriend(searchQuery);
   }, [searchQuery, filterByFriend]);
 
+  // Sightings feed: friends' real bird sightings (reports live in the Feedback
+  // view instead). Bucketed into day sections, same as the Field Journal.
+  const sightingItems = useMemo(
+    () => filteredSightings.filter(s => !isReportEntry(s.birdName)),
+    [filteredSightings]
+  );
+  const sections = useMemo(() => groupSightingsByDay(sightingItems), [sightingItems]);
+
+  // The user's own Bug Report / Feature Request entries, shaped like a friend
+  // sighting so they render in the Feedback view. They stay hidden from the
+  // Field Journal; this is the one place a user can see what they submitted.
+  const ownReports = useMemo<FriendSighting[]>(
+    () => ownSightings
+      .filter(s => isReportEntry(s.birdName))
+      .map(s => ({ ...s, friendName: 'You' })),
+    [ownSightings]
+  );
+
+  // Feedback feed: everyone's reports (friends' + own), newest first. The
+  // friend filter narrows the friend reports; own reports are included unless
+  // the filter text doesn't match "You".
+  const reportItems = useMemo<FriendSighting[]>(() => {
+    const friendReports = filteredSightings.filter(s => isReportEntry(s.birdName));
+    const q = searchQuery.trim().toLowerCase();
+    const own = q ? ownReports.filter(r => r.friendName.toLowerCase().includes(q)) : ownReports;
+    return [...own, ...friendReports].sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [filteredSightings, ownReports, searchQuery]);
+
   const friendStats = useMemo(() => {
-    if (!searchQuery) return null;
+    if (feedMode !== 'sightings' || !searchQuery) return null;
     // Exclude Bug Report / Feature Request entries from the counts — they still
     // show as cards in the feed, but aren't real sightings/species.
     const sightings = filterByFriend(searchQuery).filter(s => !isReportEntry(s.birdName));
     const totalSightings = sightings.length;
-    const uniqueSpecies = new Set(sightings.map(sighting => sighting.birdName)).size;
+    // Custom easter-egg species (e.g. Kelsey) don't add to the species count.
+    const uniqueSpecies = new Set(
+      sightings.filter(s => !isCustomSpecies(s.birdName)).map(s => s.birdName)
+    ).size;
     return { totalSightings, uniqueSpecies };
   }, [searchQuery, filterByFriend]);
 
@@ -182,6 +220,36 @@ export default function FriendsScreen() {
               <Text style={styles.addButtonText}>Add</Text>
             </Pressable>
           </HardShadow>
+        </View>
+
+        {/* Feed mode toggle: friends' sightings vs everyone's feedback */}
+        <View style={styles.feedPillsRow}>
+          <Pressable
+            style={[styles.feedPill, feedMode === 'sightings' && styles.feedPillActive]}
+            onPress={() => setFeedMode('sightings')}
+          >
+            <Ionicons
+              name="leaf"
+              size={14}
+              color={feedMode === 'sightings' ? palette.cream : palette.ink}
+            />
+            <Text style={[styles.feedPillText, feedMode === 'sightings' && styles.feedPillTextActive]}>
+              Sightings
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.feedPill, feedMode === 'feedback' && styles.feedPillActive]}
+            onPress={() => setFeedMode('feedback')}
+          >
+            <Ionicons
+              name="chatbox-ellipses"
+              size={14}
+              color={feedMode === 'feedback' ? palette.cream : palette.ink}
+            />
+            <Text style={[styles.feedPillText, feedMode === 'feedback' && styles.feedPillTextActive]}>
+              Hep
+            </Text>
+          </Pressable>
         </View>
 
         {/* Friends filter search */}
@@ -295,13 +363,37 @@ export default function FriendsScreen() {
         )}
       </View>
 
-      {/* Sightings feed / empty / loading */}
+      {/* Feed: sightings (day-grouped) or feedback (flat) / empty / loading */}
       {isLoadingFriends && !isRefreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={palette.leaf} />
           <Text style={styles.loadingText}>Loading friend activity...</Text>
         </View>
-      ) : filteredSightings.length === 0 ? (
+      ) : feedMode === 'feedback' ? (
+        reportItems.length === 0 ? (
+          <View style={styles.emptyState}>
+            <HardShadow>
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>No feedback yet.</Text>
+                <Text style={styles.emptySubtitle}>
+                  {searchQuery
+                    ? `No bug reports or feature requests from "${searchQuery}".`
+                    : 'Bug reports and feature requests (yours and your friends’) show up here.'}
+                </Text>
+              </View>
+            </HardShadow>
+          </View>
+        ) : (
+          <FlatList
+            data={reportItems}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => <FriendSightingCard sighting={item} />}
+            contentContainerStyle={styles.listContent}
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+          />
+        )
+      ) : sightingItems.length === 0 ? (
         <View style={styles.emptyState}>
           <HardShadow>
             <View style={styles.emptyCard}>
@@ -327,8 +419,8 @@ export default function FriendsScreen() {
           </HardShadow>
         </View>
       ) : (
-        <FlatList
-          data={filteredSightings}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <FriendSightingCard
@@ -336,6 +428,15 @@ export default function FriendsScreen() {
               isFirstSighting={isFirstSightingForFriend(item.friendName, item.birdName, item.date)}
             />
           )}
+          renderSectionHeader={({ section }) => (
+            <View style={styles.dayHeader}>
+              <Text style={styles.dayTitle}>{section.title}</Text>
+              <Text style={styles.dayCounts}>
+                {section.sightingCount} {section.sightingCount === 1 ? 'sighting' : 'sightings'} · {section.speciesCount} {section.speciesCount === 1 ? 'species' : 'species'}
+              </Text>
+            </View>
+          )}
+          stickySectionHeadersEnabled={false}
           contentContainerStyle={styles.listContent}
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
@@ -528,6 +629,36 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
 
+  // Feed mode pills
+  feedPillsRow: {
+    flexDirection: 'row',
+    gap: space.sm,
+    marginBottom: space.md,
+  },
+  feedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: radius.pill,
+    backgroundColor: palette.card,
+    ...border.thick,
+  },
+  feedPillActive: {
+    backgroundColor: palette.ink,
+  },
+  feedPillText: {
+    fontFamily: font.display,
+    fontSize: 13,
+    fontWeight: '700',
+    color: palette.ink,
+    letterSpacing: -0.2,
+  },
+  feedPillTextActive: {
+    color: palette.cream,
+  },
+
   // Avatar
   // Search bar
   searchContainer: {
@@ -651,6 +782,23 @@ const styles = StyleSheet.create({
   listContent: {
     paddingVertical: space.sm,
     paddingBottom: space.xl,
+  },
+  dayHeader: {
+    paddingHorizontal: space.xl,
+    paddingTop: space.lg,
+    paddingBottom: space.sm,
+    backgroundColor: palette.cream,
+  },
+  dayTitle: {
+    ...type.h3,
+    color: palette.ink,
+    fontWeight: '700',
+  },
+  dayCounts: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    marginTop: 2,
+    fontWeight: '500',
   },
   emptyState: {
     flex: 1,

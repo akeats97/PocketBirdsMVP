@@ -8,6 +8,7 @@ import { uploadPhoto } from '../services/photoService';
 import { isMilestone } from '../constants/milestones';
 import { isReportEntry } from '../../constants/reportTypes';
 import { isUnknownEntry } from '../../constants/unknownBird';
+import { isCustomSpecies } from '../../constants/customSpecies';
 import { Coordinates, Sighting } from '../types';
 
 export interface AddSightingResult {
@@ -303,22 +304,30 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     // they're excluded from the species math so they don't inflate counts for
     // real birds logged afterward. "Mystery Bird" (unidentified) entries count
     // as real sightings but likewise never add a species, so they're excluded
-    // from the species math here too.
+    // from the species math here too. Custom easter-egg species (e.g. Kelsey)
+    // DO get the new-species celebration on first log, but are likewise kept
+    // out of the species count + milestone math.
     const isReport = isReportEntry(sighting.birdName);
     const isUnknown = isUnknownEntry(sighting.birdName);
+    const isCustom = isCustomSpecies(sighting.birdName);
     const speciesSightings = sightings.filter(
-      s => !isReportEntry(s.birdName) && !isUnknownEntry(s.birdName)
+      s => !isReportEntry(s.birdName) && !isUnknownEntry(s.birdName) && !isCustomSpecies(s.birdName)
     );
 
     // Check if this is a new species (case-insensitive match against existing).
-    const isNewSpecies = !isReport && !isUnknown && !speciesSightings.some(existingSighting =>
-      existingSighting.birdName.toLowerCase() === sighting.birdName.toLowerCase()
-    );
+    // Custom species celebrate on their first log too, checked against prior
+    // sightings of that same custom name (not the real-species base above).
+    const isNewSpecies = isCustom
+      ? !sightings.some(s => s.birdName.toLowerCase() === sighting.birdName.toLowerCase())
+      : !isReport && !isUnknown && !speciesSightings.some(existingSighting =>
+          existingSighting.birdName.toLowerCase() === sighting.birdName.toLowerCase()
+        );
 
     // Compute the user's unique-species count AFTER this save and decide
     // whether it crossed a milestone (5, 10, 25, 50, 100, then every 50).
+    // Custom species never increment the count, so they never trigger one.
     let milestone: number | null = null;
-    if (isNewSpecies) {
+    if (isNewSpecies && !isCustom) {
       const uniqueBefore = new Set(
         speciesSightings.map(s => s.birdName.toLowerCase())
       ).size;

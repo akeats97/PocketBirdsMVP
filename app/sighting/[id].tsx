@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -13,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/social/Avatar';
 import { FacePile } from '../../components/social/FacePile';

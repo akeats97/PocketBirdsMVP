@@ -7,6 +7,7 @@ import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../con
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
 import { isUnknownEntry } from '../../constants/unknownBird';
+import { isCustomSpecies } from '../../constants/customSpecies';
 import { useSightings } from '../context/SightingsContext';
 import { useWishlist } from '../context/WishlistContext';
 
@@ -90,11 +91,16 @@ export default function DexScreen() {
     return map;
   }, [realSightings]);
 
-  const stats = useMemo(() => ({
-    totalSightings: realSightings.length,
-    uniqueSpecies: Object.keys(seenMap).length,
-    photographedSpecies: Object.values(seenMap).filter(info => info.hasPhoto).length,
-  }), [realSightings.length, seenMap]);
+  // Custom easter-egg species (e.g. Kelsey) get a Dex tile (via the orphan
+  // "Other" path below) but are kept out of the headline species counts.
+  const stats = useMemo(() => {
+    const realSpeciesNames = Object.keys(seenMap).filter(n => !isCustomSpecies(n));
+    return {
+      totalSightings: realSightings.length,
+      uniqueSpecies: realSpeciesNames.length,
+      photographedSpecies: realSpeciesNames.filter(n => seenMap[n].hasPhoto).length,
+    };
+  }, [realSightings.length, seenMap]);
 
   const sections = useMemo<Section[]>(() => {
     const q = searchQuery.trim().toLowerCase();
