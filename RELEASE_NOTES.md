@@ -1,5 +1,49 @@
 # PocketBirds — Release Notes
 
+## Snowcap — June 6 2026
+**Builds:** iOS 1.0.0 (8) · Android 1.0.0 (versionCode 23, **APK** for Firebase App Distribution)
+**Headline:** Birder profiles, the "You & {friend}" overlap compare, full-page friend search, and gold "first on Pocket Birds" trophies.
+
+### Play Store - "What's new"
+> 👤 Profiles + compare
+> • Tap a birder in search — or your own name — to open a profile: stats, Field Journal, and Bird Dex
+> • Search the Friends tab to find and visit anyone, friends and strangers alike
+> • "You & {friend}": see how much your life lists overlap, and exactly which birds they have that you don't
+> • 🏆 Log a species before anyone else on Pocket Birds and earn a gold trophy on it
+> • Tap a friend's name on any sighting to jump straight to their profile
+> Plus polish and fixes.
+
+### TestFlight - "What to Test"
+> New: Profiles, the You-&-friend compare, and full-page friend search.
+>
+> Please check:
+> • Friends tab: type a name in the search bar → tap a birder → their profile opens (stats, Field Journal, Bird Dex). Back returns to your search.
+> • On a friend's profile, open "You & {name}" → the compare screen. Tap section headers to expand/collapse; add one of their birds to your Wishlist.
+> • Tap the username pill on any sighting in the feed → it should open that person's profile.
+> • Follow / unfollow from a profile and confirm it sticks after leaving and returning.
+> • Bird Dex: species you were first on the whole app to log show a gold 🏆 next to the name (tile stays green).
+> • Push (still validating): have an Android friend log a sighting → confirm the iOS push lands. This is the first build with the entitlement fix actually live.
+
+### What shipped (engineering)
+- **Profile pages:** `app/profile/[uid].tsx` (friend / public / self) + `app/profile/[uid]/compare.tsx` (Venn). Pushed screens, no tab bar. Data via `getSightingsByUid` + `getPublicProfile`; no `firestore.rules` change needed (signed-in reads of `sightings`/`users` were already allowed). Self profile reuses live contexts.
+- **Venn compare:** `compareLists.ts` (Jaccard overlap), `CompareCard` module on the profile, and the full compare screen with collapsible Only-them / Only-you / Both buckets + Wishlist/LOGGED affordances.
+- **Friends tab rewrite:** the friend-filter dropdown is replaced by a **full-page birder search** (`searchUsers`, includes strangers, lazy species counts); search moved beside the title, "Add" button removed; the feed no longer filters by friend; feed card username pill links to the poster's profile.
+- **Global-first:** `sighting.globalFirst` flag — first-ever logger of a species across the app gets a gold trophy on the green Dex tile + profile Dex chip, plus a `GlobalFirstCelebration` gold takeover. Detected via `isGlobalFirstSpecies` at log time ("first" = input-into-app time, not observation date). Seeded existing data with `functions/backfillGlobalFirst.js` (applied Jun 6: alex 97, victoria 70, Ray 3, ooplena 1, penguin 1).
+- **Milestones** now fire at **1, 5, 10, 25, then every 50** (reworded 1/5/10 taglines).
+- **Release title** rolled Gnatcatcher → Snowcap.
+
+### Known issues
+- "First on Pocket Birds" detection is best-effort: needs connectivity, matches on exact name, and two simultaneous loggers could both be flagged. No card **pill** yet (gold trophy only) — pill design pending (`WORK_QUEUE.md` Q-3).
+- Offline sighting data-loss hardening still unconfirmed (`WORK_QUEUE.md` Bug 3).
+- Android notification small icon renders inconsistently across OEMs (cosmetic; Bug 2).
+
+### Post-ship steps
+- **iOS:** add build 1.0.0 (8) to the "Friends" external group. No new capability this build, so it should skip Beta App Review.
+- **Android:** this is an **APK** (not the Play Store AAB) — distribute via **Firebase App Distribution** (new channel this release; see `WORK_QUEUE.md` Q-2). Play Store internal track is unchanged.
+- Fill the `release-names.csv` Snowcap date only when actually shipped to production. Next release name after Snowcap is **Antwren**.
+
+---
+
 ## Gnatcatcher - June 5 2026
 **Builds:** iOS 1.0.0 (7) · Android 1.0.0 (versionCode 22)
 **Headline:** Activity feed + bell, day-grouped friends feed, keyboard fixes across the app, and a custom species.
