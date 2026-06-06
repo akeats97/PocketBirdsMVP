@@ -24,7 +24,29 @@ Features Alex wants to ship next. Not yet scoped or scheduled — capture ideas 
 - **Kudos on a friend's sighting.** Lightweight reaction — let the user tap a heart / star / "nice" on a friend's sighting. Single reaction per user per sighting (toggle). Surfaces a count + recent reactors on the SightingCard. Probably also fires a quiet push back to the original sighter ("Victoria liked your Robin").
 - **Push notifications deep-link to the sighting.** Today, tapping a friend-sighting push just opens the app to wherever it was last (or Field Journal). Want: tap → navigate directly to that friend's sighting card in the Friends feed. Will need to encode the sighting ID + friend ID in the push payload and handle the `Notifications.addNotificationResponseReceivedListener` route on cold start vs warm start. Existing push payload format is in `functions/index.js`.
 - **Bird detail screen from Dex tile.** Tapping a tile in the Bird Dex (currently does nothing) should open a detail view that lists all the user's previous sightings for that species (date, location, photo if any, notes). Re-uses the SightingCard component scoped to that bird. Consider also showing the Latin name there (Latin names are also wanted in feed cards per the Pending Design Work block).
-- **Friends — search + Dex view of a friend.** On the Friends tab, want to be able to (a) search a friend's list for a specific bird, and (b) view a friend's Bird Dex (read-only) so you can see what they've seen but you haven't. Useful for the "what should I be looking for" question. Requires either fetching all of a friend's sightings on demand, or syncing their seen-species summary to a denormalized doc Alex can query cheaply. Probably the latter — write a Cloud Function or client trigger that maintains `users/{uid}.seenSpecies: string[]`.
+- **Friends — search + Dex view of a friend.** ~~(b) view a friend's Bird Dex (read-only)~~ **DONE Jun 6 2026** via profile pages (the profile's Bird Dex tab, fetched on demand with `getSightingsByUid`). Still open: **(a) search a friend's list for a specific bird** (and the Venn compare already surfaces "what should I be looking for"). The denormalized `users/{uid}.seenSpecies` idea is still worth doing if profile loads get heavy at scale — the full-page friend search currently fetches each result's sightings just to show a species count.
+
+---
+
+## Profiles, Venn Compare & Global-First (shipped Jun 6 2026)
+
+- **Profile pages.** `app/profile/[uid].tsx` (friend / public / self — self variant when `uid === auth.currentUser.uid`) and `app/profile/[uid]/compare.tsx` (the Venn screen). Pushed screens, no tab bar (registered in `app/_layout.tsx` with `headerShown:false`). Reached from the Friends search results and from the username pill on feed cards. The profile Field Journal reuses the full `FriendSightingCard` (taps through to `/sighting/[id]`); the Bird Dex tab uses `buildUserDex`.
+- **Data.** `sightingService.getSightingsByUid(uid)` + `userService.getPublicProfile(uid)` (joinDate from `users.createdAt`, falls back to earliest sighting). `firestore.rules` already allow any signed-in user to read `sightings` + `users`, so no rules change was needed. Compare math is `app/utils/compareLists.ts` (Jaccard overlap; same report/mystery/custom exclusions as the journal).
+- **Friends tab rewrite.** The old friend-filter dropdown is GONE. Search is now a **full-page birder list** (`searchUsers`, includes public strangers) that pushes profiles; the feed no longer filters by friend (always shows everyone). The "Add" button was removed — the Add-friends modal still exists but is only reachable from the empty-state "Find Friends" button (following now happens via search → profile → Follow). Usernames are the sole identity (no separate handle field), so search rows show `@lowercased(username)`.
+- **Global-first.** A sighting of a species **no one on PocketBirds had logged before** gets `sighting.globalFirst = true`. Detection: `sightingService.isGlobalFirstSpecies(birdName)` queries the whole `sightings` collection for an exact `birdName` match (`limit 1`). Runs at Add-time (`add.tsx`) for new, non-custom, non-mystery, non-report species; **needs connectivity**, matches **exact name**, and is **racy** (two simultaneous loggers can both flag). The flag is set on the still-pending local doc via `SightingsContext.markGlobalFirst` and rides normal sync.
+  - **"First" = when the log was INPUT into the app (`createdAt`), NOT the observation `date`.**
+  - **Visual:** a small **gold trophy** beside the species name on the still-green ("seen") Dex tile (`dex.tsx`) and profile Dex chips. We deliberately did NOT recolor the whole tile — a red/coral fill read as "missing" (opposite of seen) and a gold fill hid the gold camera icon. Celebration is `GlobalFirstCelebration.tsx` (gold takeover, "First birder on Pocket Birds to log this species!").
+  - **Backfill:** `functions/backfillGlobalFirst.js` seeded existing data (run once Jun 6 2026). Idempotent/re-runnable: `GOOGLE_APPLICATION_CREDENTIALS=~/Downloads/pocketbirds-firebase-adminsdk-fbsvc-19e23de9d2.json node backfillGlobalFirst.js [--commit]`. Flags the earliest-`createdAt` sighting per species across all users. Winners as of the backfill: alex 97, victoria 70, Ray 3, ooplena 1, penguin 1.
+  - **Open follow-ups (WORK_QUEUE):** Q-3 = a distinct "first on Pocket Birds" PILL on the sighting card (design pending; TODO comments sit next to the "1ST" lifer badge in both card components). Q-4 = "verified sightings" (photo + ≥1 other user confirms the ID); consider gating global-first on verified once that exists.
+- **Milestones.** `constants/milestones.ts` now fires at **1, 5, 10, 25, then every 50**. Reports / Mystery Bird / Kelsey are excluded from both milestone and global-first.
+
+---
+
+## Release naming & builds
+
+- In-app title is `Pocket Birds {CURRENT_RELEASE_NAME}` from `constants/release.ts`. Release names come from `release-names.csv`, ordered by **wingspan ascending**. Current: **Snowcap** (was Gnatcatcher). Next after Snowcap is **Antwren**. The CSV `Release Date` column = the actual Play Store ship date; leave it blank when rolling the name forward.
+- `eas.json`: `appVersionSource: "remote"` + `autoIncrement`, so Android `versionCode` / iOS `buildNumber` bump automatically per build (not stored in `app.json`). Profiles: `production` (AAB + the mandatory `macos-sequoia-15.6-xcode-26.2` image), `production-aab`, and **`apk`** (`autoIncrement`, `buildType: apk` — for **Firebase App Distribution**, NOT the Play Store).
+- **Snowcap builds (Jun 6 2026):** Android **APK** (versionCode 23) via `eas build -p android --profile apk` for Firebase App Distribution; iOS (build 8) via `eas build -p ios --profile production --auto-submit` → TestFlight "Friends" group. iOS submit needs `ascAppId` (6772308812, already in `eas.json`). `--auto-submit` must be passed at build time (can't be added to a running build). First iOS build with the Bug 6 push-entitlement fix live — verify Android→iOS push delivers.
 
 ---
 
@@ -73,6 +95,13 @@ A React Native bird sighting logger for Alex and his wife. Users log bird sighti
 | `app/services/userService.ts` | Firestore user/friend management |
 | `app/services/notificationService.ts` | Push notification registration + sending |
 | `app/services/photoService.ts` | Photo upload to Firebase Storage |
+| `app/profile/[uid].tsx` | Profile page (friend / public / self) — identity, stats, Field Journal, Bird Dex |
+| `app/profile/[uid]/compare.tsx` | Venn "You & {name}" compare screen |
+| `components/compare/CompareCard.tsx` | Overlap module shown on a profile |
+| `app/utils/compareLists.ts` | Overlap math (Jaccard) + `speciesSet`/`sightingCount` |
+| `app/utils/userDex.ts` | Per-user family-grouped Dex view (`buildUserDex`) |
+| `app/components/GlobalFirstCelebration.tsx` | Gold takeover for app-first species |
+| `functions/backfillGlobalFirst.js` | One-time global-first backfill (Admin SDK) |
 | `functions/index.js` | Cloud Functions — triggers push notif on new friend sighting |
 
 ---
