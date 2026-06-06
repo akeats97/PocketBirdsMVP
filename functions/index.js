@@ -384,9 +384,9 @@ exports.onCommentAdded = onDocumentCreated('sightings/{sightingId}/comments/{com
   }
 });
 
-// New follower → write an activity item for the followed user. (No push here;
-// a follow push is a separate, not-yet-approved feature. The header bell's
-// unread dot surfaces it in-app.)
+// New follower → write an activity item for the followed user AND push them.
+// Like hoots/comments, the follow push is a social event and is NOT gated by
+// the per-friend notificationPrefs (those only apply to sighting pushes).
 exports.onFollowCreated = onDocumentCreated('following/{followerUid}/following/{followedUid}', async (event) => {
   const { followerUid, followedUid } = event.params;
   if (followerUid === followedUid) return;
@@ -398,6 +398,11 @@ exports.onFollowCreated = onDocumentCreated('following/{followerUid}/following/{
       type: 'follow',
       actorUid: followerUid,
       actorUsername,
+    });
+    await pushSocial(followedUid, {
+      title: `${actorUsername} followed you 🐦`,
+      body: `${actorUsername} is now watching your sightings`,
+      data: { type: 'follow', actorUid: followerUid, actorUsername },
     });
   } catch (error) {
     console.error('Error in onFollowCreated:', error);
