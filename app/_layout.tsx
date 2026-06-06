@@ -231,6 +231,8 @@ function AuthenticatedApp() {
           />
           <Stack.Screen name="sighting/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="activity" options={{ headerShown: false }} />
+          <Stack.Screen name="profile/[uid]" options={{ headerShown: false }} />
+          <Stack.Screen name="profile/[uid]/compare" options={{ headerShown: false }} />
         </Stack>
       </SafeAreaView>
     </ThemeProvider>

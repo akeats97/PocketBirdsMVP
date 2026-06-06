@@ -7,11 +7,13 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { HardShadow } from '../../components/SightingCard';
 import { birdNamesAlpha, birdNamesAlphaLower } from '../../constants/birdNamesLower';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
-import { CUSTOM_SPECIES } from '../../constants/customSpecies';
+import { CUSTOM_SPECIES, isCustomSpecies } from '../../constants/customSpecies';
 import { REPORT_TYPES, isReportEntry } from '../../constants/reportTypes';
 import { UNKNOWN_BIRD } from '../../constants/unknownBird';
+import GlobalFirstCelebration from '../components/GlobalFirstCelebration';
 import MilestoneCelebration from '../components/MilestoneCelebration';
 import { useSightings } from '../context/SightingsContext';
+import { isGlobalFirstSpecies } from '../services/sightingService';
 import { pickImage } from '../services/photoService';
 import { getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission } from '../services/locationService';
 import { getPlaceCoordinates, getPlacesAutocomplete, PlaceSuggestion } from '../services/placesService';
@@ -19,7 +21,7 @@ import { Coordinates } from '../types';
 
 export default function AddSightingScreen() {
   const navigation = useNavigation();
-  const { addSighting, lastLocation } = useSightings();
+  const { addSighting, lastLocation, markGlobalFirst } = useSightings();
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [selectedBird, setSelectedBird] = useState('');
@@ -35,6 +37,7 @@ export default function AddSightingScreen() {
   const [submittedReport, setSubmittedReport] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
+  const [globalFirstBird, setGlobalFirstBird] = useState<string | null>(null);
   const textInputRef = useRef<TextInput>(null);
   const notesInputRef = useRef<TextInput>(null);
   const locationInputRef = useRef<TextInput>(null);
@@ -217,7 +220,7 @@ export default function AddSightingScreen() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedBird) {
       Alert.alert('Error', 'Please select a bird');
       return;
@@ -228,6 +231,9 @@ export default function AddSightingScreen() {
       Alert.alert('Error', 'Please enter a location');
       return;
     }
+
+    // Capture before the field resets below — used by the async global-first check.
+    const birdName = selectedBird;
 
     const { isNewSpecies: newSpeciesDetected, milestone } = addSighting({
       birdName: selectedBird,
@@ -256,6 +262,24 @@ export default function AddSightingScreen() {
     }
 
     setSubmittedReport(false);
+
+    // Global first: a brand-new species for the user that NO ONE on PocketBirds
+    // has ever logged. Custom easter-egg species (e.g. Kelsey) and Mystery Bird
+    // are excluded (Mystery Bird never reads as a new species anyway). The check
+    // needs the network; if it fails/offline we fall through to the normal
+    // celebration. This special popup takes priority over the milestone/banner.
+    if (newSpeciesDetected && !isCustomSpecies(birdName)) {
+      try {
+        const isFirst = await isGlobalFirstSpecies(birdName);
+        if (isFirst) {
+          markGlobalFirst(birdName);
+          setGlobalFirstBird(birdName);
+          return;
+        }
+      } catch {
+        // offline / query failed — fall through to the normal celebration
+      }
+    }
 
     if (milestone) {
       setMilestoneCount(milestone);
@@ -288,6 +312,12 @@ export default function AddSightingScreen() {
         visible={milestoneCount !== null}
         count={milestoneCount}
         onDismiss={() => setMilestoneCount(null)}
+      />
+
+      <GlobalFirstCelebration
+        visible={globalFirstBird !== null}
+        birdName={globalFirstBird}
+        onDismiss={() => setGlobalFirstBird(null)}
       />
 
       {showSuccess && (

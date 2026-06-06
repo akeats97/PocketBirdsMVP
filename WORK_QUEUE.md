@@ -58,6 +58,28 @@ Open questions to work through before building:
 - Counts: confirmed it counts in species totals (Alex). So it behaves like a normal species except it's user-authored and non-canonical (lands in the orphan "Other" path already used by the Dex).
 - Distinction from Kelsey: Kelsey = `isCustomSpecies` (curated easter egg, NOT counted). The `*` path = user-authored real non-bird (counted). These are two different categories; the new `constants/customSpecies.ts` is a reasonable home/pattern to extend, but the `*` items are open-ended (any string) rather than a fixed list, so they likely need their own predicate (e.g. `isNonBirdEntry(name) = name.startsWith('*')`) rather than a hardcoded set.
 - Validation/abuse: free-text `*anything` means users can log arbitrary strings as counted species. Decide whether that's fine (it's their personal Dex) or needs light guardrails.
+
+---
+
+## Queued (June 6 2026)
+
+### Q-1 — Profile icon in the top-right header → your own profile; move logout off the main pages — FEATURE
+
+Now that profiles exist (`app/profile/[uid].tsx`), put a small avatar/profile button in the top-right of the main header (next to / replacing part of the current header actions). Tapping it pushes the current user's own profile (`/profile/{auth.currentUser.uid}` — the self variant). **The logout button should move into that flow** (e.g. an action on the self-profile screen, or behind the profile's `•••` overflow) so logout is no longer always visible on the main tab pages. Net effect: the main pages get a cleaner header with just the activity bell + a profile avatar; logout lives one level in, on your own profile. Header is configured in `app/_layout.tsx` (`AuthenticatedApp` → `Stack.Screen name="(tabs)" headerRight`). The self-profile screen currently has a stub **Edit** pill and a `•••` overflow that does nothing yet — the overflow is a natural home for Logout (and later, Edit profile / settings).
+
+### Q-4 — Verified sightings — FEATURE (design pending, noted Jun 6 2026)
+
+Add a notion of a **verified** sighting, gated by trust rules so a log can be marked legit. Alex's initial criteria: **(1) a photo is uploaded**, AND **(2) the species ID is confirmed by at least 1 other user**. Open design questions: who can confirm (any user, or only people you follow / who follow you?), what the confirm UI is (a "confirm ID" action on the sighting detail, distinct from a hoot/comment), how confirmations are stored (a `verifications` subcollection à la hoots, with `verifiedBy`/`verifiedCount` denormalized onto the doc), and how "verified" is surfaced (a badge on the card + Dex). **Ties into global-first (Q-3 / shipped):** consider awarding/keeping the gold global-first only for *verified* first sightings, so an unverified or photo-less log can't permanently claim a species — possibly recompute global-first among verified sightings once verification exists. Relates to UR-4(b) (friends help verify a Mystery Bird ID) — same confirm-an-ID mechanic, so build them together.
+
+### Q-3 — Special "first on Pocket Birds" pill on the sighting card — FEATURE (design pending)
+
+The **global-first** feature shipped Jun 6 2026: when a user logs a species nobody on PocketBirds has ever logged, it's flagged `sighting.globalFirst = true` (set at log time via `isGlobalFirstSpecies()` in `sightingService.ts`), it fires the gold `GlobalFirstCelebration` popup ("First birder on Pocket Birds to log this species!"), and the Dex tile renders bold gold (`tileGlobalFirst`) instead of green. **Still TODO:** a distinct pill/badge on the sighting card itself (own `SightingCard` + `FriendSightingCard`) for global-first sightings — Alex hasn't designed it yet. The flag is already on the sighting, so this is purely the badge UI. TODO comments are in both card components next to the existing "1ST" lifer badge. Decide how it reads vs. the coral "1ST" lifer badge (global-first is rarer — maybe a gold trophy pill). Possible follow-up: also color the profile Bird Dex (`buildUserDex`/`app/profile/[uid].tsx`) gold for global-first, to match the main Dex.
+
+Caveats to keep in mind: detection matches on exact `birdName` and needs connectivity (offline logs silently skip the check); two people logging the same never-seen species near-simultaneously can both get flagged (acceptable at this scale); only newly-logged sightings get the flag (no retroactive backfill of existing data).
+
+### Q-2 — Next build: try APK + Firebase App Distribution for faster friend updates — BUILD/INFRA
+
+For the next build (no fixed date), try producing an **APK** (instead of the AAB Play Store flow) and distributing via **Firebase App Distribution** so friends get updates faster than the Play Store internal-testing round-trip. Rough path: `eas build --platform android --profile preview` (or a profile with `android.buildType "apk"`) to get an installable APK, then upload to Firebase App Distribution (`firebase appdistribution:distribute <apk> --app <android-app-id> --groups friends`) and invite testers. Keep the existing Play Store production flow as-is; this is an additional, lower-latency channel to evaluate. Open questions: tester onboarding (Firebase invite email + App Tester app), whether to wire it into EAS build hooks, and signing (APK can use the same EAS keystore).
 - Friends feed + verification: how do non-bird entries read on a friend's card? Ties into UR-4 (Mystery Bird verification).
 
 ---
@@ -383,7 +405,7 @@ Show me the diff. This should be a small change.
 
 ---
 
-### Bug 5 — App display name is "PocketBirds4" instead of "PocketBirds"
+### Bug 5 — App display name is "PocketBirds4" instead of "PocketBirds" ✅ DONE Jun 6 2026
 
 **What's happening:** On Alex's phone home screen, the app label under the icon reads "PocketBirds4" — the scaffolding name from `expo init` that never got cleaned up. It should just be "PocketBirds."
 
@@ -435,7 +457,7 @@ Commit as a single small commit since the three changes are atomically one logic
 
 ---
 
-### Bug 6 — iOS push notifications broken: missing `aps-environment` entitlement (priority)
+### Bug 6 — iOS push notifications broken: missing `aps-environment` entitlement (priority) ✅ DONE Jun 6 2026
 
 **Found:** June 3 2026, testing the Sheartail TestFlight build on a real iPhone.
 
@@ -454,7 +476,7 @@ Commit as a single small commit since the three changes are atomically one logic
 
 ---
 
-### Bug 7 — Location feature crashes the app on iOS
+### Bug 7 — Location feature crashes the app on iOS ✅ DONE Jun 6 2026
 
 **Found:** June 3 2026, same Sheartail TestFlight build on iPhone.
 

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, FlatList, Keyboard, Modal, Pressable, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
@@ -7,16 +8,18 @@ import { Avatar } from '../../components/social/Avatar';
 import { auth } from '../../config/firebaseConfig';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
-import { isCustomSpecies } from '../../constants/customSpecies';
 import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useSightings } from '../context/SightingsContext';
 import { groupSightingsByDay } from '../utils/groupSightingsByDay';
+import { speciesSet } from '../utils/compareLists';
 import { FriendSighting } from '../types';
 import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../services/notificationPrefsService';
+import { getSightingsByUid } from '../services/sightingService';
 import { UserProfile, followUser, isFollowing, searchUsers, unfollowUser } from '../services/userService';
 
 interface SearchResultUser extends UserProfile {
   isFollowing?: boolean;
+  speciesCount?: number; // distinct species, filled in async after the row appears
 }
 
 // Bell icon + tint for each notification mode.
@@ -42,14 +45,19 @@ const PREF_OPTIONS: { mode: NotificationMode; title: string; sub: string }[] = [
 ];
 
 export default function FriendsScreen() {
-  const { friendSightings, friends, filterByFriend, isLoadingFriends, refreshFriends, isFirstSightingForFriend } = useFriendSightings();
+  const router = useRouter();
+  const { friendSightings, friends, isLoadingFriends, refreshFriends, isFirstSightingForFriend } = useFriendSightings();
   const { isNewSpeciesForUser, sightings: ownSightings } = useSightings();
   const [searchQuery, setSearchQuery] = useState('');
+  // Birder search results — includes public strangers, not just followed
+  // friends, so the search box is a doorway to any profile.
+  const [birderResults, setBirderResults] = useState<SearchResultUser[]>([]);
+  const [isSearchingBirders, setIsSearchingBirders] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   // 'sightings' = friends' bird sightings (day-grouped). 'feedback' = all Bug
   // Report / Feature Request entries, including the user's own (which are
   // hidden from their Field Journal but surfaced here).
   const [feedMode, setFeedMode] = useState<'sightings' | 'feedback'>('sightings');
-  const [showFriendsList, setShowFriendsList] = useState(false);
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
   const [modalSearchQuery, setModalSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResultUser[]>([]);
@@ -59,26 +67,12 @@ export default function FriendsScreen() {
   const [notificationPrefs, setNotificationPrefs] = useState<Record<string, NotificationMode>>({});
   const [prefPickerFor, setPrefPickerFor] = useState<{ uid: string; name: string } | null>(null);
   const searchInputRef = useRef<TextInput>(null);
-  // Stores the pending blur-close timer so refocusing the input can cancel it
-  // (e.g. when the X button refocuses after clearing the search).
-  const blurCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filteredFriends = useMemo(() => {
-    if (!searchQuery) return friends;
-    return friends.filter(friend =>
-      friend.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [searchQuery, friends]);
-
-  const filteredSightings = useMemo(() => {
-    return filterByFriend(searchQuery);
-  }, [searchQuery, filterByFriend]);
-
-  // Sightings feed: friends' real bird sightings (reports live in the Feedback
-  // view instead). Bucketed into day sections, same as the Field Journal.
+  // The search box now finds PEOPLE, not feed text — so the feed itself always
+  // shows everything your friends have logged (no per-friend filter).
   const sightingItems = useMemo(
-    () => filteredSightings.filter(s => !isReportEntry(s.birdName)),
-    [filteredSightings]
+    () => friendSightings.filter(s => !isReportEntry(s.birdName)),
+    [friendSightings]
   );
   const sections = useMemo(() => groupSightingsByDay(sightingItems), [sightingItems]);
 
@@ -88,32 +82,19 @@ export default function FriendsScreen() {
   const ownReports = useMemo<FriendSighting[]>(
     () => ownSightings
       .filter(s => isReportEntry(s.birdName))
-      .map(s => ({ ...s, friendName: 'You' })),
+      .map(s => ({ ...s, friendName: 'You', friendId: auth.currentUser?.uid })),
     [ownSightings]
   );
 
-  // Feedback feed: everyone's reports (friends' + own), newest first. The
-  // friend filter narrows the friend reports; own reports are included unless
-  // the filter text doesn't match "You".
+  // Feedback feed: everyone's reports (friends' + own), newest first.
   const reportItems = useMemo<FriendSighting[]>(() => {
-    const friendReports = filteredSightings.filter(s => isReportEntry(s.birdName));
-    const q = searchQuery.trim().toLowerCase();
-    const own = q ? ownReports.filter(r => r.friendName.toLowerCase().includes(q)) : ownReports;
-    return [...own, ...friendReports].sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [filteredSightings, ownReports, searchQuery]);
+    const friendReports = friendSightings.filter(s => isReportEntry(s.birdName));
+    return [...ownReports, ...friendReports].sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [friendSightings, ownReports]);
 
-  const friendStats = useMemo(() => {
-    if (feedMode !== 'sightings' || !searchQuery) return null;
-    // Exclude Bug Report / Feature Request entries from the counts — they still
-    // show as cards in the feed, but aren't real sightings/species.
-    const sightings = filterByFriend(searchQuery).filter(s => !isReportEntry(s.birdName));
-    const totalSightings = sightings.length;
-    // Custom easter-egg species (e.g. Kelsey) don't add to the species count.
-    const uniqueSpecies = new Set(
-      sightings.filter(s => !isCustomSpecies(s.birdName)).map(s => s.birdName)
-    ).size;
-    return { totalSightings, uniqueSpecies };
-  }, [searchQuery, filterByFriend]);
+  // Search is active (replaces the feed with a full-page birder list) the
+  // moment there's any query text.
+  const searching = searchQuery.trim().length > 0;
 
   const openSearchModal = () => setIsSearchModalVisible(true);
 
@@ -181,15 +162,53 @@ export default function FriendsScreen() {
     }
   };
 
-  // Close the friend-filter dropdown without picking anyone.
-  const dismissFriendDropdown = () => {
-    if (blurCloseTimerRef.current) {
-      clearTimeout(blurCloseTimerRef.current);
-      blurCloseTimerRef.current = null;
+  // Debounced birder search (≥2 chars) so typing surfaces people to visit,
+  // including public strangers. Each result is enriched with its follow state,
+  // then (lazily, after the rows render) with the person's species count.
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setBirderResults([]);
+      setIsSearchingBirders(false);
+      return;
     }
-    setShowFriendsList(false);
+    let cancelled = false;
+    setIsSearchingBirders(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchUsers(q);
+        const withFollow = await Promise.all(
+          results.map(async (u) => ({ ...u, isFollowing: await isFollowing(u.uid) }))
+        );
+        if (cancelled) return;
+        setBirderResults(withFollow);
+        setIsSearchingBirders(false);
+        // Fill in species counts in the background — the rows show immediately
+        // and the "{N} species" line populates as each fetch resolves.
+        withFollow.forEach(async (u) => {
+          try {
+            const theirs = await getSightingsByUid(u.uid);
+            const count = speciesSet(theirs).size;
+            if (!cancelled) {
+              setBirderResults(prev => prev.map(r => r.uid === u.uid ? { ...r, speciesCount: count } : r));
+            }
+          } catch {
+            /* leave speciesCount undefined on failure */
+          }
+        });
+      } catch (error) {
+        console.error('Birder search failed:', error);
+        if (!cancelled) { setBirderResults([]); setIsSearchingBirders(false); }
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [searchQuery]);
+
+  // Navigate into a profile. Keep the query intact so back returns to results.
+  const goToProfile = (uid: string) => {
     searchInputRef.current?.blur();
     Keyboard.dismiss();
+    router.push(`/profile/${uid}`);
   };
 
   // Keep a live map of the current user's per-friend notification modes.
@@ -220,169 +239,128 @@ export default function FriendsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.headerSection}>
+        {/* Title + search on one row — search is right-aligned and fills the
+            space left of it. */}
         <View style={styles.titleRow}>
           <Text style={styles.title}>Friends</Text>
-          <HardShadow offset={3} borderRadius={radius.pill}>
-            <Pressable
-              style={({ pressed }) => [styles.addButton, pressed && { backgroundColor: palette.inkSoft }]}
-              onPress={openSearchModal}
-            >
-              <Ionicons name="person-add" size={14} color={palette.cream} />
-              <Text style={styles.addButtonText}>Add</Text>
-            </Pressable>
+          <HardShadow offset={4} borderRadius={radius.input} style={styles.searchShadow}>
+            <View style={styles.searchContainer}>
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                placeholder="Search birders…"
+                placeholderTextColor={palette.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+              />
+              {searchQuery.length > 0 ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSearchQuery('');
+                    searchInputRef.current?.focus();
+                  }}
+                  style={styles.searchTrailing}
+                >
+                  <Ionicons name="close-circle" size={20} color={palette.inkSoft} />
+                </TouchableOpacity>
+              ) : (
+                <Ionicons name="search" size={18} color={palette.inkSoft} style={styles.searchTrailing} />
+              )}
+            </View>
           </HardShadow>
         </View>
 
-        {/* Feed mode toggle: friends' sightings vs everyone's feedback */}
-        <View style={styles.feedPillsRow}>
-          <Pressable
-            style={[styles.feedPill, feedMode === 'sightings' && styles.feedPillActive]}
-            onPress={() => setFeedMode('sightings')}
-          >
-            <Ionicons
-              name="leaf"
-              size={14}
-              color={feedMode === 'sightings' ? palette.cream : palette.ink}
-            />
-            <Text style={[styles.feedPillText, feedMode === 'sightings' && styles.feedPillTextActive]}>
-              Sightings
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.feedPill, feedMode === 'feedback' && styles.feedPillActive]}
-            onPress={() => setFeedMode('feedback')}
-          >
-            <Ionicons
-              name="chatbox-ellipses"
-              size={14}
-              color={feedMode === 'feedback' ? palette.cream : palette.ink}
-            />
-            <Text style={[styles.feedPillText, feedMode === 'feedback' && styles.feedPillTextActive]}>
-              Hep
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Friends filter search */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={18} color={palette.inkSoft} style={styles.searchIcon} />
-          <TextInput
-            ref={searchInputRef}
-            style={styles.searchInput}
-            placeholder="Filter by friend..."
-            placeholderTextColor={palette.muted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onFocus={() => {
-              if (blurCloseTimerRef.current) {
-                clearTimeout(blurCloseTimerRef.current);
-                blurCloseTimerRef.current = null;
-              }
-              setShowFriendsList(true);
-            }}
-            onBlur={() => {
-              // Delay so taps inside the dropdown (friend row, X button) can
-              // refocus the input before the dropdown disappears. onFocus
-              // cancels the timer if a refocus happens first.
-              blurCloseTimerRef.current = setTimeout(() => {
-                setShowFriendsList(false);
-                blurCloseTimerRef.current = null;
-              }, 150);
-            }}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => {
-                setSearchQuery('');
-                // User is still in search mode — keep the dropdown open and
-                // the input focused so they can pick another friend or type
-                // a new filter. Refocusing also cancels any pending blur-close.
-                searchInputRef.current?.focus();
-              }}
-              style={styles.clearButton}
+        {/* Feed mode toggle: friends' sightings vs everyone's feedback.
+            Hidden while searching — search takes over the whole page. */}
+        {!searching && (
+          <View style={styles.feedPillsRow}>
+            <Pressable
+              style={[styles.feedPill, feedMode === 'sightings' && styles.feedPillActive]}
+              onPress={() => setFeedMode('sightings')}
             >
-              <Ionicons name="close-circle" size={20} color={palette.inkSoft} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Friend stats panel — shown when a friend is selected */}
-        {friendStats && (
-          <View style={styles.statsWrap}>
-            <HardShadow borderRadius={radius.card}>
-              <View style={styles.statsPanel}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{friendStats.totalSightings}</Text>
-                  <Text style={styles.statLabel}>Sightings</Text>
-                </View>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                  <Text style={styles.statValue}>{friendStats.uniqueSpecies}</Text>
-                  <Text style={styles.statLabel}>Species</Text>
-                </View>
-              </View>
-            </HardShadow>
-          </View>
-        )}
-
-        {/* Friends list dropdown */}
-        {showFriendsList && (
-          <View style={styles.friendsListWrap}>
-            <HardShadow borderRadius={radius.card}>
-              <View style={styles.friendsList}>
-                <Pressable style={styles.dropdownHeader} onPress={dismissFriendDropdown}>
-                  <Text style={styles.dropdownHeaderLabel}>FRIENDS</Text>
-                  <View style={styles.dropdownCloseRow}>
-                    <Text style={styles.dropdownCloseText}>Close</Text>
-                    <Ionicons name="chevron-up" size={16} color={palette.inkSoft} />
-                  </View>
-                </Pressable>
-                {isLoadingFriends ? (
-                  <View style={styles.loadingRow}>
-                    <ActivityIndicator size="small" color={palette.leaf} />
-                    <Text style={styles.loadingText}>Loading friends...</Text>
-                  </View>
-                ) : (
-                  <FlatList
-                    data={filteredFriends}
-                    keyExtractor={(item) => item.id}
-                    keyboardShouldPersistTaps="handled"
-                    renderItem={({ item }) => (
-                      <View style={styles.friendRow}>
-                        <Pressable
-                          style={styles.friendRowContent}
-                          onPress={() => {
-                            Keyboard.dismiss();
-                            setSearchQuery(item.name);
-                            setShowFriendsList(false);
-                          }}
-                        >
-                          <Avatar name={item.name} seed={item.id} size={36} />
-                          <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.bellButton}
-                          onPress={() => setPrefPickerFor({ uid: item.id, name: item.name })}
-                        >
-                          <Ionicons {...bellIconProps(modeFor(item.id))} size={18} />
-                        </Pressable>
-                      </View>
-                    )}
-                    ListEmptyComponent={
-                      <Text style={styles.emptyText}>
-                        {searchQuery ? 'No friends match your search' : "You're not following anyone yet"}
-                      </Text>
-                    }
-                  />
-                )}
-              </View>
-            </HardShadow>
+              <Ionicons
+                name="leaf"
+                size={14}
+                color={feedMode === 'sightings' ? palette.cream : palette.ink}
+              />
+              <Text style={[styles.feedPillText, feedMode === 'sightings' && styles.feedPillTextActive]}>
+                Sightings
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.feedPill, feedMode === 'feedback' && styles.feedPillActive]}
+              onPress={() => setFeedMode('feedback')}
+            >
+              <Ionicons
+                name="chatbox-ellipses"
+                size={14}
+                color={feedMode === 'feedback' ? palette.cream : palette.ink}
+              />
+              <Text style={[styles.feedPillText, feedMode === 'feedback' && styles.feedPillTextActive]}>
+                Hep
+              </Text>
+            </Pressable>
           </View>
         )}
       </View>
 
-      {/* Feed: sightings (day-grouped) or feedback (flat) / empty / loading */}
-      {isLoadingFriends && !isRefreshing ? (
+      {/* Search active → full-page birder results, replacing the feed */}
+      {searching ? (
+        searchQuery.trim().length < 2 ? (
+          <View style={styles.searchHintWrap}>
+            <Text style={styles.searchHintText}>Keep typing to find birders…</Text>
+          </View>
+        ) : isSearchingBirders ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={palette.leaf} />
+            <Text style={styles.loadingText}>Searching birders...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={birderResults}
+            keyExtractor={(item) => item.uid}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.searchResultsContent}
+            ListHeaderComponent={
+              birderResults.length > 0 ? (
+                <Text style={styles.resultCount}>
+                  {birderResults.length} {birderResults.length === 1 ? 'BIRDER' : 'BIRDERS'}
+                </Text>
+              ) : null
+            }
+            renderItem={({ item }) => (
+              <Pressable style={styles.birderRow} onPress={() => goToProfile(item.uid)}>
+                <Avatar name={item.username} seed={item.uid} size={48} round />
+                <View style={styles.birderInfo}>
+                  <Text style={styles.birderName} numberOfLines={1}>{item.username}</Text>
+                  <View style={styles.birderMetaRow}>
+                    <Text style={styles.birderHandle} numberOfLines={1}>@{item.username.toLowerCase()}</Text>
+                    {typeof item.speciesCount === 'number' && (
+                      <>
+                        <Text style={styles.birderDot}>·</Text>
+                        <Text style={styles.birderSpecies}>{item.speciesCount} species</Text>
+                      </>
+                    )}
+                    {!item.isFollowing && (
+                      <Text style={styles.notFollowingTag}>NOT FOLLOWING</Text>
+                    )}
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={palette.muted} />
+              </Pressable>
+            )}
+            ListEmptyComponent={
+              <View style={styles.searchHintWrap}>
+                <Text style={styles.searchHintText}>No birders found for “{searchQuery.trim()}”.</Text>
+              </View>
+            }
+          />
+        )
+      ) : isLoadingFriends && !isRefreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={palette.leaf} />
           <Text style={styles.loadingText}>Loading friend activity...</Text>
@@ -619,7 +597,7 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: space.md,
     marginBottom: space.md,
   },
   title: {
@@ -677,8 +655,10 @@ const styles = StyleSheet.create({
     color: palette.cream,
   },
 
-  // Avatar
-  // Search bar
+  // Search bar — fills the row to the right of the title
+  searchShadow: {
+    flex: 1,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -686,10 +666,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.input,
     paddingHorizontal: space.md,
     ...border.thick,
-    marginBottom: space.md,
   },
   searchIcon: {
     marginRight: space.sm,
+  },
+  searchTrailing: {
+    marginLeft: space.sm,
   },
   searchInput: {
     flex: 1,
@@ -794,6 +776,85 @@ const styles = StyleSheet.create({
   },
   bellButton: {
     padding: 6,
+  },
+
+  // Full-page birder search results
+  searchResultsContent: {
+    paddingBottom: space.xl,
+  },
+  resultCount: {
+    ...type.mono,
+    color: palette.inkSoft,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    paddingHorizontal: space.xl,
+    paddingTop: space.sm,
+    paddingBottom: space.xs,
+  },
+  searchHintWrap: {
+    paddingHorizontal: space.xl,
+    paddingTop: space.xl,
+    alignItems: 'center',
+  },
+  searchHintText: {
+    ...type.body,
+    color: palette.inkSoft,
+    textAlign: 'center',
+  },
+  birderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.rule,
+  },
+  birderInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  birderName: {
+    fontFamily: font.display,
+    fontSize: 18,
+    fontWeight: '700',
+    color: palette.ink,
+    letterSpacing: -0.4,
+  },
+  birderMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 3,
+    flexWrap: 'wrap',
+  },
+  birderHandle: {
+    fontFamily: font.mono,
+    fontSize: 11,
+    color: palette.inkSoft,
+    flexShrink: 1,
+  },
+  birderDot: {
+    color: palette.muted,
+  },
+  birderSpecies: {
+    fontFamily: font.bodyBold,
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: palette.leaf,
+  },
+  notFollowingTag: {
+    fontFamily: font.mono,
+    fontSize: 9,
+    color: palette.inkSoft,
+    letterSpacing: 0.5,
+    backgroundColor: palette.cream,
+    borderWidth: 1,
+    borderColor: palette.rule,
+    borderRadius: radius.pill,
+    paddingVertical: 1,
+    paddingHorizontal: 6,
+    overflow: 'hidden',
   },
 
   // Loading + empty

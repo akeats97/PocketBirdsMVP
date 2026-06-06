@@ -14,14 +14,14 @@ import { font, palette, radius, space } from '../../constants/Colors';
 import { milestoneTagline } from '../constants/milestones';
 
 const SCREEN = Dimensions.get('window');
-const PIECE_COUNT = 45;
+export const PIECE_COUNT = 45;
 const CONFETTI_COLORS = [palette.leaf, palette.sun, palette.sky, palette.coral, palette.crimson];
 
 type ConfettiPieceProps = {
   index: number;
 };
 
-function ConfettiPiece({ index }: ConfettiPieceProps) {
+export function ConfettiPiece({ index }: ConfettiPieceProps) {
   const cfg = useRef({
     startX: Math.random() * SCREEN.width,
     driftX: (Math.random() - 0.5) * 120,

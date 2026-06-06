@@ -224,6 +224,42 @@ export async function getUserByUsername(username: string): Promise<User | null> 
   }
 }
 
+// Public profile for any user (friend, stranger, or self). Reads users/{uid}
+// (allowed for any signed-in user by the Firestore rules) and resolves a join
+// date from `createdAt`. If that field is missing (older accounts), the caller
+// can fall back to the earliest sighting date via `fallbackJoinDate`.
+export interface PublicProfile {
+  uid: string;
+  username: string;
+  joinDate: Date | null;
+}
+
+export async function getPublicProfile(
+  uid: string,
+  fallbackJoinDate?: Date | null,
+): Promise<PublicProfile | null> {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', uid));
+    if (!userDoc.exists()) {
+      return null;
+    }
+    const data = userDoc.data();
+    // createdAt is a Firestore Timestamp on accounts created after the field
+    // was added (May 2026); older accounts have no createdAt at all.
+    const createdAt: Date | null =
+      data.createdAt?.toDate?.() ??
+      (data.createdAt ? new Date(data.createdAt) : null);
+    return {
+      uid,
+      username: data.username,
+      joinDate: createdAt ?? fallbackJoinDate ?? null,
+    };
+  } catch (error) {
+    console.error(`Error getting public profile for ${uid}:`, error);
+    return null;
+  }
+}
+
 // Add this function to save push token
 export async function savePushToken(pushToken: string): Promise<void> {
   const currentUser = auth.currentUser;

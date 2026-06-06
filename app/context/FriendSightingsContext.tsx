@@ -175,6 +175,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
                 date: data.date.toDate(),
                 notes: data.notes,
                 friendName: usernameMap[userId],
+                friendId: userId,
                 syncStatus: 'synced' as const,
                 lastModified: data.lastModified ? data.lastModified.toDate() : data.date.toDate(),
                 photoUrl: data.photoUrl || undefined,

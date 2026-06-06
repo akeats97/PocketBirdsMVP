@@ -29,6 +29,10 @@ interface SightingsContextType {
   syncSightings: () => Promise<void>;
   clearLocalData: () => Promise<void>;
   isNewSpeciesForUser: (birdName: string, sightingDate: Date) => boolean;
+  // Flag the user's just-logged sighting of this species as a global first (no
+  // one on PocketBirds had it before). The flag rides the normal sync up to
+  // Firestore (the sighting is still 'pending' at this point).
+  markGlobalFirst: (birdName: string) => void;
 }
 
 const SightingsContext = createContext<SightingsContextType | undefined>(undefined);
@@ -482,6 +486,21 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const markGlobalFirst = (birdName: string) => {
+    const key = birdName.toLowerCase();
+    setSightings(prev => {
+      let changed = false;
+      const next = prev.map(s => {
+        if (s.birdName.toLowerCase() === key && !s.globalFirst) {
+          changed = true;
+          return { ...s, globalFirst: true };
+        }
+        return s;
+      });
+      return changed ? next : prev;
+    });
+  };
+
   const isNewSpeciesForUser = (birdName: string, sightingDate: Date): boolean => {
     // Find all sightings of this species
     const speciesSightings = sightings.filter(s => 
@@ -506,7 +525,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, deleteSighting, syncSightings, clearLocalData, isNewSpeciesForUser }}>
+    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, deleteSighting, syncSightings, clearLocalData, isNewSpeciesForUser, markGlobalFirst }}>
       {children}
     </SightingsContext.Provider>
   );

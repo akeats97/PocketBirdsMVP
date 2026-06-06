@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { Sighting } from '../types';
 
@@ -38,6 +38,10 @@ export async function addSightingToFirebase(sighting: Sighting): Promise<string>
 
     if (typeof sighting.milestoneCrossed === 'number') {
       firestoreSighting.milestoneCrossed = sighting.milestoneCrossed;
+    }
+
+    if (sighting.globalFirst) {
+      firestoreSighting.globalFirst = true;
     }
 
     console.log(`🦅 Adding sighting to Firebase: ${sighting.birdName} at ${sighting.location}`);
@@ -90,6 +94,7 @@ export async function getUserSightingsFromFirebase(): Promise<Sighting[]> {
         commentCount: data.commentCount ?? 0,
         recentHooters: data.recentHooters ?? [],
         topComment: data.topComment ?? undefined,
+        globalFirst: data.globalFirst ?? false,
       };
       if (data.coordinates) {
         sighting.coordinates = {
@@ -108,6 +113,67 @@ export async function getUserSightingsFromFirebase(): Promise<Sighting[]> {
     console.error('Error getting user sightings from Firebase:', error);
     throw error;
   }
+}
+
+// Get any user's sightings by uid (for public profiles). Unlike
+// getUserSightingsFromFirebase (which is scoped to the signed-in user via a
+// live cache path), this is a one-shot read of another person's list — used
+// when you navigate into their profile. Firestore rules allow any signed-in
+// user to read the `sightings` collection.
+export async function getSightingsByUid(uid: string): Promise<Sighting[]> {
+  try {
+    const sightingsRef = collection(db, 'sightings');
+    const q = query(
+      sightingsRef,
+      where('userId', '==', uid),
+      orderBy('date', 'desc')
+    );
+
+    const querySnapshot = await getDocs(q);
+
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      const sighting: Sighting = {
+        id: doc.id,
+        birdName: data.birdName,
+        location: data.location,
+        date: data.date?.toDate?.() ?? new Date(data.date),
+        notes: data.notes,
+        photoUrl: data.photoUrl || undefined,
+        lastModified: data.lastModified?.toDate?.() ?? new Date(),
+        syncStatus: 'synced',
+        hootCount: data.hootCount ?? 0,
+        commentCount: data.commentCount ?? 0,
+        recentHooters: data.recentHooters ?? [],
+        topComment: data.topComment ?? undefined,
+        globalFirst: data.globalFirst ?? false,
+      };
+      if (data.coordinates) {
+        sighting.coordinates = {
+          latitude: data.coordinates.latitude,
+          longitude: data.coordinates.longitude,
+          accuracy: data.coordinates.accuracy ?? undefined,
+          capturedAt: data.coordinates.capturedAt?.toDate?.() ?? undefined,
+        };
+      }
+      return sighting;
+    });
+  } catch (error) {
+    console.error(`Error getting sightings for uid ${uid}:`, error);
+    throw error;
+  }
+}
+
+// Has ANY PocketBirds user ever logged this species? Returns true if no
+// matching sighting exists yet — i.e. the caller would be the global first.
+// Matches on exact birdName (canonical names come from the IOC picker, so
+// casing is consistent). Best effort: requires connectivity; throws on failure
+// so callers can default to "not first".
+export async function isGlobalFirstSpecies(birdName: string): Promise<boolean> {
+  const sightingsRef = collection(db, 'sightings');
+  const q = query(sightingsRef, where('birdName', '==', birdName), limit(1));
+  const snap = await getDocs(q);
+  return snap.empty;
 }
 
 // Update a sighting in Firebase
@@ -139,6 +205,9 @@ export async function updateSightingInFirebase(sighting: Sighting): Promise<void
       photoUrl: sighting.photoUrl || null,
       lastModified: Timestamp.fromDate(sighting.lastModified)
     };
+    if (sighting.globalFirst) {
+      updatePayload.globalFirst = true;
+    }
     if (sighting.coordinates) {
       updatePayload.coordinates = {
         latitude: sighting.coordinates.latitude,
@@ -196,6 +265,7 @@ export async function deleteSightingFromFirebase(sightingId: string): Promise<vo
 const sightingService = {
   addSightingToFirebase,
   getUserSightingsFromFirebase,
+  getSightingsByUid,
   updateSightingInFirebase,
   deleteSightingFromFirebase
 };

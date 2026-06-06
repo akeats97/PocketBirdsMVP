@@ -71,6 +71,10 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
               <Text style={styles.birdName} numberOfLines={2}>{sighting.birdName}</Text>
             </View>
 
+            {/* TODO (global-first): when sighting.globalFirst is true, show a
+                special "FIRST ON POCKET BIRDS" pill here (design TBD). The flag
+                already exists on the sighting; only the pill UI is pending.
+                See WORK_QUEUE Q-3. */}
             {isNewSpecies && (
               <View style={recipes.liferBadge}>
                 <Ionicons name="star" size={9} color="#fff" />

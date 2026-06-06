@@ -13,7 +13,7 @@ import { useWishlist } from '../context/WishlistContext';
 
 type FilterMode = 'all' | 'seen' | 'wishlist';
 
-type SeenInfo = { timesSeen: number; lastSeen: string; hasPhoto: boolean };
+type SeenInfo = { timesSeen: number; lastSeen: string; hasPhoto: boolean; isGlobalFirst: boolean };
 type RowItem = string[];
 type Section = { title: string; data: RowItem[]; familySeen: number; familyTotal: number };
 
@@ -81,11 +81,12 @@ export default function DexScreen() {
       // total above) but have no identified species, so they never get a Dex
       // tile or feed into the species / photographed counts.
       if (isUnknownEntry(s.birdName)) return;
-      const entry = map[s.birdName] || { timesSeen: 0, lastSeen: '', hasPhoto: false };
+      const entry = map[s.birdName] || { timesSeen: 0, lastSeen: '', hasPhoto: false, isGlobalFirst: false };
       entry.timesSeen += 1;
       const d = s.date.toISOString().split('T')[0];
       if (!entry.lastSeen || d > entry.lastSeen) entry.lastSeen = d;
       if (s.photoUrl) entry.hasPhoto = true;
+      if (s.globalFirst) entry.isGlobalFirst = true;
       map[s.birdName] = entry;
     });
     return map;
@@ -189,15 +190,30 @@ export default function DexScreen() {
         const seen = !!info;
         const times = info?.timesSeen ?? 0;
         const hasPhoto = info?.hasPhoto ?? false;
+        const globalFirst = info?.isGlobalFirst ?? false;
         const wished = wishlist.has(name);
         return (
-          <View key={name} style={[styles.tile, seen ? styles.tileSeen : styles.tileUnseen]}>
-            <Text
-              style={[styles.tileName, seen ? styles.tileNameSeen : styles.tileNameUnseen]}
-              numberOfLines={3}
-            >
-              {name}
-            </Text>
+          <View
+            key={name}
+            style={[styles.tile, seen ? styles.tileSeen : styles.tileUnseen]}
+          >
+            {globalFirst ? (
+              // Global first: green "seen" tile + a gold trophy marking that
+              // this user was the first on PocketBirds to log the species.
+              <View style={styles.tileNameRow}>
+                <Ionicons name="trophy" size={11} color={palette.sun} style={styles.tileTrophy} />
+                <Text style={[styles.tileName, styles.tileNameSeen, styles.tileNameFlex]} numberOfLines={3}>
+                  {name}
+                </Text>
+              </View>
+            ) : (
+              <Text
+                style={[styles.tileName, seen ? styles.tileNameSeen : styles.tileNameUnseen]}
+                numberOfLines={3}
+              >
+                {name}
+              </Text>
+            )}
             <Pressable
               onPress={() => toggleWishlist(name)}
               style={styles.starButton}
@@ -559,6 +575,20 @@ const styles = StyleSheet.create({
     lineHeight: 13.2,
     letterSpacing: -0.3,
     paddingRight: 22,
+  },
+  // Global-first tiles render the name in a row beside a small gold trophy.
+  tileNameRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingRight: 22,
+  },
+  tileTrophy: {
+    marginRight: 3,
+    marginTop: 1,
+  },
+  tileNameFlex: {
+    flex: 1,
+    paddingRight: 0,
   },
   starButton: {
     position: 'absolute',

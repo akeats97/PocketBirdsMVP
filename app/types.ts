@@ -21,6 +21,13 @@ export interface Sighting {
   // reads this to send a richer push notification to followers.
   milestoneCrossed?: number;
 
+  // True if, at log time, NO other PocketBirds user had ever logged this
+  // species — i.e. the logger was the first birder on the whole app to record
+  // it. Determined by a one-shot query when the sighting is created (best
+  // effort; a tie between two simultaneous loggers can flag both). Drives the
+  // special Dex tile color + the "first on Pocket Birds" celebration.
+  globalFirst?: boolean;
+
   // Social engagement, denormalized onto the sighting doc and maintained
   // server-side by Cloud Functions (see Hoot & Comments data model). Missing
   // is treated as zero/empty on older sightings.
@@ -33,6 +40,7 @@ export interface Sighting {
 export interface FriendSighting extends Sighting {
   friendName: string;
   friendAvatar?: string;
+  friendId?: string; // poster's uid — lets the feed tag link to their profile
 }
 
 // Adding a default export to fix the warning

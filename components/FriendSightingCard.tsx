@@ -14,6 +14,8 @@ import { SocialFooter } from './social/SocialFooter';
 interface FriendSightingCardProps {
   sighting: FriendSighting;
   isFirstSighting?: boolean;
+  /** Hide the friend name tag (e.g. on a profile, where the owner is implied). */
+  hideTag?: boolean;
 }
 
 // "Victoria, Marco & 10 others hooted" — first two hooter names bold, rest
@@ -44,7 +46,7 @@ function formatRelativeDate(date: Date): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function FriendSightingCard({ sighting, isFirstSighting }: FriendSightingCardProps) {
+export default function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSightingCardProps) {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [showHootList, setShowHootList] = useState(false);
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -73,21 +75,31 @@ export default function FriendSightingCard({ sighting, isFirstSighting }: Friend
         )}
 
         <Pressable style={styles.body} onPress={openDetail}>
-          {/* Friend tag */}
-          <View style={styles.friendTagRow}>
-            <View style={styles.friendTag}>
-              <Ionicons name="person" size={10} color={palette.ink} />
-              <Text style={styles.friendTagText} numberOfLines={1}>
-                {sighting.friendName.toUpperCase()}
-              </Text>
+          {/* Friend tag — tappable, links to the poster's profile */}
+          {!hideTag && (
+            <View style={styles.friendTagRow}>
+              <Pressable
+                style={({ pressed }) => [styles.friendTag, pressed && sighting.friendId && { backgroundColor: palette.sky }]}
+                onPress={() => sighting.friendId && router.push(`/profile/${sighting.friendId}`)}
+                disabled={!sighting.friendId}
+                hitSlop={6}
+              >
+                <Ionicons name="person" size={10} color={palette.ink} />
+                <Text style={styles.friendTagText} numberOfLines={1}>
+                  {sighting.friendName.toUpperCase()}
+                </Text>
+              </Pressable>
             </View>
-          </View>
+          )}
 
           <View style={styles.headerRow}>
             <View style={styles.nameBlock}>
               <Text style={styles.birdName} numberOfLines={2}>{sighting.birdName}</Text>
             </View>
 
+            {/* TODO (global-first): when sighting.globalFirst is true, show a
+                special "FIRST ON POCKET BIRDS" pill here (design TBD).
+                See WORK_QUEUE Q-3. */}
             {isFirstSighting && (
               <View style={recipes.liferBadge}>
                 <Ionicons name="star" size={9} color="#fff" />

@@ -1,11 +1,10 @@
 // Species-count milestones that trigger a celebration:
-// 5, 10, 25, 50, 100, 150, 200, ...
-// (the "fives" tier early on, then every 50 from 50 onward)
+// 1, 5, 10, 25, 50, 100, 150, 200, ...
+// (your very first bird, then the "fives" tier early on, then every 50 from 50 onward)
 
-const EARLY = new Set<number>([5, 10, 25]);
+const EARLY = new Set<number>([1, 5, 10, 25]);
 
 export function isMilestone(count: number): boolean {
-  if (count < 5) return false;
   if (EARLY.has(count)) return true;
   return count >= 50 && count % 50 === 0;
 }
@@ -14,8 +13,9 @@ export function isMilestone(count: number): boolean {
 // for any milestone past the curated tier.
 export function milestoneTagline(count: number): string {
   switch (count) {
-    case 5:   return 'Five species! Birding is officially happening.';
-    case 10:  return 'Double digits! ✨';
+    case 1:   return "You're officially a birder!";
+    case 5:   return 'This is getting out of hand!';
+    case 10:  return 'Mamma mia pizzeria!';
     case 25:  return 'Quarter-century of birds!';
     case 50:  return 'Fifty species! 🪶';
     case 100: return 'Century club! 💯';
