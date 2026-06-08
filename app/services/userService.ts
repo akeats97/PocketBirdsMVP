@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { NEW_FOLLOW_MODE, setPref } from './notificationPrefsService';
 
@@ -165,6 +165,104 @@ export async function getFollowing(): Promise<UserProfile[]> {
   } catch (error) {
     console.error('Error getting following list:', error);
     return [];
+  }
+}
+
+// ─── Follow graph (followers + following for any user) ──────────────────────
+//
+// The graph is stored one-directional: each edge is a doc at
+// following/{followerUid}/following/{followedUid}. There is no reverse index,
+// so to find a user's FOLLOWERS we scan the whole `following` collection group
+// (the follower is the edge's grandparent doc id, the followed is its doc id).
+// This reads every edge in the app per call — fine at our scale (a handful of
+// users); revisit with a denormalized followers mirror past a few thousand
+// follows (same posture as searchUsers scanning the whole usernames collection).
+
+// A person as shown in a follow list / counts row.
+export interface Person {
+  uid: string;
+  username: string;
+}
+
+interface FollowEdge {
+  follower: string;
+  followed: string;
+}
+
+// One collection-group read of every follow edge in the app.
+async function getAllFollowEdges(): Promise<FollowEdge[]> {
+  const snap = await getDocs(collectionGroup(db, 'following'));
+  const edges: FollowEdge[] = [];
+  snap.forEach((d) => {
+    // following/{followerUid}/following/{followedUid}: the follower is the
+    // grandparent doc. Skip any stray top-level following/{uid} docs (no parent).
+    const followerDoc = d.ref.parent.parent;
+    if (!followerDoc) return;
+    edges.push({ follower: followerDoc.id, followed: d.id });
+  });
+  return edges;
+}
+
+// Resolve uid → username (from users/{uid}) for a batch of uids.
+async function resolveUsernames(uids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(uids)];
+  const map = new Map<string, string>();
+  await Promise.all(
+    unique.map(async (uid) => {
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      map.set(uid, userDoc.exists() ? (userDoc.data().username ?? '') : '');
+    }),
+  );
+  return map;
+}
+
+// Follower / following counts for any user — the numbers the profile shows.
+// Equals the length of the lists getConnections returns, so they always match.
+export async function getFollowCounts(
+  uid: string,
+): Promise<{ followers: number; following: number }> {
+  try {
+    const edges = await getAllFollowEdges();
+    let followers = 0;
+    let following = 0;
+    for (const e of edges) {
+      if (e.followed === uid) followers++;
+      if (e.follower === uid) following++;
+    }
+    return { followers, following };
+  } catch (error) {
+    console.error('Error getting follow counts:', error);
+    return { followers: 0, following: 0 };
+  }
+}
+
+// Full followers + following lists for `targetUid`, plus the set of uids that
+// `myUid` follows (used to seed each row's Follow / Following pill). One graph
+// scan + a username resolve.
+export async function getConnections(
+  targetUid: string,
+  myUid: string,
+): Promise<{ followers: Person[]; following: Person[]; myFollowing: Set<string> }> {
+  try {
+    const edges = await getAllFollowEdges();
+    const followerUids: string[] = [];
+    const followingUids: string[] = [];
+    const myFollowing = new Set<string>();
+    for (const e of edges) {
+      if (e.followed === targetUid) followerUids.push(e.follower);
+      if (e.follower === targetUid) followingUids.push(e.followed);
+      if (e.follower === myUid) myFollowing.add(e.followed);
+    }
+    const names = await resolveUsernames([...followerUids, ...followingUids]);
+    const toPerson = (uid: string): Person => ({ uid, username: names.get(uid) ?? '' });
+    return {
+      followers: followerUids.map(toPerson),
+      following: followingUids.map(toPerson),
+      myFollowing,
+    };
+  } catch (error) {
+    console.error('Error getting connections:', error);
+    return { followers: [], following: [], myFollowing: new Set<string>() };
   }
 }
 

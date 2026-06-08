@@ -61,6 +61,15 @@ service cloud.firestore {
       allow write: if isSignedIn() && followerUid == myUid();
     }
 
+    // Collection-group read over `following` so a signed-in user can query the
+    // whole graph (getConnections / getFollowCounts derive a user's FOLLOWERS
+    // from it — there's no reverse index). Read-only; writes stay gated by the
+    // path rule above. Collection-group queries require this recursive-wildcard
+    // match in addition to the fixed path rule.
+    match /{path=**}/following/{followedUid} {
+      allow read: if isSignedIn();
+    }
+
     // Sightings (and the bug-report / feature-request entries that ride the
     // same pipeline). Owner-only writes; any signed-in user may read (the app
     // shows friends' sightings and filters by the follow graph client-side).

@@ -1,1 +1,1 @@
-export const CURRENT_RELEASE_NAME = 'Snowcap';
+export const CURRENT_RELEASE_NAME = 'Antwren';

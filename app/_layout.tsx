@@ -19,7 +19,7 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { signOut, User } from 'firebase/auth';
+import { User } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import { Alert, Platform, StatusBar, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -28,14 +28,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../config/firebaseConfig';
 import { palette } from '../constants/Colors';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
+import { Avatar } from '../components/social/Avatar';
 import ActivityProvider, { useActivity } from './context/ActivityContext';
 import FriendSightingsProvider from './context/FriendSightingsContext';
 import HootsProvider from './context/HootsContext';
-import { SightingsProvider, useSightings } from './context/SightingsContext';
+import { SightingsProvider } from './context/SightingsContext';
 import { WishlistProvider } from './context/WishlistContext';
 import LoginScreen from '../components/LoginScreen';
 import { notificationService } from './services/notificationService';
-import { savePushToken } from './services/userService';
+import { getCurrentUserProfile, savePushToken } from './services/userService';
 
 console.log('ROOT LAYOUT: Firebase imported'); //just for bug testing
 
@@ -104,37 +105,14 @@ function HeaderBell() {
 
 // Authenticated App Component
 function AuthenticatedApp() {
-  const { clearLocalData } = useSightings();
-  
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('Starting logout process...');
-              await clearLocalData();
-              console.log('Local data cleared');
-              await signOut(auth);
-              console.log('Firebase signOut completed');
-              // No navigation needed - auth state change will handle UI update
-            } catch (error) {
-              console.error('Error signing out:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          },
-        },
-      ]
-    );
-  };
+  // The header avatar (top-right) opens your own profile, where Log out now
+  // lives. Fetch your username/uid once to render the avatar initial.
+  const [me, setMe] = useState<{ uid: string; username: string } | null>(null);
+  useEffect(() => {
+    getCurrentUserProfile().then((p) => {
+      if (p) setMe({ uid: p.uid, username: p.username });
+    });
+  }, []);
 
   useEffect(() => {
     const registerForNotifications = async () => {
@@ -238,22 +216,17 @@ function AuthenticatedApp() {
               },
               headerShadowVisible: false,
               headerRight: () => (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 }}>
                   <HeaderBell />
-                  <TouchableOpacity
-                    onPress={handleLogout}
-                    style={{
-                      padding: 8,
-                      minWidth: 40,
-                      minHeight: 40,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      borderRadius: 8,
-                    }}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Ionicons name="log-out-outline" size={24} color={palette.ink} />
-                  </TouchableOpacity>
+                  {me && (
+                    <TouchableOpacity
+                      onPress={() => router.push(`/profile/${me.uid}`)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityLabel="Your profile"
+                    >
+                      <Avatar name={me.username} seed={me.uid} size={32} />
+                    </TouchableOpacity>
+                  )}
                 </View>
               ),
             }}
@@ -263,6 +236,7 @@ function AuthenticatedApp() {
           <Stack.Screen name="activity" options={{ headerShown: false }} />
           <Stack.Screen name="profile/[uid]" options={{ headerShown: false }} />
           <Stack.Screen name="profile/[uid]/compare" options={{ headerShown: false }} />
+          <Stack.Screen name="profile/[uid]/connections" options={{ headerShown: false }} />
         </Stack>
       </SafeAreaView>
     </ThemeProvider>

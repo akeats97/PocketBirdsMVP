@@ -3,15 +3,17 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { signOut } from 'firebase/auth';
 import CompareCard from '../../components/compare/CompareCard';
 import FriendSightingCard from '../../components/FriendSightingCard';
 import { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
+import { SocialCounts, ConnectionTab } from '../../components/social/SocialCounts';
 import { auth } from '../../config/firebaseConfig';
 import { font, palette, radius, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
 import { useSightings } from '../context/SightingsContext';
-import { followUser, getPublicProfile, isFollowing, PublicProfile, unfollowUser } from '../services/userService';
+import { followUser, getFollowCounts, getPublicProfile, isFollowing, PublicProfile, unfollowUser } from '../services/userService';
 import { getSightingsByUid } from '../services/sightingService';
 import { FriendSighting, Sighting } from '../types';
 import { sightingCount, speciesSet } from '../utils/compareLists';
@@ -41,7 +43,7 @@ export default function ProfileScreen() {
   const myUid = auth.currentUser?.uid;
   const isSelf = !!uid && uid === myUid;
 
-  const { sightings: mySightings } = useSightings();
+  const { sightings: mySightings, clearLocalData } = useSightings();
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [theirSightings, setTheirSightings] = useState<Sighting[]>([]);
@@ -49,6 +51,7 @@ export default function ProfileScreen() {
   const [following, setFollowing] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
   const [tab, setTab] = useState<Tab>('journal');
+  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
 
   // The list this profile renders: my own (live context) when self, else the
   // fetched list.
@@ -97,6 +100,14 @@ export default function ProfileScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, isSelf]);
 
+  // Follower / following counts (lengths of the lists the counts row opens).
+  // Kept separate from the main load so a follow toggle can cheaply refresh it.
+  const loadFollowCounts = React.useCallback(() => {
+    if (!uid) return;
+    getFollowCounts(uid).then(setFollowCounts).catch(() => {});
+  }, [uid]);
+  useEffect(() => { loadFollowCounts(); }, [loadFollowCounts]);
+
   const name = profile?.username ?? '';
   const since = profile?.joinDate
     ? profile.joinDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
@@ -129,6 +140,7 @@ export default function ProfileScreen() {
     try {
       if (next) await followUser(uid);
       else await unfollowUser(uid);
+      loadFollowCounts(); // their follower count just changed
     } catch (err) {
       console.error('Follow toggle failed:', err);
       setFollowing(!next); // revert
@@ -136,6 +148,28 @@ export default function ProfileScreen() {
     } finally {
       setFollowBusy(false);
     }
+  };
+
+  // Log out now lives on your own profile (the app header shows your avatar in
+  // its place). Mirrors the old header logout: clear local cache, then sign out
+  // — the root auth listener swaps the UI to the login screen.
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await clearLocalData();
+            await signOut(auth);
+          } catch (error) {
+            console.error('Error signing out:', error);
+            Alert.alert('Error', 'Failed to logout. Please try again.');
+          }
+        },
+      },
+    ]);
   };
 
   // Shared header chrome — identity, stat strip, comparison, segmented control.
@@ -157,6 +191,13 @@ export default function ProfileScreen() {
             : handleFollowToggle}
         />
       </View>
+
+      {/* Social graph — tappable Followers / Following on every profile */}
+      <SocialCounts
+        followers={followCounts.followers}
+        following={followCounts.following}
+        onOpen={(t: ConnectionTab) => router.push(`/profile/${uid}/connections?tab=${t}`)}
+      />
 
       {/* Stat strip */}
       <View style={styles.statWrap}>
@@ -202,9 +243,16 @@ export default function ProfileScreen() {
       <View style={[styles.navRow, { paddingTop: topInset + space.sm }]}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.navLeft}>
           <Ionicons name="chevron-back" size={20} color={palette.ink} />
-          <Text style={styles.navLabel}>FRIENDS</Text>
+          <Text style={styles.navLabel}>{isSelf ? 'POCKET BIRDS' : 'FRIENDS'}</Text>
         </Pressable>
-        <Ionicons name="ellipsis-horizontal" size={18} color={palette.inkSoft} />
+        {isSelf ? (
+          <Pressable onPress={handleLogout} hitSlop={8} style={styles.logoutPill}>
+            <Ionicons name="log-out-outline" size={14} color={palette.crimson} />
+            <Text style={styles.logoutText}>Log out</Text>
+          </Pressable>
+        ) : (
+          <Ionicons name="ellipsis-horizontal" size={18} color={palette.inkSoft} />
+        )}
       </View>
 
       {loading && !profile ? (
@@ -346,6 +394,24 @@ const styles = StyleSheet.create({
   },
   navLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   navLabel: { fontFamily: font.mono, fontSize: 11, color: palette.inkSoft, letterSpacing: 1 },
+  logoutPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: palette.card,
+    borderWidth: 2,
+    borderColor: palette.ink,
+    borderRadius: radius.pill,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    boxShadow: `2px 2px 0 ${palette.ink}`,
+  },
+  logoutText: {
+    fontFamily: font.display,
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: palette.crimson,
+  },
 
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scrollContent: { paddingBottom: space.xxl },
