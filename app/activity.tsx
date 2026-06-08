@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../components/social/Avatar';
 import { font, palette, radius, space, type } from '../constants/Colors';
@@ -41,7 +41,9 @@ function typeBadge(t: ActivityItem['type']): { name: keyof typeof Ionicons.glyph
 export default function ActivityScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const topInset = Platform.OS === 'android' ? insets.top : 0;
+  // Header-less screen: own the top inset on both platforms (the root
+  // SafeAreaView only insets the horizontal edges now).
+  const topInset = insets.top;
   const { items, markAllRead } = useActivity();
 
   // Opening the screen clears the unread dot.

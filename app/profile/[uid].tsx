@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
 import CompareCard from '../../components/compare/CompareCard';
@@ -38,7 +38,9 @@ export default function ProfileScreen() {
   const { uid } = useLocalSearchParams<{ uid: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const topInset = Platform.OS === 'android' ? insets.top : 0;
+  // Header-less screen: own the top inset on both platforms (the root
+  // SafeAreaView only insets the horizontal edges now).
+  const topInset = insets.top;
 
   const myUid = auth.currentUser?.uid;
   const isSelf = !!uid && uid === myUid;

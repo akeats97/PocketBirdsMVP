@@ -3,7 +3,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,7 +30,9 @@ export default function ConnectionsScreen() {
   const myUid = auth.currentUser?.uid ?? '';
 
   const insets = useSafeAreaInsets();
-  const topInset = Platform.OS === 'android' ? insets.top : 0;
+  // Header-less screen: own the top inset on both platforms (the root
+  // SafeAreaView only insets the horizontal edges now).
+  const topInset = insets.top;
 
   const [active, setActive] = useState<ConnectionTab>(
     tab === 'following' ? 'following' : 'followers',

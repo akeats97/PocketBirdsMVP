@@ -1,5 +1,4 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import {
   BricolageGrotesque_700Bold,
@@ -21,22 +20,20 @@ import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { User } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
-import { Alert, Platform, StatusBar, TouchableOpacity, View } from 'react-native';
+import { Alert, StatusBar, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../config/firebaseConfig';
 import { palette } from '../constants/Colors';
-import { CURRENT_RELEASE_NAME } from '../constants/release';
-import { Avatar } from '../components/social/Avatar';
-import ActivityProvider, { useActivity } from './context/ActivityContext';
+import ActivityProvider from './context/ActivityContext';
 import FriendSightingsProvider from './context/FriendSightingsContext';
 import HootsProvider from './context/HootsContext';
 import { SightingsProvider } from './context/SightingsContext';
 import { WishlistProvider } from './context/WishlistContext';
 import LoginScreen from '../components/LoginScreen';
 import { notificationService } from './services/notificationService';
-import { getCurrentUserProfile, savePushToken } from './services/userService';
+import { savePushToken } from './services/userService';
 
 console.log('ROOT LAYOUT: Firebase imported'); //just for bug testing
 
@@ -65,55 +62,8 @@ const theme = {
   },
 };
 
-// Header bell → opens the Activity screen, with an unread dot.
-function HeaderBell() {
-  const { unreadCount } = useActivity();
-  return (
-    <TouchableOpacity
-      onPress={() => router.push('/activity')}
-      style={{
-        marginRight: 4,
-        padding: 8,
-        minWidth: 40,
-        minHeight: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: 8,
-      }}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      accessibilityLabel={unreadCount > 0 ? `Activity, ${unreadCount} unread` : 'Activity'}
-    >
-      <Ionicons name="notifications-outline" size={24} color={palette.ink} />
-      {unreadCount > 0 && (
-        <View
-          style={{
-            position: 'absolute',
-            top: 6,
-            right: 6,
-            minWidth: 9,
-            height: 9,
-            borderRadius: 5,
-            backgroundColor: palette.coral,
-            borderWidth: 1,
-            borderColor: palette.cream,
-          }}
-        />
-      )}
-    </TouchableOpacity>
-  );
-}
-
 // Authenticated App Component
 function AuthenticatedApp() {
-  // The header avatar (top-right) opens your own profile, where Log out now
-  // lives. Fetch your username/uid once to render the avatar initial.
-  const [me, setMe] = useState<{ uid: string; username: string } | null>(null);
-  useEffect(() => {
-    getCurrentUserProfile().then((p) => {
-      if (p) setMe({ uid: p.uid, username: p.username });
-    });
-  }, []);
-
   useEffect(() => {
     const registerForNotifications = async () => {
       try {
@@ -187,50 +137,26 @@ function AuthenticatedApp() {
         backgroundColor={palette.cream}
         translucent={true}
       />
-      {/* Don't consume the bottom inset here — the tab bar (and the pushed
-          screens) apply their own bottom safe-area padding. Insetting it at the
-          root too left an empty strip below the tab bar on iOS.
-          Android omits the TOP edge too: the native-stack header and the
-          per-screen Android insets (e.g. sighting/[id]) already consume the
-          status-bar inset, so adding it at the root double-insets and shifts the
-          whole app down. iOS keeps the top edge. */}
+      {/* Don't consume the TOP or BOTTOM inset here — only the horizontal edges.
+          TOP: the native-stack header (the `(tabs)` route) reserves the status-bar
+          inset itself on BOTH platforms, and the header-LESS pushed screens
+          (sighting/[id], activity, profile) own their top inset via
+          useSafeAreaInsets. Adding 'top' here double-insets the header — it shoved
+          the iOS title bar down and clipped the bell/avatar off the right edge
+          (and did the same on Android before this was removed there).
+          BOTTOM: the tab bar (and the pushed screens) apply their own bottom
+          safe-area padding; insetting it here too left an empty strip below the
+          tab bar on iOS. */}
       <SafeAreaView
         style={{ flex: 1, backgroundColor: palette.cream }}
-        edges={Platform.OS === 'ios' ? ['top', 'left', 'right'] : ['left', 'right']}
+        edges={['left', 'right']}
       >
         <Stack>
-          <Stack.Screen
-            name="(tabs)"
-            options={{
-              headerShown: true,
-              headerBackVisible: false,
-              title: `Pocket Birds ${CURRENT_RELEASE_NAME}`,
-              headerStyle: {
-                backgroundColor: palette.cream,
-              },
-              headerTintColor: palette.ink,
-              headerTitleStyle: {
-                fontFamily: 'BricolageGrotesque_700Bold',
-                fontSize: 20,
-                color: palette.ink,
-              },
-              headerShadowVisible: false,
-              headerRight: () => (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 }}>
-                  <HeaderBell />
-                  {me && (
-                    <TouchableOpacity
-                      onPress={() => router.push(`/profile/${me.uid}`)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      accessibilityLabel="Your profile"
-                    >
-                      <Avatar name={me.username} seed={me.uid} size={32} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ),
-            }}
-          />
+          {/* The tab screens render their own shared header (wordmark + bell +
+              avatar) via components/AppHeader.tsx — see app/(tabs)/_layout.tsx.
+              We don't use the native-stack header here because iOS 26's glass
+              bar-button styling clipped the custom header-right controls. */}
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="sighting/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="photo" options={{ headerShown: false, animation: 'fade' }} />
           <Stack.Screen name="activity" options={{ headerShown: false }} />

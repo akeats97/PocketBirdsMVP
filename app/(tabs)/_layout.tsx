@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppHeader } from '../../components/AppHeader';
 import { font, palette, radius } from '../../constants/Colors';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -45,7 +46,11 @@ export default function TabLayout() {
           fontWeight: '600',
           letterSpacing: 0.2,
         },
-        headerShown: false,
+        // Custom JS header (wordmark + bell + avatar) shared by every tab. We
+        // render it ourselves rather than using the native-stack header to dodge
+        // iOS 26's glass bar-button styling — see components/AppHeader.tsx.
+        headerShown: true,
+        header: () => <AppHeader />,
       }}
       initialRouteName="add"
     >

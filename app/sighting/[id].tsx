@@ -67,11 +67,11 @@ export default function SightingDetailScreen() {
   const router = useRouter();
   const sightingId = String(id);
 
-  // The root layout wraps screens in react-native's SafeAreaView, which only
-  // insets on iOS. On Android it's a no-op (edge-to-edge), so apply the device
-  // insets ourselves there to clear the status bar (top) and nav bar (bottom).
+  // The root layout's SafeAreaView only insets the horizontal edges now, so this
+  // header-less screen owns its own top inset on BOTH platforms to clear the
+  // status bar (and the bottom inset below to clear the nav bar / home bar).
   const insets = useSafeAreaInsets();
-  const topInset = Platform.OS === 'android' ? insets.top : 0;
+  const topInset = insets.top;
   // The root SafeAreaView no longer insets the bottom (so the tab bar can own
   // it), so this screen applies the bottom inset itself: the composer clears
   // the home indicator / nav bar. When the keyboard opens that area is covered,

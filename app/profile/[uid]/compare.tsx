@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, DimensionValue, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, DimensionValue, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../../components/social/Avatar';
 import { auth } from '../../../config/firebaseConfig';
@@ -23,7 +23,9 @@ export default function CompareScreen() {
   const { uid } = useLocalSearchParams<{ uid: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const topInset = Platform.OS === 'android' ? insets.top : 0;
+  // Header-less screen: own the top inset on both platforms (the root
+  // SafeAreaView only insets the horizontal edges now).
+  const topInset = insets.top;
 
   const myUid = auth.currentUser?.uid;
   const { sightings: mySightings } = useSightings();
