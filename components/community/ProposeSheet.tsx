@@ -102,9 +102,12 @@ export function ProposeSheet({
       backdropOpacity.value = withTiming(1, { duration: 220 });
     } else {
       backdropOpacity.value = withTiming(0, { duration: 120 });
-      ty.value = withTiming(screenH, { duration: 240 }, (finished) => {
-        if (finished) runOnJS(setRendered)(false);
-      });
+      ty.value = withTiming(screenH, { duration: 240 });
+      // Unmount on a timer, NOT the animation's finished callback: if the slide
+      // is ever interrupted, `finished` is false and the callback never fires,
+      // leaving the Modal stuck mounted (which shifts the app down on Android).
+      const t = setTimeout(() => setRendered(false), 260);
+      return () => clearTimeout(t);
     }
   }, [visible, screenH, ty, backdropOpacity]);
 
@@ -161,7 +164,7 @@ export function ProposeSheet({
   };
 
   return (
-    <Modal visible={rendered} transparent animationType="none" onRequestClose={onClose}>
+    <Modal visible={rendered} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <GestureHandlerRootView style={styles.ghRoot}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
