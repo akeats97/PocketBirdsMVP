@@ -21,7 +21,7 @@ import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { signOut, User } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
-import { Alert, StatusBar, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, StatusBar, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -211,8 +211,15 @@ function AuthenticatedApp() {
       />
       {/* Don't consume the bottom inset here — the tab bar (and the pushed
           screens) apply their own bottom safe-area padding. Insetting it at the
-          root too left an empty strip below the tab bar on iOS. */}
-      <SafeAreaView style={{ flex: 1, backgroundColor: palette.cream }} edges={['top', 'left', 'right']}>
+          root too left an empty strip below the tab bar on iOS.
+          Android omits the TOP edge too: the native-stack header and the
+          per-screen Android insets (e.g. sighting/[id]) already consume the
+          status-bar inset, so adding it at the root double-insets and shifts the
+          whole app down. iOS keeps the top edge. */}
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: palette.cream }}
+        edges={Platform.OS === 'ios' ? ['top', 'left', 'right'] : ['left', 'right']}
+      >
         <Stack>
           <Stack.Screen
             name="(tabs)"
