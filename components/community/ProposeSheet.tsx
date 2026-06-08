@@ -57,13 +57,19 @@ export function ProposeSheet({
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // We drive enter/exit ourselves (Modal animationType="none") so the sheet can
+  // slide while the dark backdrop just fades. `rendered` keeps the Modal mounted
+  // through the exit animation after the parent flips `visible` to false.
+  const [rendered, setRendered] = useState(visible);
 
   // Drag-to-dismiss on the grabber. Uses gesture-handler + reanimated (the new
   // architecture is on, where PanResponder inside a Modal is unreliable). The
   // sheet follows the finger downward; release past a threshold (or a flick)
   // closes it, otherwise it springs back.
-  const ty = useSharedValue(0);
+  const ty = useSharedValue(screenH);
+  const backdropOpacity = useSharedValue(0);
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: ty.value }] }));
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
   const dragGesture = Gesture.Pan()
     .activeOffsetY(8)   // only engage on a downward drag
     .failOffsetY(-8)    // bail if the user drags up
@@ -72,25 +78,35 @@ export function ProposeSheet({
     })
     .onEnd((e) => {
       if (e.translationY > 110 || e.velocityY > 800) {
-        ty.value = withTiming(700, { duration: 180 }, (finished) => {
-          if (finished) runOnJS(onClose)();
-        });
+        // Hand off to the close effect, which slides the sheet the rest of the
+        // way down and fades the backdrop out from the current finger position.
+        runOnJS(onClose)();
       } else {
         ty.value = withSpring(0, { damping: 18 });
       }
     });
 
-  // Reset whenever the sheet is (re)opened.
+  // Enter/exit. On open: mount, reset the form, slide the sheet up and fade the
+  // backdrop in. On close: fade the backdrop out FAST (a quick blink, not a
+  // slide) while the sheet slides down, then unmount once the slide finishes.
   useEffect(() => {
     if (visible) {
-      ty.value = 0;
+      setRendered(true);
       setQuery('');
       setSelected('');
       setSuggestions([]);
       setNote('');
       setSubmitting(false);
+      ty.value = screenH;
+      ty.value = withSpring(0, { damping: 20, stiffness: 160 });
+      backdropOpacity.value = withTiming(1, { duration: 220 });
+    } else {
+      backdropOpacity.value = withTiming(0, { duration: 120 });
+      ty.value = withTiming(screenH, { duration: 240 }, (finished) => {
+        if (finished) runOnJS(setRendered)(false);
+      });
     }
-  }, [visible, ty]);
+  }, [visible, screenH, ty, backdropOpacity]);
 
   // Same tiered, debounced search as add.tsx — real IOC species only (a
   // proposal is an identification, so no report/custom/mystery entries).
@@ -145,12 +161,13 @@ export function ProposeSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={rendered} transparent animationType="none" onRequestClose={onClose}>
       <GestureHandlerRootView style={styles.ghRoot}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.root}
       >
+        <Reanimated.View style={[styles.backdrop, backdropStyle]} pointerEvents="none" />
         <Pressable style={styles.backdropFill} onPress={onClose} />
         <Reanimated.View
           style={[
@@ -276,8 +293,13 @@ const styles = StyleSheet.create({
   },
   root: {
     flex: 1,
-    backgroundColor: 'rgba(26,36,23,0.5)',
     justifyContent: 'flex-end',
+  },
+  // Dark scrim, faded independently of the sliding sheet (so it blinks out on
+  // close instead of sliding down with the sheet).
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(26,36,23,0.5)',
   },
   backdropFill: {
     ...StyleSheet.absoluteFillObject,
