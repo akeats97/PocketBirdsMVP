@@ -1,5 +1,48 @@
 # PocketBirds — Release Notes
 
+## Antwren - June 8 2026
+**Builds:** iOS 1.0.0 (9) · Android 1.0.0 (versionCode 24, **APK** for Firebase App Distribution)
+**Headline:** Followers & Following lists, per-person notification controls, and a header-avatar gateway to your own profile.
+
+### Play Store - "What's new"
+> 👥 Followers & Following
+> • Tap the Followers / Following count on any profile to see who's connected
+> • Every name opens that birder's profile, so browsing a friend's followers is how you find new people to follow
+> • Follow or unfollow right from the list
+> • 🔔 On your Following list, tap a person's bell to choose what they push you: All, Highlights only, or Nothing
+> • Your avatar now sits top-right: tap it to open your own profile (Log out moved there)
+> Plus polish and fixes.
+
+### TestFlight - "What to Test"
+> New: Followers/Following lists, per-person notification controls, and the header avatar.
+>
+> Please check:
+> • Tap your avatar (top-right of the header). Your profile opens, and Log out now lives there (top-right of the profile).
+> • On any profile, tap the Followers or Following count: the list opens on that tab. Switch tabs with the segmented control; each count matches the list length.
+> • Tap a person in the list to open their profile. Follow / unfollow from the list and confirm it sticks after leaving and returning.
+> • On YOUR Following list, tap someone's bell, then pick All / Highlights only / Nothing. The bell icon changes (ringing / plain / slashed) and the choice persists.
+> • Confirm the choice actually gates pushes: set a friend to Nothing, have them log a sighting, and you should get no push.
+
+### What shipped (engineering)
+- **Followers/Following screen:** `app/profile/[uid]/connections.tsx`, a pushed screen with a segmented Followers · Following switch (`?tab=` param), optimistic follow pills, and per-row lazy species counts (`getSightingsByUid` + `speciesSet`).
+- **Components** under `components/social/`: `SocialCounts` (tappable counts on the profile), `FollowRow` (person row), `NotifBell` (the ringing / plain / bell-off glyph), and `NotifPrefSheet` (the 3-mode picker, reusing the existing `notificationPrefsService`).
+- **Follow graph reverse lookup:** `userService.getConnections` / `getFollowCounts` derive a user's followers from a `collectionGroup('following')` scan (the graph stored only one direction). `firestore.rules` gained the matching recursive-wildcard read, deployed to prod Jun 8.
+- **Header avatar** replaces the old logout icon and opens your own profile; **Log out moved** to the self-profile nav.
+- **New native dependency: `react-native-svg`** (drives the bell icons). First build to carry it, so the dev client and both store builds were rebuilt.
+- **Release title** rolled Snowcap → Antwren.
+
+### Known issues
+- Follower/following counts read the whole follow graph per profile open: fine at current scale, flagged to revisit with a denormalized followers index later (same posture as `searchUsers`).
+- "First on Pocket Birds" detection caveats carry over (best-effort; no sighting-card pill yet, `WORK_QUEUE.md` Q-3).
+- Android notification small icon renders inconsistently across OEMs (cosmetic; Bug 2).
+
+### Post-ship steps
+- **iOS:** build 1.0.0 (9) is processing at Apple, then lands in the "Friends" external group. No new *capability* this build (`react-native-svg` is not an entitlement), so it should skip Beta App Review.
+- **Android:** this is an **APK** (not the Play Store AAB): distribute via **Firebase App Distribution**. Artifact: <https://expo.dev/artifacts/eas/fmEG7AYa5tAAXd3QYuzqmS.apk>
+- Fill the `release-names.csv` Antwren date only when actually shipped to production. Next release name after Antwren is **Tyrannulet**.
+
+---
+
 ## Snowcap — June 6 2026
 **Builds:** iOS 1.0.0 (8) · Android 1.0.0 (versionCode 23, **APK** for Firebase App Distribution)
 **Headline:** Birder profiles, the "You & {friend}" overlap compare, full-page friend search, and gold "first on Pocket Birds" trophies.
