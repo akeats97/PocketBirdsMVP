@@ -3,28 +3,42 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
+  Vibration,
   View,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/social/Avatar';
 import { FacePile } from '../../components/social/FacePile';
 import { HootButton } from '../../components/social/HootButton';
-import { Owl } from '../../components/Owl';
-import { border, font, palette, radius, space, type } from '../../constants/Colors';
-import { auth } from '../../config/firebaseConfig';
+import { AcceptBar } from '../../components/community/AcceptBar';
+import { CommunityIdSection } from '../../components/community/CommunityIdSection';
+import { MysteryPhoto } from '../../components/community/MysteryPhoto';
+import { NeedsIdPill } from '../../components/community/NeedsIdPill';
+import { ProposalAcceptedCelebration } from '../../components/community/ProposalAcceptedCelebration';
+import { ProposeSheet } from '../../components/community/ProposeSheet';
+import GlobalFirstCelebration from '../components/GlobalFirstCelebration';
+import MilestoneCelebration from '../components/MilestoneCelebration';
+import { font, palette, radius, space, type } from '../../constants/Colors';
+import { isMysteryBird, isUnknownEntry } from '../../constants/unknownBird';
+import { isReportEntry } from '../../constants/reportTypes';
+import { isCustomSpecies } from '../../constants/customSpecies';
 import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useHoots } from '../context/HootsContext';
 import { useSightings } from '../context/SightingsContext';
 import { useComments } from '../hooks/useComments';
-import { getCurrentUserProfile } from '../services/userService';
+import { useProposals } from '../hooks/useProposals';
+import { getCurrentUserProfile, isFollowing } from '../services/userService';
+import { setPhotoUri } from '../utils/photoViewer';
 import { FriendSighting } from '../types';
 
 function timeAgo(date: Date | null): string {
@@ -58,17 +72,27 @@ export default function SightingDetailScreen() {
   // insets ourselves there to clear the status bar (top) and nav bar (bottom).
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === 'android' ? insets.top : 0;
-  const bottomInset = Platform.OS === 'android' ? insets.bottom : 0;
+  // The root SafeAreaView no longer insets the bottom (so the tab bar can own
+  // it), so this screen applies the bottom inset itself: the composer clears
+  // the home indicator / nav bar. When the keyboard opens that area is covered,
+  // so KeyboardStickyView pulls the footer back down by the inset on iOS.
+  const bottomInset = insets.bottom;
+  const bottomInsetIOS = Platform.OS === 'ios' ? insets.bottom : 0;
 
   const { friendSightings } = useFriendSightings();
-  const { sightings } = useSightings();
-  const { hasHooted, hootCount, toggleHoot } = useHoots();
+  const { sightings, evaluateNewSpecies, applyCommunityId, markGlobalFirst } = useSightings();
+  const { hasHooted, hootCount, toggleHoot, hasHootedProposal, toggleProposalHoot } = useHoots();
   const { comments, loading, post } = useComments(sightingId);
+  const { proposals, add, accept } = useProposals(sightingId);
 
+  // Own sightings live in `sightings`; friends' in `friendSightings`. The
+  // detail screen reads either. Being in your own list means you're the owner.
+  const ownSighting = sightings.find((s) => s.id === sightingId);
   const sighting = useMemo(
-    () => friendSightings.find((s) => s.id === sightingId) ?? sightings.find((s) => s.id === sightingId),
-    [sightingId, friendSightings, sightings]
+    () => friendSightings.find((s) => s.id === sightingId) ?? ownSighting,
+    [sightingId, friendSightings, ownSighting]
   );
+  const isOwner = !!ownSighting;
 
   const [me, setMe] = useState<{ uid: string; username: string } | null>(null);
   useEffect(() => {
@@ -77,9 +101,51 @@ export default function SightingDetailScreen() {
     });
   }, []);
 
+  // Engagement gate (same as hoots/comments): the owner, or someone who follows
+  // the owner, may propose / hoot. Resolved once for a friend's sighting.
+  const ownerUid = isOwner ? me?.uid : (sighting as FriendSighting | undefined)?.friendId;
+  const [followsOwner, setFollowsOwner] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (isOwner || !ownerUid) {
+      setFollowsOwner(false);
+      return;
+    }
+    isFollowing(ownerUid).then((f) => {
+      if (!cancelled) setFollowsOwner(f);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwner, ownerUid]);
+  const canPropose = isOwner || followsOwner;
+
   const [text, setText] = useState('');
   const [posting, setPosting] = useState(false);
+  const [showPropose, setShowPropose] = useState(false);
+  const [accepting, setAccepting] = useState(false);
+  // Resolution celebration + chained new-species machinery.
+  const [accepted, setAccepted] = useState<{
+    species: string;
+    proposerName: string;
+    proposerUid: string;
+    hootCount: number;
+    dexNumber: number | null;
+  } | null>(null);
+  const [pendingGlobalFirst, setPendingGlobalFirst] = useState<string | null>(null);
+  const [pendingMilestone, setPendingMilestone] = useState<number | null>(null);
+  // The chained celebration modals shown after the resolution card is dismissed.
+  const [globalFirstShown, setGlobalFirstShown] = useState<string | null>(null);
+  const [milestoneShown, setMilestoneShown] = useState<number | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+
+  const mysteryBird = !!sighting && isMysteryBird(sighting);
+
+  // The owner accepts the proposal THEY hooted ("hoot the one you agree with,
+  // then lock it in"). If they've hooted more than one, the highest-ranked
+  // hooted proposal is the target. Null until they hoot one.
+  const selectedProposal =
+    mysteryBird && isOwner ? proposals.find((p) => hasHootedProposal(p.id)) ?? null : null;
 
   const onSend = async () => {
     if (!text.trim() || posting) return;
@@ -97,12 +163,109 @@ export default function SightingDetailScreen() {
     }
   };
 
+  const onSubmitProposal = (species: string, note?: string) =>
+    add(species, note);
+
+  const onShare = async () => {
+    try {
+      await Share.share({
+        message: `Help me identify this Mystery Bird on Pocket Birds!`,
+      });
+    } catch (e) {
+      console.error('Error sharing:', e);
+    }
+  };
+
+  // Unique real-species count the user would have AFTER accepting `species`
+  // (for the "Added to your Dex · species #NN" chip). Mirrors the milestone
+  // math: reports / Mystery / custom species don't count.
+  const uniqueSpeciesAfter = (species: string): number => {
+    const real = (name: string) =>
+      !isReportEntry(name) && !isUnknownEntry(name) && !isCustomSpecies(name);
+    const set = new Set(
+      sightings.filter((s) => real(s.birdName)).map((s) => s.birdName.toLowerCase())
+    );
+    set.add(species.toLowerCase());
+    return set.size;
+  };
+
+  const doAccept = async () => {
+    if (!selectedProposal || accepting) return;
+    setAccepting(true);
+    try {
+      const species = selectedProposal.species;
+      // Detection runs while the sighting is still a Mystery (it's excluded from
+      // species math), so this reads as "logging `species` right now".
+      const { isNewSpecies, milestone } = evaluateNewSpecies(species);
+      const dexNumber = isNewSpecies ? uniqueSpeciesAfter(species) : null;
+
+      const result = await accept(selectedProposal.id);
+      if (!result) {
+        setAccepting(false);
+        return;
+      }
+
+      // Reuse the exact post-log machinery add.tsx fires: Dex update, haptics,
+      // global-first, milestone — chained behind the resolution celebration.
+      applyCommunityId(sightingId, result.species, milestone);
+      if (result.globalFirst) markGlobalFirst(result.species);
+      if (isNewSpecies) Vibration.vibrate([0, 150, 100, 150, 100, 300]);
+
+      setPendingGlobalFirst(result.globalFirst ? result.species : null);
+      setPendingMilestone(milestone);
+      setAccepted({
+        species: result.species,
+        proposerName: result.proposerUsername,
+        proposerUid: result.proposerUid,
+        hootCount: result.proposalHootCount,
+        dexNumber,
+      });
+    } catch (e) {
+      console.error('Error accepting proposal:', e);
+      Alert.alert('Could not accept', 'Something went wrong. Please try again.');
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  const handleAccept = () => {
+    if (!selectedProposal) return;
+    Alert.alert(
+      'Accept this ID?',
+      `Set "${selectedProposal.species}" as the species and add it to your Dex?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Accept', onPress: doAccept },
+      ]
+    );
+  };
+
+  // When the resolution celebration is dismissed, chain the bigger moments
+  // (global-first, then milestone) the same way the Add flow prioritizes them.
+  const onAcceptedDismiss = () => {
+    setAccepted(null);
+    if (pendingGlobalFirst) {
+      const bird = pendingGlobalFirst;
+      setPendingGlobalFirst(null);
+      setGlobalFirstShown(bird);
+    } else if (pendingMilestone) {
+      const count = pendingMilestone;
+      setPendingMilestone(null);
+      setMilestoneShown(count);
+    }
+  };
+
   const NavBar = (
     <View style={[styles.navBar, { paddingTop: topInset + space.sm }]}>
       <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
         <Ionicons name="chevron-back" size={22} color={palette.ink} />
       </Pressable>
-      <Text style={styles.navTitle}>Sighting</Text>
+      <Text style={styles.navTitle}>{mysteryBird ? 'Mystery Bird' : 'Sighting'}</Text>
+      {mysteryBird && (
+        <View style={{ marginLeft: 'auto' }}>
+          <NeedsIdPill />
+        </View>
+      )}
     </View>
   );
 
@@ -111,7 +274,7 @@ export default function SightingDetailScreen() {
       <View style={styles.screen}>
         {NavBar}
         <View style={styles.emptyWrap}>
-          <Text style={styles.emptyText}>Couldn't load this sighting.</Text>
+          <Text style={styles.emptyText}>Couldn&apos;t load this sighting.</Text>
         </View>
       </View>
     );
@@ -123,16 +286,17 @@ export default function SightingDetailScreen() {
   const hooted = hasHooted(sightingId);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior="padding"
-    >
+    <View style={styles.screen}>
       {NavBar}
 
       <ScrollView ref={scrollRef} style={styles.body} keyboardShouldPersistTaps="handled">
-        {sighting.photoUrl && (
-          <Image source={{ uri: sighting.photoUrl }} style={styles.photo} resizeMode="cover" />
-        )}
+        {sighting.photoUrl ? (
+          <Pressable onPress={() => { setPhotoUri(sighting.photoUrl!); router.push('/photo'); }}>
+            <Image source={{ uri: sighting.photoUrl }} style={styles.photo} resizeMode="cover" />
+          </Pressable>
+        ) : mysteryBird ? (
+          <MysteryPhoto height={190} />
+        ) : null}
 
         {/* Meta */}
         <View style={styles.meta}>
@@ -158,6 +322,10 @@ export default function SightingDetailScreen() {
             <Text style={styles.metaText}>{metaDate(sighting.date)}</Text>
           </View>
 
+          {sighting.notes ? (
+            <Text style={styles.note}>“{sighting.notes}”</Text>
+          ) : null}
+
           {/* Hoot summary + toggle */}
           <View style={styles.hootSummary}>
             <View style={styles.hootSummaryLeft}>
@@ -171,6 +339,21 @@ export default function SightingDetailScreen() {
             <HootButton hooted={hooted} count={count} onPress={() => toggleHoot(sightingId)} />
           </View>
         </View>
+
+        {/* Community ID — Mystery Birds only */}
+        {mysteryBird && (
+          <View style={styles.communitySection}>
+            <CommunityIdSection
+              proposals={proposals}
+              isOwner={isOwner}
+              canPropose={canPropose}
+              onPropose={() => setShowPropose(true)}
+              onShare={onShare}
+              hasHootedProposal={hasHootedProposal}
+              onToggleHoot={(proposalId) => toggleProposalHoot(sightingId, proposalId)}
+            />
+          </View>
+        )}
 
         {/* Comments header */}
         <View style={styles.commentsHeader}>
@@ -188,10 +371,14 @@ export default function SightingDetailScreen() {
         ) : (
           comments.map((c) => (
             <View key={c.id} style={styles.commentRow}>
-              <Avatar name={c.username} seed={c.uid} size={34} />
+              <Pressable onPress={() => router.push(`/profile/${c.uid}`)} hitSlop={4}>
+                <Avatar name={c.username} seed={c.uid} size={34} />
+              </Pressable>
               <View style={styles.commentBody}>
                 <View style={styles.commentMetaRow}>
-                  <Text style={styles.commentName}>{c.username}</Text>
+                  <Pressable onPress={() => router.push(`/profile/${c.uid}`)} hitSlop={4}>
+                    <Text style={styles.commentName}>{c.username}</Text>
+                  </Pressable>
                   <Text style={styles.commentTime}>{timeAgo(c.createdAt?.toDate?.() ?? null)}</Text>
                 </View>
                 <Text style={styles.commentText}>{c.text}</Text>
@@ -202,27 +389,76 @@ export default function SightingDetailScreen() {
         <View style={{ height: space.md }} />
       </ScrollView>
 
-      {/* Composer */}
-      <View style={[styles.composer, { paddingBottom: bottomInset + space.sm }]}>
-        {me && <Avatar name={me.username} seed={me.uid} size={32} />}
-        <TextInput
-          style={styles.input}
-          placeholder="Add a comment…"
-          placeholderTextColor={palette.muted}
-          value={text}
-          onChangeText={setText}
-          multiline
-          maxLength={500}
-        />
-        <Pressable
-          onPress={onSend}
-          disabled={!text.trim() || posting}
-          style={[styles.sendBtn, (!text.trim() || posting) && styles.sendBtnDisabled]}
-        >
-          <Ionicons name="arrow-up" size={18} color="#fff" />
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+      {/* Accept bar + comment composer ride above the keyboard together.
+          KeyboardStickyView is the reliable iOS pattern for a pinned footer
+          (plain KeyboardAvoidingView left the input under the keyboard). */}
+      <KeyboardStickyView offset={{ closed: 0, opened: bottomInsetIOS }}>
+        {/* Owner Accept bar — pinned above the comment composer. Targets the
+            proposal the owner hooted; prompts them to hoot one if they haven't. */}
+        {mysteryBird && isOwner && proposals.length > 0 && (
+          <AcceptBar
+            species={selectedProposal?.species ?? null}
+            busy={accepting}
+            onAccept={handleAccept}
+          />
+        )}
+
+        {/* Composer */}
+        <View style={[styles.composer, { paddingBottom: bottomInset + space.sm }]}>
+          {me && <Avatar name={me.username} seed={me.uid} size={32} />}
+          <TextInput
+            style={styles.input}
+            placeholder="Add a comment…"
+            placeholderTextColor={palette.muted}
+            value={text}
+            onChangeText={setText}
+            multiline
+            maxLength={500}
+          />
+          <Pressable
+            onPress={onSend}
+            disabled={!text.trim() || posting}
+            style={[styles.sendBtn, (!text.trim() || posting) && styles.sendBtnDisabled]}
+          >
+            <Ionicons name="arrow-up" size={18} color="#fff" />
+          </Pressable>
+        </View>
+      </KeyboardStickyView>
+
+      {/* Propose composer */}
+      <ProposeSheet
+        visible={showPropose}
+        ownerName={isOwner ? 'your' : `${friendName}'s`}
+        location={sighting.location}
+        photoUrl={sighting.photoUrl}
+        onClose={() => setShowPropose(false)}
+        onSubmit={onSubmitProposal}
+      />
+
+      {/* Resolution celebration (then chains global-first / milestone) */}
+      <ProposalAcceptedCelebration
+        visible={accepted !== null}
+        species={accepted?.species ?? null}
+        proposerName={accepted?.proposerName ?? ''}
+        proposerUid={accepted?.proposerUid ?? ''}
+        hootCount={accepted?.hootCount ?? 0}
+        dexNumber={accepted?.dexNumber ?? null}
+        photoUrl={sighting.photoUrl}
+        onDismiss={onAcceptedDismiss}
+      />
+
+      <GlobalFirstCelebration
+        visible={globalFirstShown !== null}
+        birdName={globalFirstShown}
+        onDismiss={() => setGlobalFirstShown(null)}
+      />
+
+      <MilestoneCelebration
+        visible={milestoneShown !== null}
+        count={milestoneShown}
+        onDismiss={() => setMilestoneShown(null)}
+      />
+    </View>
   );
 }
 
@@ -265,6 +501,13 @@ const styles = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1 },
   metaText: { ...type.bodyS, color: palette.inkSoft, fontWeight: '500' },
   metaDivider: { color: palette.muted },
+  note: {
+    ...type.body,
+    color: palette.ink,
+    fontStyle: 'italic',
+    marginTop: 10,
+    lineHeight: 20,
+  },
 
   hootSummary: {
     flexDirection: 'row',
@@ -275,6 +518,12 @@ const styles = StyleSheet.create({
   hootSummaryLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
   hootCountText: { ...type.bodyS, color: palette.inkSoft },
   hootCountNum: { color: palette.ink, fontFamily: font.bodyBold },
+
+  communitySection: {
+    borderBottomWidth: 1.5,
+    borderBottomColor: palette.rule,
+    paddingBottom: space.sm,
+  },
 
   commentsHeader: {
     flexDirection: 'row',

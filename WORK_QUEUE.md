@@ -33,7 +33,8 @@ Shipped as two pill buttons on the Friends tab: **Sightings** (friends' real bir
 Alex: "submit an unknown bird and have my friends help verify it." Victoria: "let me submit unknown birds" — already possible by typing "?" (Mystery Bird), so Victoria's ask is really a **discoverability** gap.
 
 - **(a) Mystery Bird discoverability — WON'T DO (Alex's call, Jun 4 2026).** A tappable "Couldn't ID it?" hint was tried and reverted. Alex wants the `?`-typed entry to remain the ONLY way to log a Mystery Bird — intentionally low-profile, not surfaced as an affordance. Leave it undiscoverable by design.
-- **(b) Friend verification — still open, needs design.** Let friends suggest/confirm an ID on a Mystery Bird sighting (lightweight comment-or-vote on the species). Real feature, scope with Alex. Ties into the Hoot/Comment data model already in place.
+- **(b) Friend verification — SHIPPED Jun 7 2026 as the Community ID feature.** Friends propose an ID on a Mystery Bird, hoot the proposals they agree with (front-runner gets a ribbon), and the owner accepts one — which sets the species and runs the normal Dex/milestone/global-first pipeline. Built from `design_handoff_community_id/`. Data model: `sightings/{id}/proposals/{pid}` (+ `/hoots/{uid}`), denormalized `proposalCount`/`leadingProposal`, Cloud Functions `onProposal*`, rules + indexes deployed. UI in `components/community/*` + `app/sighting/[id].tsx`. Mystery-Bird-only (gated on `isMysteryBird`); widening scope later is a one-line change.
+  - **TODO (polish, low priority) — rework the Propose composer presentation.** Alex isn't happy with the current bottom pull-up sheet (`components/community/ProposeSheet.tsx`): (1) the dimmed backdrop tint behind the sheet "feels weird," and (2) he's leaning toward making the whole propose flow a **full screen** (a pushed expo-router route) instead of a pull-up tab. The drag-to-dismiss grabber works but the implementation (gesture-handler + reanimated inside a `Modal` with a nested `GestureHandlerRootView`, needed because PanResponder is unreliable on the new architecture in a Modal) is "not my favourite" — if it becomes a full-screen route, the grabber/drag-dismiss and the whole Modal/GHRootView dance go away. Revisit when there's a clean stretch.
 
 ### Already tracked (now also user-requested, no new entry needed)
 
@@ -113,6 +114,41 @@ For the next build (no fixed date), try producing an **APK** (instead of the AAB
 4. Manual `Keyboard` show/hide listener (no KAV), set composer `paddingBottom = kbHeight` when open / `insets.bottom` when closed → **under-lifted** (~half the field behind the keyboard). Couldn't model why from inspection; suspected misreported `endCoordinates.height` and/or partial adjustResize interaction under edge-to-edge. Reverted.
 
 **Real fix — DONE Jun 4 2026 (pending dev-client rebuild to verify):** swapped this screen's RN `KeyboardAvoidingView` for the one from **`react-native-keyboard-controller`** (built for edge-to-edge, resets cleanly). Done together with the Add Sighting migration to `KeyboardAwareScrollView` and the root `KeyboardProvider` (see UR-1). It's a **native dependency**, so it needs a dev-client rebuild (`eas build --profile development --platform android`, then reinstall the dev APK). Validate the open→type→dismiss cycle on a gesture-nav Android device specifically (that's where the residual margin showed) and confirm the resting margin is gone.
+
+---
+
+## TODO — redo photo pinch-to-zoom (glitchy, Jun 7 2026) — REBUILT Jun 8 2026 (library + route), pending Android dev-client verification
+
+**Root cause (the thing two hand-rolled attempts missed):** the full-screen viewer lived inside a React Native `<Modal>`. On Android + the new architecture, a `Modal` renders in a **separate native window** where gesture-handler gestures misbehave — this is a documented issue and matches the "Android-specific glitch" note below. The gesture math was a red herring; the Modal was the wall.
+
+**Fix done Jun 8 2026 (two parts):**
+1. **Dropped RN `Modal`, moved the viewer to a pushed expo-router route** `app/photo.tsx` (registered in `app/_layout.tsx` Stack, `animation: 'fade'`, `headerShown:false`). As a normal Stack screen it renders inside the **app-root `GestureHandlerRootView`** (no separate window). Reached via `router.push({ pathname: '/photo', params: { uri } })`.
+2. **Replaced the hand-rolled `ZoomableImage` with `react-native-zoom-toolkit`** (`ResumableZoom` + `useImageResolution` + `fitContainer`). Pure JS over our existing gesture-handler (2.24, lib needs ≥2.16) + reanimated v3 — **no native code, so NO dev-client APK rebuild** (just restart Metro, ideally `--clear`). `react-native-worklets` is only needed on Expo 54+; we're on 53.
+
+**`components/ZoomableImage.tsx` was DELETED.** All three former call sites (`app/sighting/[id].tsx`, `components/FriendSightingCard.tsx`, `components/SightingCard.tsx`) now `router.push('/photo')` and their photo `<Modal>` blocks + modal styles were removed. (SightingCard keeps its separate delete-confirmation `<Modal>` — that one has no gestures.) Typechecks clean (one unrelated pre-existing error in `notificationService.ts`).
+
+**Still needs on-device verification on the Android dev client** — restart Metro (`npx expo start --dev-client --clear`), tap a sighting photo, confirm pinch / pan-while-zoomed / double-tap all feel right and the X (top-right) / back closes it. If anything's still off, the toolkit has `panMode`/`scaleMode`/`maxScale` knobs to tune in `app/photo.tsx`.
+
+<details><summary>Original diagnosis notes (kept for reference)</summary>
+
+**Where:** `components/ZoomableImage.tsx` (used by the full-screen photo viewer on `app/sighting/[id].tsx`, `components/FriendSightingCard.tsx`, and `components/SightingCard.tsx`).
+
+**Symptom (Alex, Android dev client, Jun 7 2026):** the current gesture-based zoom "feels really glitchy."
+- **Double-tap to zoom works.**
+- **Pinch-to-zoom is really inconsistent** (doesn't reliably track the pinch).
+- **Can't pan/move the image around** once zoomed.
+
+**Background:** this replaced the original `ScrollView` `minimumZoomScale`/`maximumZoomScale` viewer, which didn't zoom at all (and had `contentContainerStyle: { flex: 1 }` killing it). The replacement uses `react-native-gesture-handler` Pinch + Pan + double-tap with `reanimated` shared values, mounted in a `GestureHandlerRootView` inside the Modal.
+
+**Likely culprits to investigate on the redo:**
+- Pinch isn't focal-point aware (it scales from the image center, not the pinch midpoint) — feels wrong/jumpy. A proper implementation tracks `focalX/focalY` and adjusts translation so the content zooms around the fingers.
+- Pan is gated on `scale.value > 1` read inside the worklet; combined with `Gesture.Simultaneous(pinch, pan)` and the double-tap `Gesture.Exclusive`, the composition may be eating pan updates. Reconsider the gesture composition (e.g. `Race`/`Simultaneous` arrangement) and don't gate pan on scale.
+- No bounds clamping, so panning can fling the image off-screen.
+- New architecture (Fabric) + gestures inside a RN `Modal` can be finicky — **glitchiness confirmed on Android specifically** (Alex's dev client). On Android, gestures inside a `Modal` need the `GestureHandlerRootView` to wrap the modal content (it does), but the Pinch gesture on Android GH can still misbehave vs iOS; test the redo on Android first.
+
+**Options for the redo:** either (a) properly implement focal-pinch + bounded pan (reference the gesture-handler "scale and rotation" / pinch-to-zoom recipes), or (b) drop in a maintained library like `react-native-awesome-gallery` or `react-native-image-zoom` and delete `ZoomableImage.tsx`. Library route is probably faster and more robust. When fixing, update all three call sites. _(Resolved Jun 8 2026 via option (b) + the Modal→route move — see top of section.)_
+
+</details>
 
 ---
 

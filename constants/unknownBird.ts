@@ -15,3 +15,11 @@ export const UNKNOWN_BIRD = 'Mystery Bird';
 export function isUnknownEntry(name: string): boolean {
   return name.trim().toLowerCase() === UNKNOWN_BIRD.toLowerCase();
 }
+
+// Predicate reused by the Community ID feature: a sighting is a Mystery Bird
+// when its species is the "?" sentinel. Gate every community-ID surface on
+// this so widening scope later (to already-identified sightings) is a one-line
+// change. Takes a minimal shape to avoid importing app/types here.
+export function isMysteryBird(sighting: { birdName: string }): boolean {
+  return isUnknownEntry(sighting.birdName);
+}

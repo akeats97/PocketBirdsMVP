@@ -10,16 +10,22 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../config/firebaseConfig';
 
-export type ActivityType = 'hoot' | 'comment' | 'follow';
+export type ActivityType =
+  | 'hoot'
+  | 'comment'
+  | 'follow'
+  | 'proposal'           // someone proposed an ID on your Mystery Bird
+  | 'proposal_accepted'; // the owner accepted your ID
 
 export interface ActivityItem {
   id: string;
   type: ActivityType;
   actorUid: string;
   actorUsername: string;
-  sightingId?: string;   // hoot / comment
+  sightingId?: string;   // hoot / comment / proposal
   birdName?: string;     // hoot / comment
   commentText?: string;  // comment only
+  species?: string;      // proposal / proposal_accepted
   read: boolean;
   createdAt: Date | null; // null briefly while serverTimestamp resolves
 }
@@ -49,6 +55,7 @@ export function subscribeToActivity(
           sightingId: data.sightingId,
           birdName: data.birdName,
           commentText: data.commentText,
+          species: data.species,
           read: !!data.read,
           createdAt: data.createdAt?.toDate?.() ?? null,
         };

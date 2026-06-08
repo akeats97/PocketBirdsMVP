@@ -33,6 +33,15 @@ interface SightingsContextType {
   // one on PocketBirds had it before). The flag rides the normal sync up to
   // Firestore (the sighting is still 'pending' at this point).
   markGlobalFirst: (birdName: string) => void;
+  // Would logging this species right now be a new species for the user, and
+  // would it cross a milestone? Pure detection (no write). Shared by the Add
+  // flow and the Community ID accept flow so they can't drift.
+  evaluateNewSpecies: (birdName: string) => AddSightingResult;
+  // Resolve a Mystery Bird in local state by rewriting its birdName to the
+  // accepted species (the Firestore write is done separately by
+  // proposalService.acceptProposal). Makes the species count toward the Dex
+  // immediately, and stamps milestoneCrossed if this acceptance crossed one.
+  applyCommunityId: (sightingId: string, species: string, milestone: number | null) => void;
 }
 
 const SightingsContext = createContext<SightingsContextType | undefined>(undefined);
@@ -302,18 +311,23 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addSighting = (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>): AddSightingResult => {
-    // Bug Report / Feature Request entries ride this pipeline but aren't real
-    // species — they never count as a new species or toward milestones, and
-    // they're excluded from the species math so they don't inflate counts for
-    // real birds logged afterward. "Mystery Bird" (unidentified) entries count
-    // as real sightings but likewise never add a species, so they're excluded
-    // from the species math here too. Custom easter-egg species (e.g. Kelsey)
-    // DO get the new-species celebration on first log, but are likewise kept
-    // out of the species count + milestone math.
-    const isReport = isReportEntry(sighting.birdName);
-    const isUnknown = isUnknownEntry(sighting.birdName);
-    const isCustom = isCustomSpecies(sighting.birdName);
+  // Pure new-species / milestone detection for a given species name, evaluated
+  // against the user's CURRENT sightings (i.e. as if `birdName` were logged
+  // right now). No writes. Shared by addSighting and the Community ID accept
+  // flow so the two can never drift.
+  //
+  // Bug Report / Feature Request entries ride this pipeline but aren't real
+  // species — they never count as a new species or toward milestones, and
+  // they're excluded from the species math so they don't inflate counts for
+  // real birds logged afterward. "Mystery Bird" (unidentified) entries count
+  // as real sightings but likewise never add a species, so they're excluded
+  // from the species math here too. Custom easter-egg species (e.g. Kelsey)
+  // DO get the new-species celebration on first log, but are likewise kept
+  // out of the species count + milestone math.
+  const evaluateNewSpecies = (birdName: string): AddSightingResult => {
+    const isReport = isReportEntry(birdName);
+    const isUnknown = isUnknownEntry(birdName);
+    const isCustom = isCustomSpecies(birdName);
     const speciesSightings = sightings.filter(
       s => !isReportEntry(s.birdName) && !isUnknownEntry(s.birdName) && !isCustomSpecies(s.birdName)
     );
@@ -322,9 +336,9 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     // Custom species celebrate on their first log too, checked against prior
     // sightings of that same custom name (not the real-species base above).
     const isNewSpecies = isCustom
-      ? !sightings.some(s => s.birdName.toLowerCase() === sighting.birdName.toLowerCase())
+      ? !sightings.some(s => s.birdName.toLowerCase() === birdName.toLowerCase())
       : !isReport && !isUnknown && !speciesSightings.some(existingSighting =>
-          existingSighting.birdName.toLowerCase() === sighting.birdName.toLowerCase()
+          existingSighting.birdName.toLowerCase() === birdName.toLowerCase()
         );
 
     // Compute the user's unique-species count AFTER this save and decide
@@ -340,6 +354,12 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
         milestone = uniqueAfter;
       }
     }
+
+    return { isNewSpecies, milestone };
+  };
+
+  const addSighting = (sighting: Omit<Sighting, 'id' | 'syncStatus' | 'lastModified'>): AddSightingResult => {
+    const { isNewSpecies, milestone } = evaluateNewSpecies(sighting.birdName);
 
     const newSighting: Sighting = {
       ...sighting,
@@ -501,6 +521,22 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const applyCommunityId = (sightingId: string, species: string, milestone: number | null) => {
+    setSightings(prev =>
+      prev.map(s =>
+        s.id === sightingId
+          ? {
+              ...s,
+              birdName: species,
+              lastModified: new Date(),
+              identifiedVia: 'community',
+              ...(milestone !== null ? { milestoneCrossed: milestone } : {}),
+            }
+          : s
+      )
+    );
+  };
+
   const isNewSpeciesForUser = (birdName: string, sightingDate: Date): boolean => {
     // Find all sightings of this species
     const speciesSightings = sightings.filter(s => 
@@ -525,7 +561,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, deleteSighting, syncSightings, clearLocalData, isNewSpeciesForUser, markGlobalFirst }}>
+    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, deleteSighting, syncSightings, clearLocalData, isNewSpeciesForUser, markGlobalFirst, evaluateNewSpecies, applyCommunityId }}>
       {children}
     </SightingsContext.Provider>
   );

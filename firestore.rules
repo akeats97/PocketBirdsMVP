@@ -102,6 +102,44 @@ service cloud.firestore {
         allow delete: if isSignedIn()
                       && (resource.data.uid == myUid() || sightingOwner() == myUid());
       }
+
+      // Community ID proposals (Mystery Bird only — enforced client-side; the
+      // rules just gate the engagement graph). Counters (hootCount on the
+      // proposal; proposalCount / leadingProposal on the parent sighting) are
+      // written only by Cloud Functions via the Admin SDK, so they're absent
+      // from every client allow-list below.
+      match /proposals/{proposalId} {
+        allow read: if isSignedIn();
+
+        // Anyone who follows the owner (or the owner) may propose. uid must be
+        // yours, species a non-empty string, and the count must start at 0.
+        allow create: if request.resource.data.uid == myUid()
+                      && request.resource.data.species is string
+                      && request.resource.data.species.size() > 0
+                      && request.resource.data.hootCount == 0
+                      && canEngage();
+
+        // Owner-only accept: the only client update permitted is flipping
+        // `accepted` to true, and only by the sighting owner.
+        allow update: if sightingOwner() == myUid()
+                      && request.resource.data.diff(resource.data).changedKeys().hasOnly(['accepted'])
+                      && request.resource.data.accepted == true;
+
+        // Proposer may withdraw their own; the sighting owner may remove any.
+        allow delete: if isSignedIn()
+                      && (resource.data.uid == myUid() || sightingOwner() == myUid());
+
+        // Agreement hoots: doc id == hooter's uid (one per user, structurally).
+        // These live in the same 'hoots' collection group as sighting hoots, so
+        // the recursive-wildcard read rule at the top also covers reads here.
+        match /hoots/{hooterUid} {
+          allow read: if isSignedIn();
+          allow create: if hooterUid == myUid()
+                        && request.resource.data.uid == myUid()
+                        && canEngage();
+          allow delete: if hooterUid == myUid();
+        }
+      }
     }
   }
 }

@@ -35,6 +35,45 @@ export interface Sighting {
   commentCount?: number;
   recentHooters?: { uid: string; username: string }[];
   topComment?: { uid: string; username: string; text: string };
+
+  // Community ID (Mystery Bird only), denormalized + server-maintained.
+  // proposalCount drives the "needs ID · N proposals" feed cue without a
+  // per-card listener; leadingProposal is the current front-runner.
+  proposalCount?: number;
+  leadingProposal?: {
+    proposalId: string;
+    species: string;
+    uid: string;
+    username: string;
+    hootCount: number;
+  };
+  // Set when a Mystery Bird was resolved by accepting a community proposal.
+  identifiedVia?: 'community';
+  identifiedBy?: string;   // uid of the proposer whose ID was accepted
+  identifiedAt?: Date;
+}
+
+// A community-ID proposal on a Mystery Bird, stored at
+// sightings/{sightingId}/proposals/{proposalId}. Species is the COMMON NAME
+// ONLY — no Latin/scientific name is stored or surfaced anywhere.
+export interface Proposal {
+  id: string;            // auto doc id
+  uid: string;           // proposer
+  username: string;      // denormalized so the list needs no extra reads
+  species: string;       // common name only
+  speciesLower: string;  // lowercased, for the dupe-guard + matching
+  note?: string;         // optional reasoning, trimmed, max ~280
+  hootCount: number;     // maintained by a Cloud Function
+  createdAt: Date | null; // null briefly while serverTimestamp resolves
+  accepted?: boolean;    // set true by the accept transaction
+}
+
+// One agreement vote on a proposal, at .../proposals/{id}/hoots/{hooterUid}.
+// Doc id IS the hooter's uid (one hoot per user per proposal, structurally).
+export interface ProposalHoot {
+  uid: string;
+  username: string;
+  createdAt: Date | null;
 }
 
 export interface FriendSighting extends Sighting {

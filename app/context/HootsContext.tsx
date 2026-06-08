@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { auth } from '../../config/firebaseConfig';
 import { removeHoot, setHoot, subscribeToMyHoots } from '../services/hootService';
+import { removeProposalHoot, setProposalHoot } from '../services/proposalService';
 import { getCurrentUserProfile } from '../services/userService';
 
 interface HootsContextType {
@@ -10,6 +11,10 @@ interface HootsContextType {
   hootCount: (sighting: { hootCount?: number }) => number;
   /** Optimistically toggle the current user's hoot on a sighting. */
   toggleHoot: (sightingId: string) => Promise<void>;
+  /** Has the current user hooted this community-ID proposal? */
+  hasHootedProposal: (proposalId: string) => boolean;
+  /** Optimistically toggle the current user's hoot on a proposal. */
+  toggleProposalHoot: (sightingId: string, proposalId: string) => Promise<void>;
 }
 
 const HootsContext = createContext<HootsContextType | undefined>(undefined);
@@ -88,8 +93,48 @@ function HootsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Proposal hoots live at sightings/{id}/proposals/{pid}/hoots/{uid} — the SAME
+  // 'hoots' collection group the subscribeToMyHoots listener already watches.
+  // Each proposal-hoot doc's parent is the proposal, so its grandparent id is
+  // the proposalId. Since proposalIds are Firestore auto-ids (a different id
+  // space than sightingIds), reusing the one global hootedIds set is safe and
+  // needs no extra listener — exactly what the Community ID data model suggests.
+  const hasHootedProposal = (proposalId: string) => hootedIds.has(proposalId);
+
+  const toggleProposalHoot = async (sightingId: string, proposalId: string) => {
+    const currentlyHooted = hootedIds.has(proposalId);
+
+    setHootedIds((prev) => {
+      const next = new Set(prev);
+      if (currentlyHooted) next.delete(proposalId);
+      else next.add(proposalId);
+      return next;
+    });
+
+    try {
+      if (currentlyHooted) {
+        await removeProposalHoot(sightingId, proposalId);
+      } else {
+        if (!usernameRef.current) {
+          usernameRef.current = (await getCurrentUserProfile())?.username ?? '';
+        }
+        await setProposalHoot(sightingId, proposalId, usernameRef.current);
+      }
+    } catch (error) {
+      console.error('Error toggling proposal hoot:', error);
+      setHootedIds((prev) => {
+        const next = new Set(prev);
+        if (currentlyHooted) next.add(proposalId);
+        else next.delete(proposalId);
+        return next;
+      });
+    }
+  };
+
   return (
-    <HootsContext.Provider value={{ hasHooted, hootCount, toggleHoot }}>
+    <HootsContext.Provider
+      value={{ hasHooted, hootCount, toggleHoot, hasHootedProposal, toggleProposalHoot }}
+    >
       {children}
     </HootsContext.Provider>
   );

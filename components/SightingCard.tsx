@@ -1,9 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSightings } from '../app/context/SightingsContext';
+import { setPhotoUri } from '../app/utils/photoViewer';
 import { Sighting } from '../app/types';
 import { border, palette, radius, recipes, space, type } from '../constants/Colors';
+import { isMysteryBird } from '../constants/unknownBird';
+import { NeedsIdPill } from './community/NeedsIdPill';
 
 interface SightingCardProps {
   sighting: Sighting;
@@ -11,10 +15,9 @@ interface SightingCardProps {
 }
 
 export default function SightingCard({ sighting, isNewSpecies }: SightingCardProps) {
-  const [isModalVisible, setIsModalVisible] = useState(false);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
-  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const { deleteSighting } = useSightings();
+  const router = useRouter();
 
   const photoSource = sighting.photoUrl || sighting.photoPath;
 
@@ -56,7 +59,7 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
             See CLAUDE.md "Pending Design Work" and design_handoff_pocket_dex/wikidata-dump.md. */}
 
         {photoSource && (
-          <Pressable onPress={() => setIsModalVisible(true)}>
+          <Pressable onPress={() => { setPhotoUri(photoSource); router.push('/photo'); }}>
             <Image
               source={{ uri: photoSource }}
               style={styles.photo}
@@ -100,46 +103,28 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
             <Text style={styles.metaText}>{formatRelativeDate(sighting.date)}</Text>
           </View>
 
+          {isMysteryBird(sighting) && (
+            <Pressable
+              style={({ pressed }) => [styles.needsIdRow, pressed && { opacity: 0.6 }]}
+              onPress={() => router.push(`/sighting/${sighting.id}`)}
+              hitSlop={6}
+            >
+              <NeedsIdPill />
+              <Text style={styles.needsIdText} numberOfLines={1}>
+                {(sighting.proposalCount ?? 0) > 0
+                  ? sighting.leadingProposal
+                    ? `Front-runner: ${sighting.leadingProposal.species}`
+                    : `${sighting.proposalCount} ${sighting.proposalCount === 1 ? 'proposal' : 'proposals'}`
+                  : 'Tap to get an ID'}
+              </Text>
+            </Pressable>
+          )}
+
           {sighting.notes && (
             <Text style={styles.notes} numberOfLines={2}>{sighting.notes}</Text>
           )}
         </View>
       </Pressable>
-
-      {/* Full-screen photo modal */}
-      <Modal
-        visible={isModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setIsModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <Pressable
-            style={styles.modalCloseButton}
-            onPress={() => setIsModalVisible(false)}
-          >
-            <Ionicons name="close" size={28} color={palette.ink} />
-          </Pressable>
-
-          {photoSource && (
-            <ScrollView
-              style={styles.modalPhoto}
-              contentContainerStyle={styles.modalPhotoContainer}
-              minimumZoomScale={1}
-              maximumZoomScale={3}
-              showsHorizontalScrollIndicator={false}
-              showsVerticalScrollIndicator={false}
-              bouncesZoom={true}
-            >
-              <Image
-                source={{ uri: photoSource }}
-                style={[styles.modalPhotoImage, { width: screenWidth, height: screenHeight }]}
-                resizeMode="contain"
-              />
-            </ScrollView>
-          )}
-        </View>
-      </Modal>
 
       {/* Delete confirmation modal */}
       <Modal
@@ -288,37 +273,18 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  // Photo zoom modal
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.92)',
-    justifyContent: 'center',
+  // "Needs ID" cue for Mystery Birds (denormalized fields — no listener).
+  needsIdRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: space.sm,
+    marginTop: space.sm,
   },
-  modalCloseButton: {
-    position: 'absolute',
-    top: 60,
-    right: 20,
-    zIndex: 1,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: palette.cream,
-    ...border.thick,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalPhoto: {
-    width: '100%',
-    height: '100%',
-  },
-  modalPhotoContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalPhotoImage: {
-    flex: 1,
+  needsIdText: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    fontWeight: '500',
+    flexShrink: 1,
   },
 
   // Delete confirmation modal

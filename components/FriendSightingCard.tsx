@@ -1,11 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useHoots } from '../app/context/HootsContext';
+import { setPhotoUri } from '../app/utils/photoViewer';
 import { FriendSighting } from '../app/types';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
+import { isMysteryBird } from '../constants/unknownBird';
 import { HardShadow } from './SightingCard';
+import { NeedsIdPill } from './community/NeedsIdPill';
 import { Avatar } from './social/Avatar';
 import { FacePile } from './social/FacePile';
 import { HootListSheet } from './social/HootListSheet';
@@ -47,9 +50,7 @@ function formatRelativeDate(date: Date): string {
 }
 
 export default function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSightingCardProps) {
-  const [isModalVisible, setIsModalVisible] = useState(false);
   const [showHootList, setShowHootList] = useState(false);
-  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const { hasHooted, hootCount, toggleHoot } = useHoots();
   const router = useRouter();
 
@@ -65,7 +66,7 @@ export default function FriendSightingCard({ sighting, isFirstSighting, hideTag 
     <HardShadow style={styles.shadowWrap}>
       <View style={styles.card}>
         {sighting.photoUrl && (
-          <Pressable onPress={() => setIsModalVisible(true)}>
+          <Pressable onPress={() => { setPhotoUri(sighting.photoUrl!); router.push('/photo'); }}>
             <Image
               source={{ uri: sighting.photoUrl }}
               style={styles.photo}
@@ -121,6 +122,19 @@ export default function FriendSightingCard({ sighting, isFirstSighting, hideTag 
             <Text style={styles.metaText}>{formatRelativeDate(sighting.date)}</Text>
           </View>
 
+          {isMysteryBird(sighting) && (
+            <View style={styles.needsIdRow}>
+              <NeedsIdPill />
+              <Text style={styles.needsIdText} numberOfLines={1}>
+                {(sighting.proposalCount ?? 0) > 0
+                  ? sighting.leadingProposal
+                    ? `Front-runner: ${sighting.leadingProposal.species}`
+                    : `${sighting.proposalCount} ${sighting.proposalCount === 1 ? 'proposal' : 'proposals'}`
+                  : 'Help ID it'}
+              </Text>
+            </View>
+          )}
+
           {sighting.notes && (
             <Text style={styles.notes} numberOfLines={2}>{sighting.notes}</Text>
           )}
@@ -169,40 +183,6 @@ export default function FriendSightingCard({ sighting, isFirstSighting, hideTag 
         visible={showHootList}
         onClose={() => setShowHootList(false)}
       />
-
-      <Modal
-        visible={isModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setIsModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <Pressable
-            style={styles.modalCloseButton}
-            onPress={() => setIsModalVisible(false)}
-          >
-            <Ionicons name="close" size={28} color={palette.ink} />
-          </Pressable>
-
-          {sighting.photoUrl && (
-            <ScrollView
-              style={styles.modalPhoto}
-              contentContainerStyle={styles.modalPhotoContainer}
-              minimumZoomScale={1}
-              maximumZoomScale={3}
-              showsHorizontalScrollIndicator={false}
-              showsVerticalScrollIndicator={false}
-              bouncesZoom={true}
-            >
-              <Image
-                source={{ uri: sighting.photoUrl }}
-                style={[styles.modalPhotoImage, { width: screenWidth, height: screenHeight }]}
-                resizeMode="contain"
-              />
-            </ScrollView>
-          )}
-        </View>
-      </Modal>
     </HardShadow>
   );
 }
@@ -291,6 +271,20 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
+  // "Needs ID" cue for Mystery Birds on the feed (denormalized — no listener).
+  needsIdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginTop: space.sm,
+  },
+  needsIdText: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    fontWeight: '500',
+    flexShrink: 1,
+  },
+
   // Social footer region — divided from the card body by the 2px ink rule.
   footer: {
     borderTopWidth: 2,
@@ -338,38 +332,5 @@ const styles = StyleSheet.create({
   previewName: {
     color: palette.ink,
     fontFamily: font.bodyBold,
-  },
-
-  // Photo zoom modal
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.92)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalCloseButton: {
-    position: 'absolute',
-    top: 60,
-    right: 20,
-    zIndex: 1,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: palette.cream,
-    ...border.thick,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalPhoto: {
-    width: '100%',
-    height: '100%',
-  },
-  modalPhotoContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalPhotoImage: {
-    flex: 1,
   },
 });

@@ -10,7 +10,7 @@
 const {setGlobalOptions} = require("firebase-functions");
 const admin = require('firebase-admin');
 const { Expo } = require('expo-server-sdk');
-const {onDocumentCreated, onDocumentDeleted} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentDeleted, onDocumentUpdated} = require("firebase-functions/v2/firestore");
 const { FieldValue } = require('firebase-admin/firestore');
 
 // For cost control, you can set the maximum number of containers that can be
@@ -381,6 +381,152 @@ exports.onCommentAdded = onDocumentCreated('sightings/{sightingId}/comments/{com
     });
   } catch (error) {
     console.error('Error in onCommentAdded:', error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Community ID — proposals on Mystery Birds
+// ─────────────────────────────────────────────────────────────────────────
+
+// Recompute the denormalized proposal summary on the parent sighting doc:
+// the total proposal count and the current front-runner (highest hoots, ties
+// broken by oldest-first). Keeps the feed "needs ID · N proposals" cue and the
+// leading-proposal cue correct without any client write access to these fields.
+async function refreshProposalSummary(sightingRef) {
+  const propsSnap = await sightingRef.collection('proposals')
+    .orderBy('hootCount', 'desc').orderBy('createdAt', 'asc').limit(1).get();
+  const countSnap = await sightingRef.collection('proposals').count().get();
+  const lead = propsSnap.docs[0];
+  await sightingRef.update({
+    proposalCount: countSnap.data().count,
+    leadingProposal: lead ? {
+      proposalId: lead.id,
+      species: lead.data().species,
+      uid: lead.data().uid,
+      username: lead.data().username,
+      hootCount: lead.data().hootCount || 0,
+    } : FieldValue.delete(),
+  });
+}
+
+exports.onProposalAdded = onDocumentCreated('sightings/{sightingId}/proposals/{proposalId}', async (event) => {
+  const { sightingId } = event.params;
+  const proposal = event.data.data();
+  const sightingRef = admin.firestore().doc(`sightings/${sightingId}`);
+
+  try {
+    const sightingSnap = await sightingRef.get();
+    if (!sightingSnap.exists) {
+      console.log('Sighting not found for proposal:', sightingId);
+      return;
+    }
+    const sighting = sightingSnap.data();
+
+    // 1) maintain count + leading-proposal summary on the sighting doc
+    await refreshProposalSummary(sightingRef);
+
+    // 2) record activity + push the owner (never notify yourself). Social
+    // pushes are not gated by notificationPrefs — same policy as hoots/comments.
+    if (sighting.userId === proposal.uid) return;
+    await writeActivity(sighting.userId, {
+      type: 'proposal',
+      actorUid: proposal.uid,
+      actorUsername: proposal.username,
+      sightingId,
+      species: proposal.species,
+    });
+    await pushSocial(sighting.userId, {
+      title: `${proposal.username} proposed an ID 🦉`,
+      body: `${proposal.species} — for your Mystery Bird`,
+      data: { type: 'proposal', sightingId, species: proposal.species },
+    });
+  } catch (error) {
+    console.error('Error in onProposalAdded:', error);
+  }
+});
+
+exports.onProposalRemoved = onDocumentDeleted('sightings/{sightingId}/proposals/{proposalId}', async (event) => {
+  const { sightingId } = event.params;
+  const sightingRef = admin.firestore().doc(`sightings/${sightingId}`);
+  try {
+    const sightingSnap = await sightingRef.get();
+    if (!sightingSnap.exists) return; // sighting itself gone — nothing to maintain
+    await refreshProposalSummary(sightingRef);
+  } catch (error) {
+    console.error('Error in onProposalRemoved:', error);
+  }
+});
+
+// A proposal's agreement hoots changed → recount that proposal's hootCount and
+// refresh the leader (a hoot can change the ranking).
+async function recountProposalHoots(sightingId, proposalId) {
+  const sightingRef = admin.firestore().doc(`sightings/${sightingId}`);
+  const propRef = sightingRef.collection('proposals').doc(proposalId);
+  try {
+    const propSnap = await propRef.get();
+    // If the proposal was deleted, there's no counter to maintain; still refresh
+    // the parent summary so the leader stays correct.
+    if (propSnap.exists) {
+      const c = await propRef.collection('hoots').count().get();
+      await propRef.update({ hootCount: c.data().count });
+    }
+    const sightingSnap = await sightingRef.get();
+    if (sightingSnap.exists) await refreshProposalSummary(sightingRef);
+  } catch (error) {
+    console.error('Error recounting proposal hoots:', error);
+  }
+}
+
+exports.onProposalHootAdded = onDocumentCreated(
+  'sightings/{sightingId}/proposals/{proposalId}/hoots/{hooterUid}',
+  (event) => recountProposalHoots(event.params.sightingId, event.params.proposalId)
+);
+
+exports.onProposalHootRemoved = onDocumentDeleted(
+  'sightings/{sightingId}/proposals/{proposalId}/hoots/{hooterUid}',
+  (event) => recountProposalHoots(event.params.sightingId, event.params.proposalId)
+);
+
+// Owner accepted a proposal (the accept itself runs client-side in a batch,
+// since it mutates the owner's own sighting + Dex). Fire on the false→true edge
+// of `accepted` and push the PROPOSER that their ID was accepted.
+exports.onProposalAccepted = onDocumentUpdated('sightings/{sightingId}/proposals/{proposalId}', async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+  if (before.accepted || !after.accepted) return; // only the false→true edge
+
+  const { sightingId } = event.params;
+  try {
+    const sightingSnap = await admin.firestore().doc(`sightings/${sightingId}`).get();
+    if (!sightingSnap.exists) return;
+    const sighting = sightingSnap.data();
+    if (sighting.userId === after.uid) return; // owner accepted their own — no push
+
+    // Resolve the owner's username (not denormalized on the sighting doc).
+    let ownerUsername = 'They';
+    try {
+      const ownerSnap = await admin.firestore().collection('users').doc(sighting.userId).get();
+      if (ownerSnap.exists && ownerSnap.data().username) {
+        ownerUsername = ownerSnap.data().username;
+      }
+    } catch (error) {
+      console.error('Owner username lookup failed for proposal accept:', error);
+    }
+
+    await writeActivity(after.uid, {
+      type: 'proposal_accepted',
+      actorUid: sighting.userId,
+      actorUsername: ownerUsername,
+      sightingId,
+      species: after.species,
+    });
+    await pushSocial(after.uid, {
+      title: `${ownerUsername} accepted your ID 🦉`,
+      body: `It's a ${after.species} — added to their Dex.`,
+      data: { type: 'proposal_accepted', sightingId, species: after.species },
+    });
+  } catch (error) {
+    console.error('Error in onProposalAccepted:', error);
   }
 });
 

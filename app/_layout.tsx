@@ -21,9 +21,10 @@ import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { signOut, User } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
-import { Alert, SafeAreaView, StatusBar, TouchableOpacity, View } from 'react-native';
+import { Alert, StatusBar, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth } from '../config/firebaseConfig';
 import { palette } from '../constants/Colors';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
@@ -154,8 +155,17 @@ function AuthenticatedApp() {
 
           if (data.type === 'friend_sighting') {
             router.push('/(tabs)/friends');
-          } else if ((data.type === 'hoot' || data.type === 'comment') && data.sightingId) {
+          } else if (
+            (data.type === 'hoot' ||
+              data.type === 'comment' ||
+              data.type === 'proposal' ||
+              data.type === 'proposal_accepted') &&
+            data.sightingId
+          ) {
             router.push(`/sighting/${data.sightingId}`);
+          } else if (data.type === 'follow' && data.actorUid) {
+            // Open the new follower's profile so you can follow them back.
+            router.push(`/profile/${data.actorUid}`);
           }
         });
 
@@ -166,8 +176,17 @@ function AuthenticatedApp() {
           console.log('Notification tapped (cold start):', data);
           if (data.type === 'friend_sighting') {
             router.push('/(tabs)/friends');
-          } else if ((data.type === 'hoot' || data.type === 'comment') && data.sightingId) {
+          } else if (
+            (data.type === 'hoot' ||
+              data.type === 'comment' ||
+              data.type === 'proposal' ||
+              data.type === 'proposal_accepted') &&
+            data.sightingId
+          ) {
             router.push(`/sighting/${data.sightingId}`);
+          } else if (data.type === 'follow' && data.actorUid) {
+            // Open the new follower's profile so you can follow them back.
+            router.push(`/profile/${data.actorUid}`);
           }
         }
 
@@ -190,7 +209,10 @@ function AuthenticatedApp() {
         backgroundColor={palette.cream}
         translucent={true}
       />
-      <SafeAreaView style={{ flex: 1, backgroundColor: palette.cream }}>
+      {/* Don't consume the bottom inset here — the tab bar (and the pushed
+          screens) apply their own bottom safe-area padding. Insetting it at the
+          root too left an empty strip below the tab bar on iOS. */}
+      <SafeAreaView style={{ flex: 1, backgroundColor: palette.cream }} edges={['top', 'left', 'right']}>
         <Stack>
           <Stack.Screen
             name="(tabs)"
@@ -230,6 +252,7 @@ function AuthenticatedApp() {
             }}
           />
           <Stack.Screen name="sighting/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="photo" options={{ headerShown: false, animation: 'fade' }} />
           <Stack.Screen name="activity" options={{ headerShown: false }} />
           <Stack.Screen name="profile/[uid]" options={{ headerShown: false }} />
           <Stack.Screen name="profile/[uid]/compare" options={{ headerShown: false }} />

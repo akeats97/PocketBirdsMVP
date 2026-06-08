@@ -28,6 +28,10 @@ function typeBadge(t: ActivityItem['type']): { name: keyof typeof Ionicons.glyph
       return { name: 'leaf', color: palette.leaf };
     case 'comment':
       return { name: 'chatbubble', color: palette.sky ?? palette.ink };
+    case 'proposal':
+      return { name: 'help', color: palette.sun };
+    case 'proposal_accepted':
+      return { name: 'checkmark-circle', color: palette.leaf };
     case 'follow':
     default:
       return { name: 'person-add', color: palette.sun };
@@ -48,10 +52,16 @@ export default function ActivityScreen() {
   }, []);
 
   const openItem = (item: ActivityItem) => {
-    if ((item.type === 'hoot' || item.type === 'comment') && item.sightingId) {
+    if (
+      (item.type === 'hoot' ||
+        item.type === 'comment' ||
+        item.type === 'proposal' ||
+        item.type === 'proposal_accepted') &&
+      item.sightingId
+    ) {
       router.push(`/sighting/${item.sightingId}`);
-    } else if (item.type === 'follow') {
-      router.push('/(tabs)/friends');
+    } else if (item.type === 'follow' && item.actorUid) {
+      router.push(`/profile/${item.actorUid}`);
     }
   };
 
@@ -79,6 +89,12 @@ export default function ActivityScreen() {
               <Text> commented on your {item.birdName ?? 'sighting'}</Text>
             )}
             {item.type === 'follow' && <Text> started following you</Text>}
+            {item.type === 'proposal' && (
+              <Text> proposed {item.species ?? 'an ID'} for your Mystery Bird 🦉</Text>
+            )}
+            {item.type === 'proposal_accepted' && (
+              <Text> accepted your ID{item.species ? ` — it's a ${item.species}` : ''} 🦉</Text>
+            )}
           </Text>
           {item.type === 'comment' && item.commentText ? (
             <Text style={styles.preview} numberOfLines={2}>“{item.commentText}”</Text>
