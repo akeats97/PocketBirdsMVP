@@ -10,14 +10,16 @@
 • Long-press any card in your Field Journal (or tap the ⋯ on a sighting) to Edit
 • Change the species, date, location, notes, or photo of anything you've logged
 • Edits are silent: fixing a typo or swapping to a bird you've already seen pings no one. Only changing it to a brand-new species adds it to your Dex and notifies followers, like a fresh log
-💬 Your Journal, now social
-• Your own cards show hoot and comment counts, and a dot when there's something new to see
+💬 Social
+• Your own Journal cards show hoot and comment counts, and a dot when there's something new to see
+• Tap the hooters on any sighting to see everyone who gave it a hoot
+• Manage a person's notifications right from their profile
 ⚡ Smoother and faster
 • Noticeably smoother scrolling and tab-switching
 🔍 Dex and fixes
 • Mystery Birds now appear in your Dex (under "Other") with a count, and their photos count toward your photographed total
 • Fixed avatars sometimes showing "?" instead of your initial
-Plus more profile and iOS polish.
+Plus more polish.
 
 ### TestFlight - "What to Test" (plain text, copy below this line)
 
@@ -33,6 +35,9 @@ Please check:
 • Your own Journal cards show hoot and comment counts plus a "N new" cue; tapping opens the thread and clears it.
 • Open the Dex: Mystery Birds appear under "Other" with a count, and a Mystery Bird logged with a photo bumps your "photographed" stat.
 • Confirm the header and profile avatars show your initial (not "?") on a fresh launch.
+• Tap the hooters (face pile) on a friend's sighting: the hoot list opens and you can drag it down to dismiss.
+• On a profile, change that person's notification setting from the bell, and confirm the pill reads "Following".
+• iOS layout: confirm the top app bar isn't clipped (title + bell + avatar all visible) and the tab bar sits correctly.
 
 ### What shipped (engineering)
 - **Edit a sighting** (commit `feat: edit a sighting`): the Add form body was extracted into a shared `components/SightingForm` (`mode: add | edit`); a pushed route `app/sighting/[id]/edit.tsx`; `SightingsContext.updateSighting` (merge patch, recompute new-species/milestone excluding the edited row, offline `pendingUpdates` queue drained by `syncSightings`); the long-press **action sheet** (Edit/Delete/Cancel) replacing the delete-only modal, and an owner-only **⋯ overflow menu** on the detail screen; a shared `confirmDeleteSighting`. Server: `onSightingUpdated` fans out to followers ONLY when an edit becomes a new species (guarded by `notifiedSpecies` to prevent double-notify); every other edit stays silent.
