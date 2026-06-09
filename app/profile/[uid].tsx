@@ -8,11 +8,14 @@ import CompareCard from '../../components/compare/CompareCard';
 import FriendSightingCard from '../../components/FriendSightingCard';
 import { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
+import { NotifBell } from '../../components/social/NotifBell';
+import { NotifPrefSheet } from '../../components/social/NotifPrefSheet';
 import { SocialCounts, ConnectionTab } from '../../components/social/SocialCounts';
 import { auth } from '../../config/firebaseConfig';
 import { font, palette, radius, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
 import { useSightings } from '../context/SightingsContext';
+import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../services/notificationPrefsService';
 import { followUser, getFollowCounts, getPublicProfile, isFollowing, PublicProfile, unfollowUser } from '../services/userService';
 import { getSightingsByUid } from '../services/sightingService';
 import { FriendSighting, Sighting } from '../types';
@@ -54,6 +57,8 @@ export default function ProfileScreen() {
   const [followBusy, setFollowBusy] = useState(false);
   const [tab, setTab] = useState<Tab>('journal');
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, NotificationMode>>({});
+  const [notifSheetOpen, setNotifSheetOpen] = useState(false);
 
   // The list this profile renders: my own (live context) when self, else the
   // fetched list.
@@ -109,6 +114,26 @@ export default function ProfileScreen() {
     getFollowCounts(uid).then(setFollowCounts).catch(() => {});
   }, [uid]);
   useEffect(() => { loadFollowCounts(); }, [loadFollowCounts]);
+
+  // Live map of my per-friend notification levels, so the profile's bell stays
+  // in sync with the same control in the connections list.
+  useEffect(() => {
+    if (!myUid) return;
+    return subscribeToPrefs(myUid, setNotifPrefs);
+  }, [myUid]);
+
+  const notifMode: NotificationMode = (uid && notifPrefs[uid]) || DEFAULT_MODE;
+
+  const handleSelectNotifMode = async (mode: NotificationMode) => {
+    if (!uid || !myUid) return;
+    setNotifPrefs((prev) => ({ ...prev, [uid]: mode })); // optimistic
+    setNotifSheetOpen(false);
+    try {
+      await setPref(myUid, uid, mode);
+    } catch (e) {
+      console.error('Failed to set notification pref:', e);
+    }
+  };
 
   // If the profile loaded without a username (the read resolved against a partial
   // cached doc), retry a few times to pick it up once the server doc syncs in.
@@ -214,8 +239,11 @@ export default function ProfileScreen() {
           <Text style={styles.name} numberOfLines={1}>{name || 'Birder'}</Text>
           {since && <Text style={styles.since}>Since {since}</Text>}
         </View>
+        {!isSelf && following && (
+          <NotifBell mode={notifMode} onPress={() => setNotifSheetOpen(true)} />
+        )}
         <ActionPill
-          variant={isSelf ? 'edit' : following ? 'friends' : 'follow'}
+          variant={isSelf ? 'edit' : following ? 'following' : 'follow'}
           busy={followBusy}
           onPress={isSelf
             ? () => Alert.alert('Coming soon', 'Profile editing is on the way.')
@@ -356,13 +384,21 @@ export default function ProfileScreen() {
           )}
         </ScrollView>
       )}
+
+      <NotifPrefSheet
+        visible={notifSheetOpen}
+        person={uid ? { uid, username: name } : null}
+        mode={notifMode}
+        onPick={handleSelectNotifMode}
+        onClose={() => setNotifSheetOpen(false)}
+      />
     </View>
   );
 }
 
-// ── Action pill (Follow / Friends / Edit) ───────────────────────────────────
+// ── Action pill (Follow / Following / Edit) ──────────────────────────────────
 function ActionPill({ variant, busy, onPress }: {
-  variant: 'follow' | 'friends' | 'edit';
+  variant: 'follow' | 'following' | 'edit';
   busy?: boolean;
   onPress: () => void;
 }) {
@@ -379,12 +415,12 @@ function ActionPill({ variant, busy, onPress }: {
         ) : (
           <>
             <Ionicons
-              name={variant === 'edit' ? 'pencil' : variant === 'friends' ? 'checkmark' : 'add'}
+              name={variant === 'edit' ? 'pencil' : variant === 'following' ? 'checkmark' : 'add'}
               size={variant === 'follow' ? 14 : 13}
               color={isFollow ? '#fff' : palette.ink}
             />
             <Text style={[styles.pillText, isFollow && styles.pillTextFollow]}>
-              {variant === 'edit' ? 'Edit' : variant === 'friends' ? 'Friends' : 'Follow'}
+              {variant === 'edit' ? 'Edit' : variant === 'following' ? 'Following' : 'Follow'}
             </Text>
           </>
         )}
