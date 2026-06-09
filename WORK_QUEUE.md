@@ -77,6 +77,28 @@ Victoria: "Show recent locations when logging" + "X/clear button on text boxes s
 **Standalone prompt:**
 > Read `CLAUDE.md` first. Implement the smarter Add Sighting location dropdown (WORK_QUEUE UR-5). Three behaviors: (1) when the location field is focused and empty, show the user's recent locations (derived from `sightings` in `SightingsContext` — dedupe by label, most-recent coords, exclude empty/report/Mystery entries, cap ~6; put the selector in `app/utils/recentLocations.ts`); tapping one fills label + coords with no Google Places call. (2) When typing, bias `getPlacesAutocomplete` to the user's CURRENT position instead of `lastLocation.coordinates`. Add `getCurrentCoordinates()` to `locationService` that returns coords only (last-known-position first, no reverse-geocode) and ONLY if location permission is already granted (never prompt); fall back to `lastLocation.coordinates` when unavailable. (3) Add a clear "✕" button inside the location input (mirror the existing right-aligned crosshair `locateButton` layout) shown only when the field is non-empty; tapping it empties the field via `handleLocationChange('')` and refocuses so recents appear. Optionally add the same ✕ to the bird-search and notes inputs. Wire (1) and (2) into `app/(tabs)/add.tsx` (focus state, recents-vs-Places dropdown switch, bias coords resolved silently on focus). Keep the crosshair locate button's existing JIT permission prompt as the only place that asks. Don't add the country-restriction v2. Typecheck before finishing.
 
+### UR-6 — Forgiving bird search: gray↔grey and dash↔space matching (victoria, Jun 6 2026) — FEATURE
+
+Victoria: "Type matching on common cases. Ex: gray vs grey, or recognize a space for anything that has a dash." The IOC list (`constants/birdNames.ts`) uses British spellings ("Grey Plover", "Grey-headed Gull") and hyphenated compound names ("Red-breasted Nuthatch"). Americans type "gray", and people type spaces instead of hyphens — both currently fail to match.
+
+**Two cases:**
+1. **gray ↔ grey.** Typing "gray plover" should find "Grey Plover" and vice versa. High value, near-zero risk — a `grey→gray` substitution on both query and index; no English bird word breaks under it. This half alone is tiny and cherry-pickable.
+2. **dash ↔ space.** Typing "red breasted" should match "Red-breasted Nuthatch" (and typing the hyphen should work too). The loop already half-handles this via its `qDash`/`qSpace` word-start tiers, but it's not true normalization.
+
+**Why it's a small feature, not a one-liner:** the bird-search loop in `app/(tabs)/add.tsx` (~line 167) scans all 11,227 names **per keystroke** against a *precomputed* lowercase index (`birdNamesAlphaLower`), early-exiting at 20 hits. CLAUDE.md flags this as a perf-sensitive hot path ("No per-keystroke sort"). So the matching must run against a **second precomputed parallel array**, NOT by normalizing names inside the loop (11k string ops/keystroke = the exact footgun the codebase warns about).
+
+**Implementation sketch:**
+- `constants/birdNamesLower.ts`: export a shared `normalizeSearch(s)` = `s.toLowerCase().replace(/grey/g, 'gray').replace(/-/g, ' ')` (optionally collapse repeated spaces), and a new `birdNamesAlphaNorm` array = `birdNamesAlpha.map(normalizeSearch)` (built once at module load, parallel to `birdNamesAlpha`). One extra ~11k-string array; trivial memory, zero per-keystroke cost.
+- `app/(tabs)/add.tsx`: compute `q = normalizeSearch(searchQuery)`; match against `birdNamesAlphaNorm[i]` in the loop; `qSpace = ' ' + q`; drop the now-redundant `qDash` branch (the index has no hyphens after normalization). Keep displaying `birdNamesAlpha[i]` (original casing/hyphens) — only the *matching* is normalized.
+- Reuse `normalizeSearch` anywhere else the bird list gets filtered (per the CLAUDE.md "re-use this pattern" note), but add.tsx is the only live bird search today.
+
+**Scope notes:** Keep substitutions minimal (just `grey→gray`; the user named only that). Don't try fuzzy/Levenshtein matching. This does NOT touch the Google Places location search (UR-5) — birds only.
+
+**Effort:** ~30–45 min, low risk, no native deps.
+
+**Standalone prompt:**
+> Read `CLAUDE.md` first. Make the Add Sighting bird search forgiving of gray/grey and dash/space differences (WORK_QUEUE UR-6). In `constants/birdNamesLower.ts` add a shared `normalizeSearch(s)` (`toLowerCase` + `grey→gray` + `-`→space) and a precomputed parallel array `birdNamesAlphaNorm = birdNamesAlpha.map(normalizeSearch)`. In `app/(tabs)/add.tsx`, normalize the query with `normalizeSearch` and match the loop against `birdNamesAlphaNorm` (keep displaying the original `birdNamesAlpha[i]`); set `qSpace = ' ' + q` and remove the redundant `qDash` branch. Do NOT normalize names inside the per-keystroke loop — precompute the array once at module load (the loop scans 11k names/keystroke and is a documented hot path). Keep substitutions minimal (just grey→gray); no fuzzy matching; don't touch the location/Places search. Typecheck before finishing.
+
 ### Already tracked (now also user-requested, no new entry needed)
 
 - **React / kudos on a friend's sighting** (victoria, "please let me react to friends sightings") → already in `CLAUDE.md` Feature Backlog ("Kudos on a friend's sighting").
