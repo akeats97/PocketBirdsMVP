@@ -329,6 +329,9 @@ export async function getUserByUsername(username: string): Promise<User | null> 
 export interface PublicProfile {
   uid: string;
   username: string;
+  // Used only as an avatar-initial fallback when username is briefly empty (the
+  // same partial-cache race the header guards against). Never shown as text.
+  email?: string;
   joinDate: Date | null;
 }
 
@@ -350,6 +353,7 @@ export async function getPublicProfile(
     return {
       uid,
       username: data.username,
+      email: data.email,
       joinDate: createdAt ?? fallbackJoinDate ?? null,
     };
   } catch (error) {

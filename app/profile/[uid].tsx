@@ -110,7 +110,36 @@ export default function ProfileScreen() {
   }, [uid]);
   useEffect(() => { loadFollowCounts(); }, [loadFollowCounts]);
 
+  // If the profile loaded without a username (the read resolved against a partial
+  // cached doc), retry a few times to pick it up once the server doc syncs in.
+  // The email-initial fallback covers the avatar in the meantime.
+  useEffect(() => {
+    if (!uid || !profile || profile.username) return;
+    let cancelled = false;
+    let attempt = 0;
+    const retry = () => {
+      if (cancelled || attempt >= 4) return;
+      attempt += 1;
+      setTimeout(async () => {
+        if (cancelled) return;
+        const p = await getPublicProfile(uid);
+        if (cancelled) return;
+        if (p?.username) {
+          setProfile((prev) => ({ ...p, joinDate: p.joinDate ?? prev?.joinDate ?? null }));
+        } else {
+          retry();
+        }
+      }, 1000 * attempt);
+    };
+    retry();
+    return () => { cancelled = true; };
+  }, [uid, profile?.username]);
+
   const name = profile?.username ?? '';
+  // Avatar letter falls back to the email initial so a signed-in profile is
+  // never a "?" while the username is briefly empty (partial-cache race). The
+  // display name text below still shows 'Birder', never the email.
+  const avatarName = name || profile?.email || '';
   const since = profile?.joinDate
     ? profile.joinDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
     : null;
@@ -180,7 +209,7 @@ export default function ProfileScreen() {
     <View>
       {/* Identity */}
       <View style={styles.identity}>
-        <Avatar name={name} seed={uid ?? ''} size={72} />
+        <Avatar name={avatarName} seed={uid ?? ''} size={72} />
         <View style={styles.identityCol}>
           <Text style={styles.name} numberOfLines={1}>{name || 'Birder'}</Text>
           {since && <Text style={styles.since}>Since {since}</Text>}
