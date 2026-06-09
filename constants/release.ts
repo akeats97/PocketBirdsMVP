@@ -1,1 +1,1 @@
-export const CURRENT_RELEASE_NAME = 'Antwren';
+export const CURRENT_RELEASE_NAME = 'Tyrannulet';
