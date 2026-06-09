@@ -58,7 +58,9 @@ export function HootListSheet({ sightingId, visible, onClose }: HootListSheetPro
 
   const panResponder = useRef(
     PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, g) => g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_, g) => {
         if (g.dy > 0) translateY.setValue(g.dy);
       },
@@ -113,10 +115,7 @@ export function HootListSheet({ sightingId, visible, onClose }: HootListSheetPro
         {/* Full-screen tap catcher behind the sheet. */}
         <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} />
 
-        <Animated.View
-          style={[styles.sheet, { transform: [{ translateY }] }]}
-          onStartShouldSetResponder={() => true}
-        >
+        <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
           {/* Drag zone: grabber + header. The list below scrolls independently. */}
           <View {...panResponder.panHandlers}>
             <View style={styles.grabberRow}>
