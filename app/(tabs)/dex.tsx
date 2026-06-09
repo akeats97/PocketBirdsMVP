@@ -96,12 +96,16 @@ export default function DexScreen() {
   // "Other" path below) but are kept out of the headline species counts.
   const stats = useMemo(() => {
     const realSpeciesNames = Object.keys(seenMap).filter(n => !isCustomSpecies(n));
+    // Mystery Bird sightings have no identified species (so they never count
+    // toward species), but each one logged with a photo still counts as
+    // something photographed — one per mystery sighting, not one per "species".
+    const mysteryPhotos = realSightings.filter(s => isUnknownEntry(s.birdName) && s.photoUrl).length;
     return {
       totalSightings: realSightings.length,
       uniqueSpecies: realSpeciesNames.length,
-      photographedSpecies: realSpeciesNames.filter(n => seenMap[n].hasPhoto).length,
+      photographedSpecies: realSpeciesNames.filter(n => seenMap[n].hasPhoto).length + mysteryPhotos,
     };
-  }, [realSightings.length, seenMap]);
+  }, [realSightings, seenMap]);
 
   const sections = useMemo<Section[]>(() => {
     const q = searchQuery.trim().toLowerCase();
