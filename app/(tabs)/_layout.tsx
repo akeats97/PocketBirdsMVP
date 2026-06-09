@@ -27,6 +27,10 @@ function TabPill({ name, color, focused }: { name: IoniconName; color: string; f
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  // The full safe-area inset (~34pt on a home-indicator iPhone) reads as an
+  // oversized chin, so we encroach into it while keeping clearance for the
+  // home indicator. Floor of 8 covers devices with no inset.
+  const bottomPad = Math.max(insets.bottom - 12, 8);
   return (
     <Tabs
       screenOptions={{
@@ -36,9 +40,9 @@ export default function TabLayout() {
           backgroundColor: palette.card,
           borderTopWidth: 2,
           borderTopColor: palette.ink,
-          height: 60 + insets.bottom,
+          height: 50 + bottomPad,
           paddingTop: 0,
-          paddingBottom: 8 + insets.bottom,
+          paddingBottom: bottomPad,
         },
         tabBarLabelStyle: {
           fontFamily: font.body,
