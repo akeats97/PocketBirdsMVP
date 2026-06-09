@@ -32,6 +32,7 @@ import { font, palette, radius, space, type } from '../../constants/Colors';
 import { isMysteryBird, isUnknownEntry } from '../../constants/unknownBird';
 import { isReportEntry } from '../../constants/reportTypes';
 import { isCustomSpecies } from '../../constants/customSpecies';
+import { useActivity } from '../context/ActivityContext';
 import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useHoots } from '../context/HootsContext';
 import { useSightings } from '../context/SightingsContext';
@@ -81,6 +82,17 @@ export default function SightingDetailScreen() {
 
   const { friendSightings } = useFriendSightings();
   const { sightings, evaluateNewSpecies, applyCommunityId, markGlobalFirst } = useSightings();
+  const { markSightingRead } = useActivity();
+
+  // Opening a sighting clears its unread engagement, so the Journal card's
+  // unread dot / "N new" cue disappears. Mirrors how app/activity.tsx clears
+  // the whole inbox on mount. Items live in the owner's inbox, so this is a
+  // no-op for a friend's sighting.
+  useEffect(() => {
+    markSightingRead(sightingId);
+    // One-shot on mount for this sighting id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sightingId]);
   const { hasHooted, hootCount, toggleHoot, hasHootedProposal, toggleProposalHoot } = useHoots();
   const { comments, loading, post } = useComments(sightingId);
   const { proposals, add, accept } = useProposals(sightingId);

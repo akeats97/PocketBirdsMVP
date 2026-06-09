@@ -5,21 +5,34 @@ import { Alert, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-na
 import { useSightings } from '../app/context/SightingsContext';
 import { setPhotoUri } from '../app/utils/photoViewer';
 import { Sighting } from '../app/types';
-import { border, palette, radius, recipes, space, type } from '../constants/Colors';
+import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { isMysteryBird } from '../constants/unknownBird';
 import { NeedsIdPill } from './community/NeedsIdPill';
+import { Owl } from './Owl';
 
 interface SightingCardProps {
   sighting: Sighting;
   isNewSpecies?: boolean;
+  /** Unread hoots/comments/proposals on this sighting (drives the cue). */
+  unreadCount?: number;
 }
 
-export default function SightingCard({ sighting, isNewSpecies }: SightingCardProps) {
+export default function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardProps) {
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const { deleteSighting } = useSightings();
   const router = useRouter();
 
   const photoSource = sighting.photoUrl || sighting.photoPath;
+
+  const hootCount = sighting.hootCount ?? 0;
+  const commentCount = sighting.commentCount ?? 0;
+  const proposalCount = sighting.proposalCount ?? 0;
+  const mystery = isMysteryBird(sighting);
+  // The footer is a read-only engagement summary — shown only once a sighting
+  // has actually collected something. A quiet card stays exactly as before.
+  const hasEngagement = hootCount > 0 || commentCount > 0 || proposalCount > 0;
+
+  const openDetail = () => router.push(`/sighting/${sighting.id}`);
 
   const handleLongPress = () => {
     setIsDeleteModalVisible(true);
@@ -49,8 +62,11 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
 
   return (
     <HardShadow style={styles.shadowWrap}>
+      {/* Whole-card tap → detail thread; long-press still opens delete. The
+          nested photo / needs-ID pressables intercept their own taps. */}
       <Pressable
         style={styles.card}
+        onPress={openDetail}
         onLongPress={handleLongPress}
         delayLongPress={500}
         android_ripple={{ color: 'rgba(0,0,0,0.04)' }}
@@ -103,28 +119,66 @@ export default function SightingCard({ sighting, isNewSpecies }: SightingCardPro
             <Text style={styles.metaText}>{formatRelativeDate(sighting.date)}</Text>
           </View>
 
-          {isMysteryBird(sighting) && (
-            <Pressable
-              style={({ pressed }) => [styles.needsIdRow, pressed && { opacity: 0.6 }]}
-              onPress={() => router.push(`/sighting/${sighting.id}`)}
-              hitSlop={6}
-            >
+          {/* Needs-ID prompt only while there are no proposals yet — once they
+              arrive the footer's proposals pill carries the live count. */}
+          {mystery && proposalCount === 0 && (
+            <View style={styles.needsIdRow}>
               <NeedsIdPill />
-              <Text style={styles.needsIdText} numberOfLines={1}>
-                {(sighting.proposalCount ?? 0) > 0
-                  ? sighting.leadingProposal
-                    ? `Front-runner: ${sighting.leadingProposal.species}`
-                    : `${sighting.proposalCount} ${sighting.proposalCount === 1 ? 'proposal' : 'proposals'}`
-                  : 'Tap to get an ID'}
-              </Text>
-            </Pressable>
+              <Text style={styles.needsIdText} numberOfLines={1}>Tap to get an ID</Text>
+            </View>
           )}
 
           {sighting.notes && (
             <Text style={styles.notes} numberOfLines={2}>{sighting.notes}</Text>
           )}
         </View>
+
+        {/* Engagement footer — a read-only summary of the hoots, comments, and
+            ID proposals this sighting has collected. The owner can't hoot their
+            own sighting, so this is a glance + tap-through, not an action bar.
+            Replies happen in the detail thread. */}
+        {hasEngagement && (
+          <View style={styles.footer}>
+            {hootCount > 0 && (
+              <View style={styles.stat}>
+                <Owl size={18} filled color={palette.coral} />
+                <Text style={styles.statText}>{hootCount}</Text>
+              </View>
+            )}
+            {commentCount > 0 && (
+              <View style={styles.stat}>
+                <Ionicons name="chatbubble-outline" size={16} color={palette.sky} />
+                <Text style={styles.statText}>{commentCount}</Text>
+              </View>
+            )}
+            {mystery && proposalCount > 0 && (
+              <View style={styles.proposalsPill}>
+                <View style={styles.proposalsDot} />
+                <Text style={styles.proposalsText} numberOfLines={1}>
+                  {sighting.leadingProposal
+                    ? sighting.leadingProposal.species
+                    : `${proposalCount} ${proposalCount === 1 ? 'proposal' : 'proposals'}`}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.trailing}>
+              <Text style={[styles.trailingText, unreadCount > 0 && styles.trailingNew]}>
+                {unreadCount > 0 ? `${unreadCount} new` : 'View'}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={unreadCount > 0 ? palette.leaf : palette.muted}
+              />
+            </View>
+          </View>
+        )}
       </Pressable>
+
+      {/* Unread cue — coral dot riding the top-left corner, mirroring the inbox.
+          Sits outside the clipped card so the corner radius doesn't crop it. */}
+      {unreadCount > 0 && <View style={styles.unreadDot} pointerEvents="none" />}
 
       {/* Delete confirmation modal */}
       <Modal
@@ -285,6 +339,81 @@ const styles = StyleSheet.create({
     color: palette.inkSoft,
     fontWeight: '500',
     flexShrink: 1,
+  },
+
+  // Engagement footer — divided from the body by the 2px ink rule, matching
+  // FriendSightingCard's footer language but read-only (counts, not actions).
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    borderTopWidth: 2,
+    borderTopColor: palette.ink,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+  },
+  stat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  statText: {
+    fontFamily: font.bodyBold,
+    fontSize: 12.5,
+    color: palette.ink,
+  },
+  proposalsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: palette.sunSoft,
+    borderWidth: 1.5,
+    borderColor: palette.ink,
+    borderRadius: radius.pill,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+    flexShrink: 1,
+  },
+  proposalsDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: palette.coral,
+  },
+  proposalsText: {
+    fontFamily: font.bodyBold,
+    fontSize: 11.5,
+    color: palette.ink,
+    flexShrink: 1,
+  },
+  trailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginLeft: 'auto',
+  },
+  trailingText: {
+    ...type.bodyS,
+    color: palette.muted,
+    fontWeight: '500',
+  },
+  trailingNew: {
+    color: palette.leaf,
+    fontFamily: font.bodyBold,
+  },
+
+  // Unread dot — coral, cream-ringed, riding the card's top-left corner.
+  unreadDot: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: palette.coral,
+    borderWidth: 3,
+    borderColor: palette.cream,
+    zIndex: 10,
   },
 
   // Delete confirmation modal

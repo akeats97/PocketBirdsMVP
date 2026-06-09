@@ -85,3 +85,25 @@ export async function markAllActivityRead(uid: string): Promise<void> {
     console.error('Error marking activity read:', error);
   }
 }
+
+// Mark unread activity for ONE sighting read (called when its detail opens, so
+// the Journal card's unread cue clears). Scoped variant of markAllActivityRead.
+export async function markSightingActivityRead(
+  uid: string,
+  sightingId: string
+): Promise<void> {
+  try {
+    const q = query(
+      collection(db, `users/${uid}/activity`),
+      where('sightingId', '==', sightingId),
+      where('read', '==', false)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return;
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+    await batch.commit();
+  } catch (error) {
+    console.error('Error marking sighting activity read:', error);
+  }
+}

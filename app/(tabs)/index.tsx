@@ -5,6 +5,7 @@ import { palette, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
 import { isUnknownEntry } from '../../constants/unknownBird';
 import { isCustomSpecies } from '../../constants/customSpecies';
+import { useActivity } from '../context/ActivityContext';
 import { useSightings } from '../context/SightingsContext';
 import { groupSightingsByDay } from '../utils/groupSightingsByDay';
 
@@ -52,6 +53,7 @@ function EmptyState() {
 
 export default function LogScreen() {
   const { sightings, isNewSpeciesForUser } = useSightings();
+  const { unreadBySighting } = useActivity();
 
   // Bug Report / Feature Request entries are hidden from the user's own
   // Field Journal (they still appear in friends' feeds and Firestore).
@@ -71,6 +73,7 @@ export default function LogScreen() {
           <SightingCard
             sighting={item}
             isNewSpecies={!isUnknownEntry(item.birdName) && isNewSpeciesForUser(item.birdName, item.date)}
+            unreadCount={unreadBySighting[item.id] ?? 0}
           />
         )}
         renderSectionHeader={({ section }) => (

@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { auth } from '../../config/firebaseConfig';
 import {
   ActivityItem,
   markAllActivityRead,
+  markSightingActivityRead,
   subscribeToActivity,
 } from '../services/activityService';
 
@@ -11,8 +12,16 @@ interface ActivityContextType {
   items: ActivityItem[];
   /** Count of unread items — drives the header bell's dot. */
   unreadCount: number;
+  /**
+   * Per-sighting unread tally, derived from the activity stream. Drives the
+   * Field Journal card unread cue. A selector over the already-subscribed
+   * collection — no extra reads. Recency-bound by the 50-item subscription cap.
+   */
+  unreadBySighting: Record<string, number>;
   /** Mark everything read (call when the Activity screen opens). */
   markAllRead: () => Promise<void>;
+  /** Mark one sighting's activity read (call when its detail opens). */
+  markSightingRead: (sightingId: string) => Promise<void>;
 }
 
 const ActivityContext = createContext<ActivityContextType | undefined>(undefined);
@@ -43,6 +52,14 @@ function ActivityProvider({ children }: { children: React.ReactNode }) {
 
   const unreadCount = items.reduce((n, item) => (item.read ? n : n + 1), 0);
 
+  const unreadBySighting = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const i of items) {
+      if (!i.read && i.sightingId) m[i.sightingId] = (m[i.sightingId] ?? 0) + 1;
+    }
+    return m;
+  }, [items]);
+
   const markAllRead = async () => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
@@ -51,8 +68,22 @@ function ActivityProvider({ children }: { children: React.ReactNode }) {
     await markAllActivityRead(uid);
   };
 
+  const markSightingRead = async (sightingId: string) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    // Optimistic: clear this sighting's unread items locally, then persist.
+    setItems((prev) =>
+      prev.map((i) =>
+        i.read || i.sightingId !== sightingId ? i : { ...i, read: true }
+      )
+    );
+    await markSightingActivityRead(uid, sightingId);
+  };
+
   return (
-    <ActivityContext.Provider value={{ items, unreadCount, markAllRead }}>
+    <ActivityContext.Provider
+      value={{ items, unreadCount, unreadBySighting, markAllRead, markSightingRead }}
+    >
       {children}
     </ActivityContext.Provider>
   );
