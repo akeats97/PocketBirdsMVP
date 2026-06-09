@@ -14,7 +14,10 @@
 • Your own cards show hoot and comment counts, and a dot when there's something new to see
 ⚡ Smoother and faster
 • Noticeably smoother scrolling and tab-switching
-Plus profile, Dex, and iOS polish.
+🔍 Dex and fixes
+• Mystery Birds now appear in your Dex (under "Other") with a count, and their photos count toward your photographed total
+• Fixed avatars sometimes showing "?" instead of your initial
+Plus more profile and iOS polish.
 
 ### TestFlight - "What to Test" (plain text, copy below this line)
 
@@ -28,6 +31,8 @@ Please check:
 • Delete still shows the "Species Removed" alert when it was your only sighting of that bird.
 • Scroll the Field Journal and Friends feeds and flip between tabs: should feel smooth.
 • Your own Journal cards show hoot and comment counts plus a "N new" cue; tapping opens the thread and clears it.
+• Open the Dex: Mystery Birds appear under "Other" with a count, and a Mystery Bird logged with a photo bumps your "photographed" stat.
+• Confirm the header and profile avatars show your initial (not "?") on a fresh launch.
 
 ### What shipped (engineering)
 - **Edit a sighting** (commit `feat: edit a sighting`): the Add form body was extracted into a shared `components/SightingForm` (`mode: add | edit`); a pushed route `app/sighting/[id]/edit.tsx`; `SightingsContext.updateSighting` (merge patch, recompute new-species/milestone excluding the edited row, offline `pendingUpdates` queue drained by `syncSightings`); the long-press **action sheet** (Edit/Delete/Cancel) replacing the delete-only modal, and an owner-only **⋯ overflow menu** on the detail screen; a shared `confirmDeleteSighting`. Server: `onSightingUpdated` fans out to followers ONLY when an edit becomes a new species (guarded by `notifiedSpecies` to prevent double-notify); every other edit stays silent.
