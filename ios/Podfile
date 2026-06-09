@@ -60,5 +60,21 @@ target 'PocketBirds4' do
         end
       end
     end
+
+    # fmt 11.0.2 (bundled by RN 0.79) fails to compile under Xcode 26's Clang:
+    # its consteval format-string check is rejected as "not a constant expression".
+    # The header redefines FMT_USE_CONSTEVAL unconditionally (it is NOT guarded by
+    # #ifndef), so a -DFMT_USE_CONSTEVAL=0 compiler flag gets overwritten and has no
+    # effect. Patch the header itself to force the consteval path off. Idempotent.
+    fmt_base = File.join(__dir__, 'Pods/fmt/include/fmt/base.h')
+    if File.exist?(fmt_base)
+      contents = File.read(fmt_base)
+      needle = "#if !defined(__cpp_lib_is_constant_evaluated)\n#  define FMT_USE_CONSTEVAL 0"
+      patched = "#if 1 || !defined(__cpp_lib_is_constant_evaluated)\n#  define FMT_USE_CONSTEVAL 0"
+      if contents.include?(needle)
+        File.write(fmt_base, contents.sub(needle, patched))
+        Pod::UI.puts '[PocketBirds] Patched fmt base.h to disable consteval (Xcode 26 fix)'
+      end
+    end
   end
 end
