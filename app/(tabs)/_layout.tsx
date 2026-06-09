@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '../../components/AppHeader';
 import { font, palette, radius } from '../../constants/Colors';
@@ -27,10 +27,15 @@ function TabPill({ name, color, focused }: { name: IoniconName; color: string; f
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  // The full safe-area inset (~34pt on a home-indicator iPhone) reads as an
-  // oversized chin, so we encroach into it while keeping clearance for the
-  // home indicator. Floor of 8 covers devices with no inset.
-  const bottomPad = Math.max(insets.bottom - 12, 8);
+  // iOS only: the full safe-area inset (~34pt on a home-indicator iPhone) reads
+  // as an oversized chin, so we encroach into it while keeping clearance for the
+  // home indicator. Android is left at its original values (the tighter inset
+  // crowded the gesture bar there), so it keeps the full inset.
+  // baseHeight is the icon/label content area; total bar = baseHeight + bottomPad.
+  // Android restores the original (paddingBottom 8 + inset, total height 60 + inset
+  // => content 52). iOS uses the tightened chin.
+  const bottomPad = Platform.OS === 'ios' ? Math.max(insets.bottom - 12, 8) : 8 + insets.bottom;
+  const baseHeight = Platform.OS === 'ios' ? 50 : 52;
   return (
     <Tabs
       screenOptions={{
@@ -40,7 +45,7 @@ export default function TabLayout() {
           backgroundColor: palette.card,
           borderTopWidth: 2,
           borderTopColor: palette.ink,
-          height: 50 + bottomPad,
+          height: baseHeight + bottomPad,
           paddingTop: 0,
           paddingBottom: bottomPad,
         },
