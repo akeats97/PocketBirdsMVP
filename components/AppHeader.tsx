@@ -5,6 +5,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActivity } from '../app/context/ActivityContext';
 import { getCurrentUserProfile } from '../app/services/userService';
+import { auth } from '../config/firebaseConfig';
 import { font, palette, space } from '../constants/Colors';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
 import { Avatar } from './social/Avatar';
@@ -24,12 +25,32 @@ import { Avatar } from './social/Avatar';
 export function AppHeader() {
   const insets = useSafeAreaInsets();
   const { unreadCount } = useActivity();
-  const [me, setMe] = useState<{ uid: string; username: string } | null>(null);
+  // `name` is what the avatar shows the first letter of. We resolve it from the
+  // username, falling back to the email, so a signed-in user is never a "?".
+  const [me, setMe] = useState<{ uid: string; name: string } | null>(null);
 
   useEffect(() => {
-    getCurrentUserProfile().then((p) => {
-      if (p) setMe({ uid: p.uid, username: p.username });
-    });
+    let cancelled = false;
+
+    // The profile read can resolve against a partial local doc snapshot (the
+    // savePushToken merge write on launch can land a token-only version of the
+    // user doc first), which comes back with no `username` and rendered a "?".
+    // So: fall back to the email initial immediately, and retry a few times to
+    // pick up the real username once the server doc syncs into the cache.
+    const load = async (attempt = 0) => {
+      const p = await getCurrentUserProfile();
+      if (cancelled || !p) return;
+      const name = p.username || p.email || '';
+      setMe({ uid: p.uid, name });
+      if (!p.username && attempt < 4) {
+        setTimeout(() => { if (!cancelled) load(attempt + 1); }, 1000 * (attempt + 1));
+      }
+    };
+
+    // Run now for warm mounts, and when auth resolves a user on cold start.
+    if (auth.currentUser) load();
+    const unsub = auth.onAuthStateChanged((u) => { if (u) load(); });
+    return () => { cancelled = true; unsub(); };
   }, []);
 
   return (
@@ -53,7 +74,7 @@ export function AppHeader() {
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityLabel="Your profile"
           >
-            <Avatar name={me.username} seed={me.uid} size={32} />
+            <Avatar name={me.name} seed={me.uid} size={32} />
           </TouchableOpacity>
         )}
       </View>
