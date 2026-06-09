@@ -49,7 +49,7 @@ function formatRelativeDate(date: Date): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSightingCardProps) {
+function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSightingCardProps) {
   const [showHootList, setShowHootList] = useState(false);
   const { hasHooted, hootCount, toggleHoot } = useHoots();
   const router = useRouter();
@@ -186,6 +186,10 @@ export default function FriendSightingCard({ sighting, isFirstSighting, hideTag 
     </HardShadow>
   );
 }
+
+// Memoized: the friends feed re-renders on every live sightings snapshot; this
+// lets unchanged rows bail out instead of all re-rendering each update.
+export default React.memo(FriendSightingCard);
 
 const styles = StyleSheet.create({
   shadowWrap: {

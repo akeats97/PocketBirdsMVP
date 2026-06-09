@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { auth } from '../../config/firebaseConfig';
 import {
   ActivityItem,
@@ -50,7 +50,10 @@ function ActivityProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const unreadCount = items.reduce((n, item) => (item.read ? n : n + 1), 0);
+  const unreadCount = useMemo(
+    () => items.reduce((n, item) => (item.read ? n : n + 1), 0),
+    [items]
+  );
 
   const unreadBySighting = useMemo(() => {
     const m: Record<string, number> = {};
@@ -60,15 +63,15 @@ function ActivityProvider({ children }: { children: React.ReactNode }) {
     return m;
   }, [items]);
 
-  const markAllRead = async () => {
+  const markAllRead = useCallback(async () => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
     // Optimistic: flip local state immediately so the dot clears, then persist.
     setItems((prev) => prev.map((i) => (i.read ? i : { ...i, read: true })));
     await markAllActivityRead(uid);
-  };
+  }, []);
 
-  const markSightingRead = async (sightingId: string) => {
+  const markSightingRead = useCallback(async (sightingId: string) => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
     // Optimistic: clear this sighting's unread items locally, then persist.
@@ -78,12 +81,17 @@ function ActivityProvider({ children }: { children: React.ReactNode }) {
       )
     );
     await markSightingActivityRead(uid, sightingId);
-  };
+  }, []);
+
+  // Stable value object so consumers only re-render when a field they read
+  // actually changes (the items/derived values), not on every provider render.
+  const value = useMemo(
+    () => ({ items, unreadCount, unreadBySighting, markAllRead, markSightingRead }),
+    [items, unreadCount, unreadBySighting, markAllRead, markSightingRead]
+  );
 
   return (
-    <ActivityContext.Provider
-      value={{ items, unreadCount, unreadBySighting, markAllRead, markSightingRead }}
-    >
+    <ActivityContext.Provider value={value}>
       {children}
     </ActivityContext.Provider>
   );

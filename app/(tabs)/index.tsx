@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { SectionList, StyleSheet, Text, View } from 'react-native';
 import SightingCard, { HardShadow } from '../../components/SightingCard';
 import { palette, recipes, space, type } from '../../constants/Colors';
@@ -52,7 +52,7 @@ function EmptyState() {
 }
 
 export default function LogScreen() {
-  const { sightings, isNewSpeciesForUser } = useSightings();
+  const { sightings } = useSightings();
   const { unreadBySighting } = useActivity();
 
   // Bug Report / Feature Request entries are hidden from the user's own
@@ -64,18 +64,49 @@ export default function LogScreen() {
 
   const sections = useMemo(() => groupSightingsByDay(visible), [visible]);
 
+  // Precompute the set of sighting ids that are the "1ST" (first-of-species)
+  // record, once per sightings change, instead of calling isNewSpeciesForUser
+  // (an O(n) filter+sort) for every card on every render. Reproduces that
+  // helper exactly: the earliest sighting of a species by timestamp, plus any
+  // other sighting on that same local day.
+  const newSpeciesIds = useMemo(() => {
+    const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const earliestTime: Record<string, number> = {};
+    const earliestDay: Record<string, string> = {};
+    for (const s of sightings) {
+      const key = s.birdName.toLowerCase();
+      const t = s.date.getTime();
+      if (earliestTime[key] === undefined || t < earliestTime[key]) {
+        earliestTime[key] = t;
+        earliestDay[key] = dayKey(s.date);
+      }
+    }
+    const ids = new Set<string>();
+    for (const s of sightings) {
+      if (dayKey(s.date) === earliestDay[s.birdName.toLowerCase()]) ids.add(s.id);
+    }
+    return ids;
+  }, [sightings]);
+
+  // Stable renderItem: paired with React.memo on SightingCard, unchanged rows
+  // skip re-render. Each card's flags are now O(1) lookups.
+  const renderItem = useCallback(
+    ({ item }: { item: typeof visible[number] }) => (
+      <SightingCard
+        sighting={item}
+        isNewSpecies={!isUnknownEntry(item.birdName) && newSpeciesIds.has(item.id)}
+        unreadCount={unreadBySighting[item.id] ?? 0}
+      />
+    ),
+    [newSpeciesIds, unreadBySighting]
+  );
+
   return (
     <View style={styles.container}>
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <SightingCard
-            sighting={item}
-            isNewSpecies={!isUnknownEntry(item.birdName) && isNewSpeciesForUser(item.birdName, item.date)}
-            unreadCount={unreadBySighting[item.id] ?? 0}
-          />
-        )}
+        renderItem={renderItem}
         renderSectionHeader={({ section }) => (
           <View style={styles.dayHeader}>
             <Text style={styles.dayTitle}>{section.title}</Text>
