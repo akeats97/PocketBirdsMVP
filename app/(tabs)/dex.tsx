@@ -77,10 +77,9 @@ export default function DexScreen() {
   const seenMap = useMemo(() => {
     const map: { [name: string]: SeenInfo } = {};
     realSightings.forEach(s => {
-      // "Mystery Bird" entries are real sightings (they count in the sightings
-      // total above) but have no identified species, so they never get a Dex
-      // tile or feed into the species / photographed counts.
-      if (isUnknownEntry(s.birdName)) return;
+      // "Mystery Bird" entries DO get a tile (under "Other") showing how many
+      // you've logged, but they're kept out of the species headline count (see
+      // `stats` below) since they have no identified species.
       const entry = map[s.birdName] || { timesSeen: 0, lastSeen: '', hasPhoto: false, isGlobalFirst: false };
       entry.timesSeen += 1;
       const d = s.date.toISOString().split('T')[0];
@@ -95,7 +94,7 @@ export default function DexScreen() {
   // Custom easter-egg species (e.g. Kelsey) get a Dex tile (via the orphan
   // "Other" path below) but are kept out of the headline species counts.
   const stats = useMemo(() => {
-    const realSpeciesNames = Object.keys(seenMap).filter(n => !isCustomSpecies(n));
+    const realSpeciesNames = Object.keys(seenMap).filter(n => !isCustomSpecies(n) && !isUnknownEntry(n));
     // Mystery Bird sightings have no identified species (so they never count
     // toward species), but each one logged with a photo still counts as
     // something photographed — one per mystery sighting, not one per "species".
@@ -196,6 +195,9 @@ export default function DexScreen() {
         const hasPhoto = info?.hasPhoto ?? false;
         const globalFirst = info?.isGlobalFirst ?? false;
         const wished = wishlist.has(name);
+        // Mystery Bird gets a tile (count of how many you've logged) but can't be
+        // wishlisted — there's no species to wish for.
+        const isMystery = isUnknownEntry(name);
         return (
           <View
             key={name}
@@ -218,18 +220,20 @@ export default function DexScreen() {
                 {name}
               </Text>
             )}
-            <Pressable
-              onPress={() => toggleWishlist(name)}
-              style={styles.starButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityLabel={wished ? `Remove ${name} from wishlist` : `Add ${name} to wishlist`}
-            >
-              <Ionicons
-                name={wished ? 'star' : 'star-outline'}
-                size={18}
-                color={wished ? palette.sun : palette.muted}
-              />
-            </Pressable>
+            {!isMystery && (
+              <Pressable
+                onPress={() => toggleWishlist(name)}
+                style={styles.starButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel={wished ? `Remove ${name} from wishlist` : `Add ${name} to wishlist`}
+              >
+                <Ionicons
+                  name={wished ? 'star' : 'star-outline'}
+                  size={18}
+                  color={wished ? palette.sun : palette.muted}
+                />
+              </Pressable>
+            )}
             {hasPhoto && (
               <View style={styles.cameraIndicator}>
                 <Ionicons name="camera" size={14} color={palette.sun} />
