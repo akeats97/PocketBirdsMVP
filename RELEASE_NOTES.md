@@ -1,5 +1,59 @@
 # PocketBirds — Release Notes
 
+## Tyrannulet - June 9 2026
+**Builds:** iOS 1.0.0 (10) · Android 1.0.0 (versionCode 25, **APK** for Firebase App Distribution)
+**Headline:** Edit any past sighting, much smoother scrolling & tab-switching, and your own Field Journal cards now surface hoots, comments & IDs.
+
+### Play Store - "What's new" (plain text, copy below this line)
+
+✏️ Edit a sighting
+• Long-press any card in your Field Journal (or tap the ⋯ on a sighting) to Edit
+• Change the species, date, location, notes, or photo of anything you've logged
+• Edits are silent: fixing a typo or swapping to a bird you've already seen pings no one. Only changing it to a brand-new species adds it to your Dex and notifies followers, like a fresh log
+💬 Your Journal, now social
+• Your own cards show hoot and comment counts, and a dot when there's something new to see
+⚡ Smoother and faster
+• Noticeably smoother scrolling and tab-switching
+Plus profile, Dex, and iOS polish.
+
+### TestFlight - "What to Test" (plain text, copy below this line)
+
+New: edit a sighting, engagement on your own Journal cards, and a big performance pass.
+
+Please check:
+• Long-press a Journal card: the Edit / Delete / Cancel sheet rises from the bottom while the dim just fades in (not sliding). Tap the ⋯ on your own sighting detail for the same Edit / Delete.
+• Edit the date, location, notes, or photo of a bird you've already seen, then Save. Confirm "Changes saved" and that NO push fires to anyone.
+• Edit the species to a brand-new one (a lifer). Confirm the coral "New species for you" cue appears in the form, it lands in your Dex, and an opted-in follower gets one push.
+• Edit the species to one you already have elsewhere. Confirm the "Quiet edit" cue and no notification.
+• Delete still shows the "Species Removed" alert when it was your only sighting of that bird.
+• Scroll the Field Journal and Friends feeds and flip between tabs: should feel smooth.
+• Your own Journal cards show hoot and comment counts plus a "N new" cue; tapping opens the thread and clears it.
+
+### What shipped (engineering)
+- **Edit a sighting** (commit `feat: edit a sighting`): the Add form body was extracted into a shared `components/SightingForm` (`mode: add | edit`); a pushed route `app/sighting/[id]/edit.tsx`; `SightingsContext.updateSighting` (merge patch, recompute new-species/milestone excluding the edited row, offline `pendingUpdates` queue drained by `syncSightings`); the long-press **action sheet** (Edit/Delete/Cancel) replacing the delete-only modal, and an owner-only **⋯ overflow menu** on the detail screen; a shared `confirmDeleteSighting`. Server: `onSightingUpdated` fans out to followers ONLY when an edit becomes a new species (guarded by `notifiedSpecies` to prevent double-notify); every other edit stays silent.
+- **Field Journal engagement** (`0d6ddc0`): read-only hoot/comment/proposal footer + unread dot / "N new" cue on your own cards, tap-through to the detail thread; `ActivityContext.unreadBySighting` selector over the existing activity stream.
+- **Performance pass** (`perf: memoize feed cards`): `React.memo` on `SightingCard` + `FriendSightingCard`, per-card "1ST" flags precomputed once as memoized Sets (killing an O(n²) filter+sort per card), `useCallback`'d list `renderItem`s, and a memoized `ActivityContext` value. Fixes the choppiness that appeared once the Journal was wired to the activity stream.
+- **BottomSheet primitive + rule** (`feat: BottomSheet`): canonical sheet motion (content slides up, scrim fades) in `components/BottomSheet.tsx`; documented in `CLAUDE.md` as the required pattern for all sheets.
+- **Profile** (`66e0457`): Following pill (renamed from Friends) + per-person notification bell.
+- **Dex** (`c4863ad`, `dfd72f6`): Mystery Bird tile under "Other" with a logged count; Mystery photos count toward the photographed stat.
+- **Hoot sheet** (`e611459`, `4a6b57b`): tappable hooters, slide-up animation, working drag-to-dismiss.
+- **iOS layout** (`3193085`, `39a0bff`, `a1f428c`, `21374bc`): custom app bar fixing the clipped header controls + double top-inset; tab-bar chin tuned per platform.
+- **Avatar "?" fix** (`097a1d7`, `72a3168`): header + profile avatars refetch/retry and fall back to the email initial instead of sticking on "?".
+- **Release title** rolled Antwren → Tyrannulet.
+
+### Known issues
+- Scrolling is improved but not perfectly buttery on the largest lists (secondary cleanups deferred: per-card `toLocaleDateString`, and the 4 redundant header profile fetches).
+- "First on Pocket Birds" still has no dedicated sighting-card pill (`WORK_QUEUE.md` Q-3).
+- Android notification small icon renders inconsistently across OEMs (cosmetic; Bug 2).
+
+### Post-ship steps
+- **iOS:** build 1.0.0 (10) auto-submitted; processing at Apple → "Friends" external group. No new capability this build, so it should skip Beta App Review.
+- **Android:** this is an **APK** (not the Play Store AAB): distribute via **Firebase App Distribution**. Artifact: <https://expo.dev/artifacts/eas/bwx3Nfm6DB3cDT9XBebXYC.apk>
+- **iOS:** IPA <https://expo.dev/artifacts/eas/g2UxefyYnGUBR9qE42qXrX.ipa>; submitted to App Store Connect (build 10), processing for the "Friends" group.
+- Fill the `release-names.csv` Tyrannulet date only once actually shipped to production. Next release name after Tyrannulet is **Tyrant**.
+
+---
+
 ## Antwren - June 8 2026
 **Builds:** iOS 1.0.0 (9) · Android 1.0.0 (versionCode 24, **APK** for Firebase App Distribution)
 **Headline:** Followers & Following lists, per-person notification controls, and a header-avatar gateway to your own profile.

@@ -44,9 +44,20 @@ Features Alex wants to ship next. Not yet scoped or scheduled — capture ideas 
 
 ## Release naming & builds
 
-- In-app title is `Pocket Birds {CURRENT_RELEASE_NAME}` from `constants/release.ts`. Release names come from `release-names.csv`, ordered by **wingspan ascending**. Current: **Snowcap** (was Gnatcatcher). Next after Snowcap is **Antwren**. The CSV `Release Date` column = the actual Play Store ship date; leave it blank when rolling the name forward.
+- In-app title is `Pocket Birds {CURRENT_RELEASE_NAME}` from `constants/release.ts`. Release names come from `release-names.csv`, ordered by **wingspan ascending**. Current building: **Tyrannulet** (Jun 9 2026); next after it is **Tyrant**. The CSV `Release Date` column = the actual ship date; leave it blank when rolling the name forward, fill it only when a build actually shipped.
 - `eas.json`: `appVersionSource: "remote"` + `autoIncrement`, so Android `versionCode` / iOS `buildNumber` bump automatically per build (not stored in `app.json`). Profiles: `production` (AAB + the mandatory `macos-sequoia-15.6-xcode-26.2` image), `production-aab`, and **`apk`** (`autoIncrement`, `buildType: apk` — for **Firebase App Distribution**, NOT the Play Store).
-- **Snowcap builds (Jun 6 2026):** Android **APK** (versionCode 23) via `eas build -p android --profile apk` for Firebase App Distribution; iOS (build 8) via `eas build -p ios --profile production --auto-submit` → TestFlight "Friends" group. iOS submit needs `ascAppId` (6772308812, already in `eas.json`). `--auto-submit` must be passed at build time (can't be added to a running build). First iOS build with the Bug 6 push-entitlement fix live — verify Android→iOS push delivers.
+
+### "Start our builds" — the standard recipe (when Alex says to kick off builds)
+
+This is the full sequence Alex means by "start our builds". Run it in order:
+
+1. **iOS build + auto-submit to TestFlight:** `eas build -p ios --profile production --auto-submit --non-interactive` (`--auto-submit` MUST be at build time; `ascAppId` 6772308812 is already in `eas.json`). Lands in the "Friends" external group.
+2. **Android APK** (Firebase App Distribution, NOT Play Store): `eas build -p android --profile apk --non-interactive`. Grab the `.apk` artifact URL from the finished build.
+3. **Release notes:** prepend a new dated section to `RELEASE_NOTES.md` covering **everything since the last build** (boundary = the previous "Add {name} release notes" commit; `git log <that-commit>..HEAD`). Match the existing structure (Builds · Headline · Play Store "What's new" · TestFlight "What to Test" · What shipped (engineering) · Known issues · Post-ship steps). Exclude `WORK_QUEUE.md`-only "spec" commits and pure build-infra. Both builds auto-increment, so the build numbers come from the EAS output (e.g. iOS 9→10, Android vc24→25).
+4. **AFTER both builds succeed:** roll `constants/release.ts` `CURRENT_RELEASE_NAME` forward to the next CSV name, and stamp the **just-built** name's `release-names.csv` `Release Date` with today (we know it shipped). Do NOT roll before the builds upload — the build bakes in the current name, and a failed build should re-run under the same name. Then commit (release notes + roll + CSV).
+
+- EAS server builds cost ~$1 each (so ~$2 for the pair) and the iOS auto-submit is outward-facing — both are pre-authorized when Alex explicitly says to build.
+- **Snowcap (Jun 6 2026):** iOS build 8 / Android vc23. **Antwren (Jun 8 2026):** iOS build 9 / Android vc24. **Tyrannulet (Jun 9 2026):** iOS build 10 / Android vc25.
 
 ---
 
