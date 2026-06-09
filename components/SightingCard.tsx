@@ -1,9 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSightings } from '../app/context/SightingsContext';
+import { confirmDeleteSighting } from '../app/utils/confirmDeleteSighting';
 import { setPhotoUri } from '../app/utils/photoViewer';
+import { BottomSheet } from './BottomSheet';
 import { Sighting } from '../app/types';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { isMysteryBird } from '../constants/unknownBird';
@@ -17,10 +20,11 @@ interface SightingCardProps {
   unreadCount?: number;
 }
 
-export default function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardProps) {
-  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardProps) {
+  const [isSheetVisible, setIsSheetVisible] = useState(false);
   const { deleteSighting } = useSightings();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const photoSource = sighting.photoUrl || sighting.photoPath;
 
@@ -35,29 +39,17 @@ export default function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }
   const openDetail = () => router.push(`/sighting/${sighting.id}`);
 
   const handleLongPress = () => {
-    setIsDeleteModalVisible(true);
+    setIsSheetVisible(true);
   };
 
-  const handleDelete = async () => {
-    try {
-      const result = await deleteSighting(sighting.id);
-      if (result.success) {
-        setIsDeleteModalVisible(false);
-        if (result.wasLastOfSpecies) {
-          Alert.alert(
-            'Species Removed',
-            `${sighting.birdName} has been removed from your species list as this was your only sighting.`,
-            [{ text: 'OK' }]
-          );
-        }
-      } else {
-        console.error('Failed to delete sighting - deleteSighting returned false');
-        setIsDeleteModalVisible(false);
-      }
-    } catch (error) {
-      console.error('Error in handleDelete:', error);
-      setIsDeleteModalVisible(false);
-    }
+  const handleEdit = () => {
+    setIsSheetVisible(false);
+    router.push(`/sighting/${sighting.id}/edit`);
+  };
+
+  const handleDelete = () => {
+    setIsSheetVisible(false);
+    confirmDeleteSighting(sighting, deleteSighting);
   };
 
   return (
@@ -180,48 +172,65 @@ export default function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }
           Sits outside the clipped card so the corner radius doesn't crop it. */}
       {unreadCount > 0 && <View style={styles.unreadDot} pointerEvents="none" />}
 
-      {/* Delete confirmation modal */}
-      <Modal
-        visible={isDeleteModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setIsDeleteModalVisible(false)}
-      >
-        <View style={styles.deleteModalContainer}>
-          <HardShadow offset={4} borderRadius={radius.card}>
-            <View style={styles.deleteModalContent}>
-              <View style={styles.deleteIconContainer}>
-                <Ionicons name="trash" size={40} color={palette.coral} />
-              </View>
-              <Text style={styles.deleteModalTitle}>Delete sighting?</Text>
-              <Text style={styles.deleteModalText}>
-                Remove this sighting of {sighting.birdName}?
-              </Text>
-              <Text style={styles.deleteModalSubtext}>
-                This can&apos;t be undone.
-              </Text>
+      {/* Long-press action sheet — Edit · Delete · Cancel. Slides up from the
+          bottom while the scrim fades (the app-wide BottomSheet motion). */}
+      <BottomSheet visible={isSheetVisible} onClose={() => setIsSheetVisible(false)}>
+        <View style={[styles.sheetWrap, { paddingBottom: insets.bottom + space.sm }]}>
+          <View style={styles.sheetChipRow}>
+            <Text style={styles.sheetChip}>
+              {sighting.birdName} · {formatRelativeDate(sighting.date)}
+            </Text>
+          </View>
 
-              <View style={styles.deleteModalButtons}>
-                <Pressable
-                  style={styles.cancelButton}
-                  onPress={() => setIsDeleteModalVisible(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.deleteButton}
-                  onPress={handleDelete}
-                >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </Pressable>
-              </View>
+          <HardShadow offset={4} borderRadius={radius.card}>
+            <View style={styles.sheetCard}>
+              <Pressable
+                style={({ pressed }) => [styles.sheetRow, pressed && { backgroundColor: palette.leafSoft }]}
+                onPress={handleEdit}
+              >
+                <View style={styles.sheetIconTile}>
+                  <Ionicons name="pencil" size={18} color={palette.ink} />
+                </View>
+                <View style={styles.sheetRowBody}>
+                  <Text style={styles.sheetRowTitle}>Edit sighting</Text>
+                  <Text style={styles.sheetRowSub}>Change species, place, date or photo</Text>
+                </View>
+              </Pressable>
+
+              <View style={styles.sheetDivider} />
+
+              <Pressable
+                style={({ pressed }) => [styles.sheetRow, pressed && { backgroundColor: palette.coralSoft }]}
+                onPress={handleDelete}
+              >
+                <View style={[styles.sheetIconTile, { backgroundColor: palette.coralSoft }]}>
+                  <Ionicons name="trash" size={18} color={palette.crimson} />
+                </View>
+                <View style={styles.sheetRowBody}>
+                  <Text style={[styles.sheetRowTitle, { color: palette.crimson }]}>Delete sighting</Text>
+                  <Text style={styles.sheetRowSub}>Remove from journal and dex</Text>
+                </View>
+              </Pressable>
             </View>
           </HardShadow>
+
+          <View style={styles.sheetCancelWrap}>
+            <HardShadow offset={4} borderRadius={radius.card}>
+              <Pressable style={styles.sheetCancel} onPress={() => setIsSheetVisible(false)}>
+                <Text style={styles.sheetCancelText}>Cancel</Text>
+              </Pressable>
+            </HardShadow>
+          </View>
         </View>
-      </Modal>
+      </BottomSheet>
     </HardShadow>
   );
 }
+
+// Memoized: in the virtualized Journal list, this lets a row skip re-rendering
+// when its props (sighting ref, isNewSpecies, unreadCount) are unchanged — even
+// when the list container re-renders (e.g. an unrelated activity update).
+export default React.memo(SightingCard);
 
 /**
  * Hard offset shadow. RN's shadow props can't render a hard, no-blur shadow,
@@ -416,71 +425,79 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 
-  // Delete confirmation modal
-  deleteModalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(26, 36, 23, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: space.xl,
+  // Long-press action sheet (scrim + slide handled by BottomSheet)
+  sheetWrap: {
+    padding: space.sm,
   },
-  deleteModalContent: {
+  sheetChipRow: {
+    alignItems: 'center',
+    marginBottom: space.sm,
+  },
+  sheetChip: {
+    backgroundColor: palette.ink,
+    color: palette.cream,
+    fontFamily: font.mono,
+    fontSize: 11,
+    letterSpacing: 0.4,
+    borderRadius: radius.pill,
+    paddingVertical: 5,
+    paddingHorizontal: 14,
+    overflow: 'hidden',
+  },
+  sheetCard: {
     ...recipes.card,
-    padding: space.xl,
-    alignItems: 'center',
-    maxWidth: 320,
-    width: '100%',
   },
-  deleteIconContainer: {
-    marginBottom: space.md,
-  },
-  deleteModalTitle: {
-    ...type.h2,
-    color: palette.ink,
-    marginBottom: space.xs,
-  },
-  deleteModalText: {
-    ...type.bodyL,
-    color: palette.ink,
-    textAlign: 'center',
-    marginBottom: space.xs,
-  },
-  deleteModalSubtext: {
-    ...type.body,
-    color: palette.inkSoft,
-    textAlign: 'center',
-    marginBottom: space.xl,
-  },
-  deleteModalButtons: {
+  sheetRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: space.md,
-    width: '100%',
+    paddingVertical: space.md + 2,
+    paddingHorizontal: space.lg,
   },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: space.md,
-    borderRadius: radius.input,
+  sheetIconTile: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.chip,
+    ...border.thick,
     backgroundColor: palette.cream,
-    ...border.thick,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  cancelButtonText: {
-    fontFamily: 'SpaceGrotesk_700Bold',
-    fontSize: 15,
-    color: palette.ink,
-  },
-  deleteButton: {
+  sheetRowBody: {
     flex: 1,
-    paddingVertical: space.md,
-    borderRadius: radius.input,
-    backgroundColor: palette.coral,
+    minWidth: 0,
+  },
+  sheetRowTitle: {
+    fontFamily: font.display,
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.ink,
+    letterSpacing: -0.3,
+  },
+  sheetRowSub: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    marginTop: 1,
+  },
+  sheetDivider: {
+    height: 1.5,
+    backgroundColor: palette.rule,
+  },
+  sheetCancelWrap: {
+    marginTop: space.sm,
+  },
+  sheetCancel: {
+    backgroundColor: palette.cream,
+    borderRadius: radius.card,
     ...border.thick,
+    paddingVertical: space.md,
     alignItems: 'center',
   },
-  deleteButtonText: {
-    fontFamily: 'BricolageGrotesque_700Bold',
-    fontSize: 15,
-    color: '#fff',
+  sheetCancelText: {
+    fontFamily: font.display,
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.inkSoft,
     letterSpacing: -0.3,
   },
 });

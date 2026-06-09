@@ -43,181 +43,233 @@ function ordinalSuffix(n) {
   return s[(v - 20) % 10] || s[v] || s[0];
 }
 
+// Fan a sighting out to the poster's followers as a push notification,
+// respecting each follower's per-friend notificationPrefs (all / highlights /
+// none). A "highlight" is a new species for the poster or a milestone save.
+// Shared by onSightingAdded (on create) and onSightingUpdated (when an edit
+// turns a sighting into a new species). `isNewSpecies` / `milestone` are passed
+// in by the caller, which knows how to compute them for its trigger.
+async function notifyFollowersOfSighting(sightingId, sighting, isNewSpecies, milestone) {
+  // Get the user who owns the sighting
+  const userDoc = await admin.firestore()
+    .collection('users')
+    .doc(sighting.userId)
+    .get();
+
+  if (!userDoc.exists) {
+    console.log('User not found:', sighting.userId);
+    return;
+  }
+
+  const userData = userDoc.data();
+  const username = userData.username || 'A friend';
+
+  console.log(`Looking for followers of: ${username} (${sighting.userId})`);
+
+  // Get all users who follow this person.
+  // Structure: following/{followerId}/following/{targetUserId}
+  const followingQuery = await admin.firestore()
+    .collectionGroup('following')
+    .get();
+
+  const followerIds = [];
+  for (const doc of followingQuery.docs) {
+    if (doc.id === sighting.userId) {
+      const pathParts = doc.ref.path.split('/');
+      if (pathParts.length >= 2) {
+        followerIds.push(pathParts[1]); // the follower's id
+      }
+    }
+  }
+
+  console.log(`Found ${followerIds.length} followers`);
+
+  if (followerIds.length === 0) {
+    console.log('No followers found for user:', sighting.userId);
+    return;
+  }
+
+  const isHighlight = isNewSpecies || milestone !== null;
+
+  // Collect push tokens for followers whose per-friend preference allows this
+  // sighting. Absence of a pref doc resolves to "all".
+  const pushTokens = [];
+  for (const followerId of followerIds) {
+    let mode = 'all';
+    try {
+      const prefSnap = await admin.firestore()
+        .doc(`users/${followerId}/notificationPrefs/${sighting.userId}`)
+        .get();
+      if (prefSnap.exists && prefSnap.data().mode) {
+        mode = prefSnap.data().mode;
+      }
+    } catch (error) {
+      console.error(`Pref read failed for follower ${followerId}; defaulting to "all":`, error);
+    }
+
+    if (mode === 'none') {
+      console.log(`Follower ${followerId} muted this friend; skipping.`);
+      continue;
+    }
+    if (mode === 'highlights' && !isHighlight) {
+      console.log(`Follower ${followerId} on highlights; sighting is not a highlight; skipping.`);
+      continue;
+    }
+
+    const followerDoc = await admin.firestore()
+      .collection('users')
+      .doc(followerId)
+      .get();
+
+    if (followerDoc.exists) {
+      const followerData = followerDoc.data();
+      if (followerData.expoPushToken) {
+        pushTokens.push(followerData.expoPushToken);
+        console.log(`Eligible follower ${followerId} (mode: ${mode})`);
+      } else {
+        console.log(`No push token for follower: ${followerId}`);
+      }
+    }
+  }
+
+  if (pushTokens.length === 0) {
+    console.log('No eligible followers with push tokens');
+    return;
+  }
+
+  console.log(`Sending notifications to ${pushTokens.length} followers`);
+
+  const baseTitle = `🐦 ${username} spotted a bird!`;
+  const baseBody = `${sighting.birdName} at ${sighting.location}`;
+  const milestoneTitle = milestone
+    ? `🎉 ${username} hit ${milestone} species!`
+    : null;
+  const milestoneBody = milestone
+    ? `Just logged their ${milestone}${ordinalSuffix(milestone)} species: ${sighting.birdName}`
+    : null;
+
+  const messages = pushTokens.map(pushToken => {
+    if (!Expo.isExpoPushToken(pushToken)) {
+      console.log(`Invalid push token: ${pushToken}`);
+      return null;
+    }
+
+    return {
+      to: pushToken,
+      sound: 'default',
+      priority: 'high',
+      channelId: 'default',
+      title: milestoneTitle || baseTitle,
+      body: milestoneBody || baseBody,
+      data: {
+        type: milestone ? 'friend_milestone' : 'friend_sighting',
+        sightingId: sightingId,
+        friendName: username,
+        birdName: sighting.birdName,
+        location: sighting.location,
+        ...(milestone ? { milestone } : {}),
+      },
+    };
+  }).filter(message => message !== null);
+
+  const chunks = expo.chunkPushNotifications(messages);
+
+  for (const chunk of chunks) {
+    try {
+      const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+      console.log('Notification tickets:', ticketChunk);
+    } catch (error) {
+      console.error('Error sending notifications:', error);
+    }
+  }
+
+  console.log(`Successfully sent ${messages.length} notifications for sighting ${sightingId}`);
+}
+
+// Is `birdName` now this user's only record of that species? (size === 1 means
+// the triggering doc is the sole sighting → a new species for them.)
+async function isNewSpeciesForUser(userId, birdName) {
+  try {
+    const speciesSnap = await admin.firestore()
+      .collection('sightings')
+      .where('userId', '==', userId)
+      .where('birdName', '==', birdName)
+      .get();
+    return speciesSnap.size === 1;
+  } catch (error) {
+    console.error('New-species check failed; treating as not new:', error);
+    return false;
+  }
+}
+
 exports.onSightingAdded = onDocumentCreated('sightings/{sightingId}', async (event) => {
   const sighting = event.data.data();
   const sightingId = event.params.sightingId;
-  
+
   console.log(`New sighting added: ${sightingId} by user: ${sighting.userId}`);
-  
+
   try {
-    // Get the user who added the sighting
-    const userDoc = await admin.firestore()
-      .collection('users')
-      .doc(sighting.userId)
-      .get();
-    
-    if (!userDoc.exists) {
-      console.log('User not found:', sighting.userId);
-      return;
-    }
-    
-    const userData = userDoc.data();
-    const username = userData.username || 'A friend';
-    
-    console.log(`Looking for followers of: ${username} (${sighting.userId})`);
-    
-    // Get all users who follow this person
-    // We need to find all users who have this person in their following list
-    // The structure is: following/{followerId}/following/{targetUserId}
-    const followingQuery = await admin.firestore()
-      .collectionGroup('following')
-      .get();
-    
-    const followerIds = [];
-    for (const doc of followingQuery.docs) {
-      // Check if this document is for the user who added the sighting
-      if (doc.id === sighting.userId) {
-        // Extract the follower ID from the document path
-        // Path format: following/{followerId}/following/{targetUserId}
-        const pathParts = doc.ref.path.split('/');
-        if (pathParts.length >= 2) {
-          const followerId = pathParts[1]; // This is the follower's ID
-          followerIds.push(followerId);
-        }
-      }
-    }
-    
-    console.log(`Found ${followerIds.length} followers`);
-
-    if (followerIds.length === 0) {
-      console.log('No followers found for user:', sighting.userId);
-      return;
-    }
-
-    // Compute once whether this sighting is a "highlight" for the poster: a
-    // brand-new species for them, or a save that crossed a species-count
-    // milestone. Followers on "highlights" only get pushed for these.
-    let isNewSpecies = false;
-    try {
-      const speciesSnap = await admin.firestore()
-        .collection('sightings')
-        .where('userId', '==', sighting.userId)
-        .where('birdName', '==', sighting.birdName)
-        .get();
-      // The triggering sighting is already written, so size === 1 means this
-      // is the only sighting of the species for this user (i.e. new species).
-      isNewSpecies = speciesSnap.size === 1;
-    } catch (error) {
-      console.error('New-species check failed; treating as not new:', error);
-    }
-
+    const isNewSpecies = await isNewSpeciesForUser(sighting.userId, sighting.birdName);
     // milestoneCrossed is stamped on the doc by the client when this save
     // crossed a species-count threshold, so reuse it instead of recomputing.
     const milestone = typeof sighting.milestoneCrossed === 'number'
       ? sighting.milestoneCrossed
       : null;
-    const isHighlight = isNewSpecies || milestone !== null;
 
-    // Collect push tokens for followers whose per-friend preference allows
-    // this sighting. Absence of a pref doc resolves to "all", and new follows
-    // are created with an explicit "all" doc by the client — so by default a
-    // follower gets every sighting until they dial it down via the bell.
-    const pushTokens = [];
-    for (const followerId of followerIds) {
-      let mode = 'all';
-      try {
-        const prefSnap = await admin.firestore()
-          .doc(`users/${followerId}/notificationPrefs/${sighting.userId}`)
-          .get();
-        if (prefSnap.exists && prefSnap.data().mode) {
-          mode = prefSnap.data().mode;
-        }
-      } catch (error) {
-        console.error(`Pref read failed for follower ${followerId}; defaulting to "all":`, error);
-      }
+    await notifyFollowersOfSighting(sightingId, sighting, isNewSpecies, milestone);
 
-      if (mode === 'none') {
-        console.log(`Follower ${followerId} muted this friend; skipping.`);
-        continue;
-      }
-      if (mode === 'highlights' && !isHighlight) {
-        console.log(`Follower ${followerId} on highlights; sighting is not a highlight; skipping.`);
-        continue;
-      }
-
-      const followerDoc = await admin.firestore()
-        .collection('users')
-        .doc(followerId)
-        .get();
-
-      if (followerDoc.exists) {
-        const followerData = followerDoc.data();
-        if (followerData.expoPushToken) {
-          pushTokens.push(followerData.expoPushToken);
-          console.log(`Eligible follower ${followerId} (mode: ${mode})`);
-        } else {
-          console.log(`No push token for follower: ${followerId}`);
-        }
-      }
+    // Record this species on the doc so a later edit away and back to it won't
+    // re-notify followers for the same species (see onSightingUpdated guard).
+    try {
+      await event.data.ref.update({ notifiedSpecies: FieldValue.arrayUnion(sighting.birdName) });
+    } catch (error) {
+      console.error('Failed to stamp notifiedSpecies on create:', error);
     }
-
-    if (pushTokens.length === 0) {
-      console.log('No eligible followers with push tokens');
-      return;
-    }
-
-    console.log(`Sending notifications to ${pushTokens.length} followers`);
-
-    const baseTitle = `🐦 ${username} spotted a bird!`;
-    const baseBody = `${sighting.birdName} at ${sighting.location}`;
-    const milestoneTitle = milestone
-      ? `🎉 ${username} hit ${milestone} species!`
-      : null;
-    const milestoneBody = milestone
-      ? `Just logged their ${milestone}${ordinalSuffix(milestone)} species: ${sighting.birdName}`
-      : null;
-
-    // Create notification messages
-    const messages = pushTokens.map(pushToken => {
-      if (!Expo.isExpoPushToken(pushToken)) {
-        console.log(`Invalid push token: ${pushToken}`);
-        return null;
-      }
-
-      return {
-        to: pushToken,
-        sound: 'default',
-        priority: 'high',
-        channelId: 'default',
-        title: milestoneTitle || baseTitle,
-        body: milestoneBody || baseBody,
-        data: {
-          type: milestone ? 'friend_milestone' : 'friend_sighting',
-          sightingId: sightingId,
-          friendName: username,
-          birdName: sighting.birdName,
-          location: sighting.location,
-          ...(milestone ? { milestone } : {}),
-        },
-      };
-    }).filter(message => message !== null);
-    
-    // Send notifications in chunks (Expo has limits)
-    const chunks = expo.chunkPushNotifications(messages);
-    
-    for (const chunk of chunks) {
-      try {
-        const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-        console.log('Notification tickets:', ticketChunk);
-      } catch (error) {
-        console.error('Error sending notifications:', error);
-      }
-    }
-    
-    console.log(`Successfully sent ${messages.length} notifications for sighting ${sightingId}`);
-    
   } catch (error) {
     console.error('Error in onSightingAdded function:', error);
+  }
+});
+
+// An edit that turns a sighting into a NEW species for the user notifies
+// followers exactly like a fresh log. Every other edit (location / date / notes
+// / photo, or a species swap to a bird already in the dex) stays silent — a
+// plain updateDoc never triggers onSightingAdded, and this function returns
+// early unless the birdName actually changed to a brand-new species.
+exports.onSightingUpdated = onDocumentUpdated('sightings/{sightingId}', async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+  const sightingId = event.params.sightingId;
+
+  if (!before || !after) return;
+
+  // Only a species change can create a follower-worthy new species. This guard
+  // also stops recursion: our own notifiedSpecies stamp below leaves birdName
+  // unchanged, so the resulting update re-enters here and returns immediately.
+  if (before.birdName === after.birdName) return;
+
+  try {
+    const isNewSpecies = await isNewSpeciesForUser(after.userId, after.birdName);
+    if (!isNewSpecies) return;
+
+    // Don't double-notify if followers were already pinged for this species on
+    // this doc (e.g. the user edited away and back).
+    const alreadyNotified =
+      Array.isArray(before.notifiedSpecies) && before.notifiedSpecies.includes(after.birdName);
+    if (alreadyNotified) return;
+
+    // Milestone copy is intentionally omitted on edits: milestoneCrossed isn't
+    // rewritten by the edit path, so trusting it here could surface a stale
+    // milestone. The new species still pushes (a new species is always a
+    // highlight) — just with the standard "spotted a bird" copy.
+    await notifyFollowersOfSighting(sightingId, after, isNewSpecies, null);
+
+    try {
+      await event.data.after.ref.update({ notifiedSpecies: FieldValue.arrayUnion(after.birdName) });
+    } catch (error) {
+      console.error('Failed to stamp notifiedSpecies on update:', error);
+    }
+  } catch (error) {
+    console.error('Error in onSightingUpdated function:', error);
   }
 });
 

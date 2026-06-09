@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
 import { FacePile } from '../../components/social/FacePile';
 import { HootButton } from '../../components/social/HootButton';
@@ -39,6 +40,7 @@ import { useSightings } from '../context/SightingsContext';
 import { useComments } from '../hooks/useComments';
 import { useProposals } from '../hooks/useProposals';
 import { getCurrentUserProfile, isFollowing } from '../services/userService';
+import { confirmDeleteSighting } from '../utils/confirmDeleteSighting';
 import { setPhotoUri } from '../utils/photoViewer';
 import { FriendSighting } from '../types';
 
@@ -81,7 +83,7 @@ export default function SightingDetailScreen() {
   const bottomInsetIOS = Platform.OS === 'ios' ? insets.bottom : 0;
 
   const { friendSightings } = useFriendSightings();
-  const { sightings, evaluateNewSpecies, applyCommunityId, markGlobalFirst } = useSightings();
+  const { sightings, evaluateNewSpecies, applyCommunityId, markGlobalFirst, deleteSighting } = useSightings();
   const { markSightingRead } = useActivity();
 
   // Opening a sighting clears its unread engagement, so the Journal card's
@@ -134,6 +136,7 @@ export default function SightingDetailScreen() {
 
   const [text, setText] = useState('');
   const [posting, setPosting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [showPropose, setShowPropose] = useState(false);
   const [accepting, setAccepting] = useState(false);
   // Resolution celebration + chained new-species machinery.
@@ -267,19 +270,74 @@ export default function SightingDetailScreen() {
     }
   };
 
+  const onEditSighting = () => {
+    setMenuOpen(false);
+    router.push(`/sighting/${sightingId}/edit`);
+  };
+
+  const onDeleteSighting = () => {
+    setMenuOpen(false);
+    if (!sighting) return;
+    confirmDeleteSighting(
+      { id: sightingId, birdName: sighting.birdName },
+      deleteSighting,
+      () => router.back()
+    );
+  };
+
   const NavBar = (
     <View style={[styles.navBar, { paddingTop: topInset + space.sm }]}>
       <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
         <Ionicons name="chevron-back" size={22} color={palette.ink} />
       </Pressable>
       <Text style={styles.navTitle}>{mysteryBird ? 'Mystery Bird' : 'Sighting'}</Text>
-      {mysteryBird && (
-        <View style={{ marginLeft: 'auto' }}>
-          <NeedsIdPill />
-        </View>
-      )}
+      <View style={styles.navRight}>
+        {mysteryBird && <NeedsIdPill />}
+        {isOwner && (
+          <Pressable
+            onPress={() => setMenuOpen(true)}
+            hitSlop={8}
+            style={[styles.menuButton, menuOpen && styles.menuButtonOpen]}
+            accessibilityLabel="Sighting options"
+          >
+            <Ionicons
+              name="ellipsis-vertical"
+              size={18}
+              color={menuOpen ? palette.cream : palette.ink}
+            />
+          </Pressable>
+        )}
+      </View>
     </View>
   );
+
+  // Owner-only ⋯ popover (Edit · Delete), anchored top-right over a light scrim.
+  const OverflowMenu = menuOpen ? (
+    <>
+      <Pressable style={styles.menuScrim} onPress={() => setMenuOpen(false)} />
+      <View style={[styles.menuPopover, { top: topInset + 52 }]}>
+        <HardShadow offset={4} borderRadius={radius.input}>
+          <View style={styles.menuCard}>
+            <Pressable
+              style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: palette.leafSoft }]}
+              onPress={onEditSighting}
+            >
+              <Ionicons name="pencil" size={17} color={palette.ink} />
+              <Text style={styles.menuRowText}>Edit</Text>
+            </Pressable>
+            <View style={styles.menuDivider} />
+            <Pressable
+              style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: palette.coralSoft }]}
+              onPress={onDeleteSighting}
+            >
+              <Ionicons name="trash" size={17} color={palette.crimson} />
+              <Text style={[styles.menuRowText, { color: palette.crimson }]}>Delete</Text>
+            </Pressable>
+          </View>
+        </HardShadow>
+      </View>
+    </>
+  ) : null;
 
   if (!sighting) {
     return (
@@ -470,6 +528,8 @@ export default function SightingDetailScreen() {
         count={milestoneShown}
         onDismiss={() => setMilestoneShown(null)}
       />
+
+      {OverflowMenu}
     </View>
   );
 }
@@ -487,6 +547,53 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 2 },
   navTitle: { ...type.h3, color: palette.ink },
+  navRight: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  menuButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 2,
+    borderColor: palette.ink,
+    backgroundColor: palette.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuButtonOpen: { backgroundColor: palette.ink },
+
+  // Owner ⋯ popover
+  menuScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(26,36,23,0.18)',
+    zIndex: 90,
+  },
+  menuPopover: {
+    position: 'absolute',
+    right: space.lg,
+    width: 188,
+    zIndex: 100,
+  },
+  menuCard: {
+    backgroundColor: palette.card,
+    borderRadius: radius.input,
+    borderWidth: 2,
+    borderColor: palette.ink,
+    overflow: 'hidden',
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+  },
+  menuRowText: {
+    fontFamily: font.display,
+    fontSize: 15,
+    fontWeight: '700',
+    color: palette.ink,
+    letterSpacing: -0.2,
+  },
+  menuDivider: { height: 1.5, backgroundColor: palette.rule },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { ...type.body, color: palette.inkSoft },
 

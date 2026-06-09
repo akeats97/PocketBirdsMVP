@@ -158,6 +158,7 @@ function AuthenticatedApp() {
               bar-button styling clipped the custom header-right controls. */}
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="sighting/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="sighting/[id]/edit" options={{ headerShown: false }} />
           <Stack.Screen name="photo" options={{ headerShown: false, animation: 'fade' }} />
           <Stack.Screen name="activity" options={{ headerShown: false }} />
           <Stack.Screen name="profile/[uid]" options={{ headerShown: false }} />

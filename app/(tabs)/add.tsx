@@ -1,205 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { useNavigation } from '@react-navigation/native';
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import React, { useRef, useState } from 'react';
+import { Animated, Platform, StyleSheet, Text, Vibration, View } from 'react-native';
+import SightingForm, { SightingFormValues } from '../../components/SightingForm';
 import { HardShadow } from '../../components/SightingCard';
-import { birdNamesAlpha, birdNamesAlphaLower } from '../../constants/birdNamesLower';
-import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
-import { CUSTOM_SPECIES, isCustomSpecies } from '../../constants/customSpecies';
-import { REPORT_TYPES, isReportEntry } from '../../constants/reportTypes';
-import { UNKNOWN_BIRD } from '../../constants/unknownBird';
+import { border, font, palette, radius, space } from '../../constants/Colors';
+import { isCustomSpecies } from '../../constants/customSpecies';
+import { isReportEntry } from '../../constants/reportTypes';
 import GlobalFirstCelebration from '../components/GlobalFirstCelebration';
 import MilestoneCelebration from '../components/MilestoneCelebration';
 import { useSightings } from '../context/SightingsContext';
 import { isGlobalFirstSpecies } from '../services/sightingService';
-import { pickImage } from '../services/photoService';
-import { getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission } from '../services/locationService';
-import { getPlaceCoordinates, getPlacesAutocomplete, PlaceSuggestion } from '../services/placesService';
-import { Coordinates } from '../types';
 
 export default function AddSightingScreen() {
-  const navigation = useNavigation();
-  const { addSighting, lastLocation, markGlobalFirst } = useSightings();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [selectedBird, setSelectedBird] = useState('');
-  const [location, setLocation] = useState(lastLocation.label);
-  const [locationCoords, setLocationCoords] = useState<Coordinates | undefined>(lastLocation.coordinates);
-  const [placeSuggestions, setPlaceSuggestions] = useState<PlaceSuggestion[]>([]);
-  const [shouldAutocompleteLocation, setShouldAutocompleteLocation] = useState(false);
-  const [notes, setNotes] = useState('');
-  const [date, setDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const { addSighting, markGlobalFirst } = useSightings();
   const [showSuccess, setShowSuccess] = useState(false);
   const [isNewSpecies, setIsNewSpecies] = useState(false);
   const [submittedReport, setSubmittedReport] = useState(false);
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const [globalFirstBird, setGlobalFirstBird] = useState<string | null>(null);
-  const textInputRef = useRef<TextInput>(null);
-  const notesInputRef = useRef<TextInput>(null);
-  const locationInputRef = useRef<TextInput>(null);
   const slideAnim = useRef(new Animated.Value(-100)).current;
-
-  // Keyboard avoidance (keeping the focused field above the keyboard, on both
-  // iOS and Android edge-to-edge) is handled by KeyboardAwareScrollView from
-  // react-native-keyboard-controller — no manual listener / measure / scroll.
-
-  // Update location (label + coords) when lastLocation changes. Pre-fill should
-  // never trigger Places autocomplete, so reset the flag.
-  useEffect(() => {
-    setLocation(lastLocation.label);
-    setLocationCoords(lastLocation.coordinates);
-    setShouldAutocompleteLocation(false);
-    setPlaceSuggestions([]);
-  }, [lastLocation]);
-
-  // Debounced Google Places autocomplete. Only fires when the user has actively
-  // typed into the location field (not on pre-fill, locate button, or
-  // suggestion tap).
-  useEffect(() => {
-    if (!shouldAutocompleteLocation) return;
-    if (!location || location.trim().length < 2) {
-      setPlaceSuggestions([]);
-      return;
-    }
-    const handle = setTimeout(async () => {
-      const results = await getPlacesAutocomplete(location, lastLocation.coordinates);
-      setPlaceSuggestions(results);
-    }, 300);
-    return () => clearTimeout(handle);
-  }, [location, shouldAutocompleteLocation, lastLocation.coordinates]);
-
-  const handleLocationChange = (text: string) => {
-    setLocation(text);
-    setLocationCoords(undefined);
-    setShouldAutocompleteLocation(true);
-  };
-
-  const handleLocateTap = async () => {
-    locationInputRef.current?.blur();
-    Keyboard.dismiss();
-    let granted = await hasLocationPermission();
-    if (!granted) granted = await requestLocationPermission();
-    if (!granted) {
-      Alert.alert(
-        'Location permission needed',
-        'Enable location access in Settings to use the locate button.'
-      );
-      return;
-    }
-    const result = await getCurrentLocationWithLabel();
-    if (!result) {
-      Alert.alert(
-        "Couldn't get your location",
-        "Make sure GPS is on and you have signal. If you're offline, type the location manually."
-      );
-      return;
-    }
-    setShouldAutocompleteLocation(false);
-    setPlaceSuggestions([]);
-    setLocationCoords(result.coordinates);
-    if (result.label) {
-      setLocation(result.label);
-      return;
-    }
-    // Got a GPS fix but reverse-geocode came back empty — usually means we're
-    // offline (the native geocoder needs network). Coords are still attached;
-    // nudge the user to type the place name.
-    Alert.alert(
-      'Coordinates saved',
-      "We got your location, but we're offline so we couldn't look up the place name. Type the name of this spot and your coordinates will stay attached.",
-      [{ text: 'OK', onPress: () => locationInputRef.current?.focus() }]
-    );
-  };
-
-  const handlePlaceSuggestionSelect = async (suggestion: PlaceSuggestion) => {
-    setShouldAutocompleteLocation(false);
-    setPlaceSuggestions([]);
-    Keyboard.dismiss();
-    const result = await getPlaceCoordinates(suggestion.placeId);
-    if (result) {
-      setLocation(result.label);
-      setLocationCoords(result.coordinates);
-    } else {
-      setLocation(suggestion.description);
-      setLocationCoords(undefined);
-    }
-  };
-
-  // Filter bird names based on search query (debounced 100ms to coalesce fast
-  // typing). Rank: prefix > word-start > substring. Cap to 20.
-  useEffect(() => {
-    if (!searchQuery || searchQuery === selectedBird) {
-      setSuggestions([]);
-      return;
-    }
-    const handle = setTimeout(() => {
-      const q = searchQuery.toLowerCase();
-
-      // Typing "?" surfaces the "Mystery Bird" entry for logging a bird you
-      // saw but couldn't identify. Short-circuit before scanning the 11k-name
-      // list — no real bird name starts with "?".
-      if (q.startsWith('?')) {
-        setSuggestions([UNKNOWN_BIRD]);
-        return;
-      }
-
-      const qSpace = ' ' + q;
-      const qDash = '-' + q;
-      const CAP = 20;
-      const tier0: string[] = [];
-      const tier1: string[] = [];
-      const tier2: string[] = [];
-
-      // Surface "Bug Report" / "Feature Request" as selectable suggestions so
-      // they can be committed like a bird (Save requires a tapped selection).
-      const reportMatches =
-        q.length >= 2 ? REPORT_TYPES.filter(rt => rt.toLowerCase().startsWith(q)) : [];
-
-      // Custom easter-egg "species" (e.g. Kelsey) are selectable too. They're
-      // not in the IOC list, so surface them by prefix the same way.
-      const customMatches =
-        q.length >= 2 ? CUSTOM_SPECIES.filter(c => c.toLowerCase().startsWith(q)) : [];
-
-      for (let i = 0; i < birdNamesAlpha.length; i++) {
-        const lower = birdNamesAlphaLower[i];
-        if (lower.startsWith(q)) {
-          if (tier0.length < CAP) tier0.push(birdNamesAlpha[i]);
-        } else if (tier0.length < CAP) {
-          if (lower.includes(qSpace) || lower.includes(qDash)) {
-            if (tier1.length < CAP) tier1.push(birdNamesAlpha[i]);
-          } else if (lower.includes(q)) {
-            if (tier2.length < CAP) tier2.push(birdNamesAlpha[i]);
-          }
-        }
-        if (tier0.length >= CAP) break;
-      }
-
-      setSuggestions([...reportMatches, ...customMatches, ...tier0, ...tier1, ...tier2].slice(0, CAP));
-    }, 100);
-    return () => clearTimeout(handle);
-  }, [searchQuery, selectedBird]);
-
-  const handleBirdSelect = (bird: string) => {
-    setSelectedBird(bird);
-    setSearchQuery(bird);
-    setSuggestions([]);
-    Keyboard.dismiss();
-  };
-
-  const handleSelectPhoto = async () => {
-    try {
-      const result = await pickImage();
-      if (!result.canceled) {
-        setPhotoUri(result.assets[0].uri);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to select photo');
-    }
-  };
 
   const playSuccessBanner = () => {
     Animated.sequence([
@@ -220,36 +39,21 @@ export default function AddSightingScreen() {
     });
   };
 
-  const handleSave = async () => {
-    if (!selectedBird) {
-      Alert.alert('Error', 'Please select a bird');
-      return;
-    }
-    // Bug Report / Feature Request entries don't require a location.
-    const isReport = isReportEntry(selectedBird);
-    if (!isReport && !location) {
-      Alert.alert('Error', 'Please enter a location');
-      return;
-    }
-
-    // Capture before the field resets below — used by the async global-first check.
-    const birdName = selectedBird;
+  // Validation lives in SightingForm; this trusts a valid selection. The form
+  // clears its own fields after calling onSubmit.
+  const handleSubmit = async (values: SightingFormValues) => {
+    const isReport = isReportEntry(values.birdName);
+    const birdName = values.birdName;
 
     const { isNewSpecies: newSpeciesDetected, milestone } = addSighting({
-      birdName: selectedBird,
-      location,
-      date,
-      notes: notes || undefined,
+      birdName: values.birdName,
+      location: values.location,
+      date: values.date,
+      notes: values.notes,
       photoUrl: undefined,
-      photoPath: photoUri || undefined,
-      coordinates: locationCoords,
+      photoPath: values.photoUri || undefined,
+      coordinates: values.coordinates,
     });
-
-    setSelectedBird('');
-    setSearchQuery('');
-    setNotes('');
-    setDate(new Date());
-    setPhotoUri(null);
 
     // Reports get their own thank-you banner — no milestone, new-species
     // celebration, or haptic buzz.
@@ -264,10 +68,8 @@ export default function AddSightingScreen() {
     setSubmittedReport(false);
 
     // Global first: a brand-new species for the user that NO ONE on PocketBirds
-    // has ever logged. Custom easter-egg species (e.g. Kelsey) and Mystery Bird
-    // are excluded (Mystery Bird never reads as a new species anyway). The check
-    // needs the network; if it fails/offline we fall through to the normal
-    // celebration. This special popup takes priority over the milestone/banner.
+    // has ever logged. Custom easter-egg species are excluded. Best effort —
+    // needs the network; on failure we fall through to the normal celebration.
     if (newSpeciesDetected && !isCustomSpecies(birdName)) {
       try {
         const isFirst = await isGlobalFirstSpecies(birdName);
@@ -296,16 +98,6 @@ export default function AddSightingScreen() {
     playSuccessBanner();
   };
 
-  const handleOutsidePress = () => {
-    if (suggestions.length > 0) {
-      setSuggestions([]);
-    }
-    if (placeSuggestions.length > 0) {
-      setPlaceSuggestions([]);
-    }
-    Keyboard.dismiss();
-  };
-
   return (
     <View style={{ flex: 1, backgroundColor: palette.cream }}>
       <MilestoneCelebration
@@ -322,10 +114,7 @@ export default function AddSightingScreen() {
 
       {showSuccess && (
         <Animated.View
-          style={[
-            styles.successPopup,
-            { transform: [{ translateY: slideAnim }] },
-          ]}
+          style={[styles.successPopup, { transform: [{ translateY: slideAnim }] }]}
         >
           <HardShadow offset={4} borderRadius={radius.input}>
             <View
@@ -353,349 +142,12 @@ export default function AddSightingScreen() {
         </Animated.View>
       )}
 
-      <KeyboardAwareScrollView
-        style={styles.container}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 40 }]}
-        keyboardShouldPersistTaps="always"
-        keyboardDismissMode="interactive"
-        bottomOffset={20}
-        onScrollBeginDrag={handleOutsidePress}
-      >
-        <Pressable onPress={handleOutsidePress} android_disableSound={true}>
-          <View style={styles.innerContainer}>
-            <Text style={styles.title}>Add Sighting</Text>
-
-            <View style={styles.form}>
-              {/* Bird Name */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>BIRD</Text>
-                <TextInput
-                  ref={textInputRef}
-                  style={[styles.input, selectedBird ? styles.inputDisplay : null]}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder="What'd you see?"
-                  placeholderTextColor={palette.muted}
-                  onBlur={() => setSuggestions([])}
-                />
-                {suggestions.length > 0 && (
-                  <View style={styles.suggestionsContainer}>
-                    <ScrollView
-                      style={styles.suggestionsScrollView}
-                      keyboardShouldPersistTaps="handled"
-                      nestedScrollEnabled={true}
-                    >
-                      {suggestions.map((item, i) => (
-                        <Pressable
-                          key={item}
-                          style={({ pressed }) => [
-                            styles.suggestionButton,
-                            i === suggestions.length - 1 && styles.suggestionButtonLast,
-                            pressed && { backgroundColor: palette.leafSoft },
-                          ]}
-                          onPress={() => handleBirdSelect(item)}
-                        >
-                          <Text style={styles.suggestionButtonText}>{item}</Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-
-              {/* Date */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>DATE</Text>
-                <Pressable
-                  style={styles.dateButton}
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Text style={styles.dateButtonText}>
-                    {date.toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </Text>
-                  <Ionicons name="calendar" size={18} color={palette.ink} />
-                </Pressable>
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={date}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selectedDate) => {
-                      setShowDatePicker(false);
-                      if (selectedDate) {
-                        setDate(selectedDate);
-                      }
-                    }}
-                    maximumDate={new Date()}
-                  />
-                )}
-              </View>
-
-              {/* Location */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>LOCATION</Text>
-                <View style={styles.locationRow}>
-                  <TextInput
-                    ref={locationInputRef}
-                    style={[styles.input, { flex: 1 }]}
-                    value={location}
-                    onChangeText={handleLocationChange}
-                    placeholder="Where did you see it?"
-                    placeholderTextColor={palette.muted}
-                    onBlur={() => setPlaceSuggestions([])}
-                  />
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.locateButton,
-                      pressed && { backgroundColor: palette.sunSoft },
-                    ]}
-                    onPress={handleLocateTap}
-                    accessibilityLabel="Use my current location"
-                  >
-                    <Ionicons
-                      name="locate"
-                      size={22}
-                      color={locationCoords ? palette.leaf : palette.ink}
-                    />
-                  </Pressable>
-                </View>
-                {placeSuggestions.length > 0 && (
-                  <View style={styles.suggestionsContainer}>
-                    <ScrollView
-                      style={styles.suggestionsScrollView}
-                      keyboardShouldPersistTaps="handled"
-                      nestedScrollEnabled={true}
-                    >
-                      {placeSuggestions.map((s, i) => (
-                        <Pressable
-                          key={s.placeId}
-                          style={({ pressed }) => [
-                            styles.suggestionButton,
-                            i === placeSuggestions.length - 1 && styles.suggestionButtonLast,
-                            pressed && { backgroundColor: palette.leafSoft },
-                          ]}
-                          onPress={() => handlePlaceSuggestionSelect(s)}
-                        >
-                          <Text style={styles.suggestionButtonText}>{s.mainText}</Text>
-                          {s.secondaryText ? (
-                            <Text style={styles.suggestionSecondaryText}>{s.secondaryText}</Text>
-                          ) : null}
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-
-              {/* Photo */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>PHOTO</Text>
-                <TouchableOpacity
-                  style={[
-                    photoUri ? styles.photoButtonFilled : styles.photoButtonEmpty,
-                    { height: photoUri ? 200 : 88 },
-                  ]}
-                  onPress={handleSelectPhoto}
-                >
-                  {photoUri ? (
-                    <Image source={{ uri: photoUri }} style={styles.photoPreview} />
-                  ) : (
-                    <View style={styles.photoPlaceholder}>
-                      <Ionicons name="camera" size={24} color={palette.inkSoft} />
-                      <Text style={styles.photoPlaceholderText}>Add Photo</Text>
-                    </View>
-                  )}
-                  {photoUri && (
-                    <TouchableOpacity
-                      style={styles.removePhotoButton}
-                      onPress={() => setPhotoUri(null)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      accessibilityLabel="Remove photo"
-                    >
-                      <Ionicons name="close" size={16} color={palette.ink} />
-                    </TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* Notes */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>NOTES</Text>
-                <TextInput
-                  ref={notesInputRef}
-                  style={[styles.input, styles.notesInput]}
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Anything worth remembering?"
-                  placeholderTextColor={palette.muted}
-                  multiline
-                  numberOfLines={2}
-                />
-              </View>
-
-              {/* Save */}
-              <View style={styles.saveWrap}>
-                <HardShadow offset={4} borderRadius={radius.input}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.saveButton,
-                      pressed && { backgroundColor: palette.ink },
-                    ]}
-                    onPress={handleSave}
-                  >
-                    <Text style={styles.saveButtonText}>Save Sighting</Text>
-                  </Pressable>
-                </HardShadow>
-              </View>
-            </View>
-          </View>
-        </Pressable>
-      </KeyboardAwareScrollView>
+      <SightingForm mode="add" onSubmit={handleSubmit} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  innerContainer: {
-    paddingHorizontal: space.xl,
-    paddingTop: space.lg,
-    paddingBottom: space.xxl,
-  },
-  title: {
-    ...type.h1,
-    color: palette.ink,
-    fontWeight: '700',
-    marginBottom: space.lg,
-  },
-  form: {
-    gap: space.md,
-  },
-  fieldGroup: {
-    marginBottom: 0,
-  },
-  label: {
-    ...recipes.fieldLabel,
-  },
-
-  // Input recipe applied directly. The font color/family are set so the
-  // TextInput itself renders consistently across iOS/Android.
-  input: {
-    backgroundColor: palette.card,
-    borderRadius: radius.input,
-    paddingVertical: space.md,
-    paddingHorizontal: space.lg,
-    ...border.thick,
-    fontFamily: font.body,
-    fontSize: 16,
-    color: palette.ink,
-  },
-  inputDisplay: {
-    fontFamily: font.bodyBold,
-  },
-  notesInput: {
-    minHeight: 72,
-    textAlignVertical: 'top',
-    paddingTop: space.md,
-  },
-
-  // Location row: input flexes to fill, locate button sits to the right
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-  },
-  locateButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.input,
-    backgroundColor: palette.sun,
-    ...border.thick,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Suggestions dropdown: 2px ink border, no soft shadow (clipped offset on
-  // the bottom would interfere with z-stacking, so leave shadowless here).
-  suggestionsContainer: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    backgroundColor: palette.card,
-    borderRadius: radius.input,
-    ...border.thick,
-    marginTop: space.xs,
-    zIndex: 9999,
-    elevation: 8,
-    maxHeight: 220,
-    overflow: 'hidden',
-  },
-  suggestionsScrollView: {
-    maxHeight: 220,
-  },
-  suggestionButton: {
-    width: '100%',
-    paddingVertical: space.md,
-    paddingHorizontal: space.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.rule,
-    backgroundColor: palette.card,
-  },
-  suggestionButtonLast: {
-    borderBottomWidth: 0,
-  },
-  suggestionButtonText: {
-    ...type.bodyL,
-    color: palette.ink,
-    fontWeight: '500',
-  },
-  suggestionSecondaryText: {
-    ...type.bodyS,
-    color: palette.inkSoft,
-    marginTop: 2,
-  },
-
-  // Date button: same input recipe but row layout
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: palette.card,
-    borderRadius: radius.input,
-    paddingVertical: space.md,
-    paddingHorizontal: space.lg,
-    ...border.thick,
-  },
-  dateButtonText: {
-    ...type.bodyL,
-    color: palette.ink,
-    fontWeight: '500',
-  },
-
-  // Save button
-  saveWrap: {
-    marginTop: space.md,
-    alignSelf: 'stretch',
-  },
-  saveButton: {
-    ...recipes.buttonPrimary,
-    paddingVertical: space.md + 2,
-  },
-  saveButtonText: {
-    ...recipes.buttonPrimaryText,
-  },
-
-  // Success popup
   successPopup: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 60 : 40,
@@ -723,50 +175,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#fff',
     letterSpacing: 0.2,
-  },
-
-  // Photo
-  photoButtonEmpty: {
-    width: '100%',
-    backgroundColor: palette.card,
-    borderRadius: radius.input,
-    borderWidth: 2,
-    borderColor: palette.ink,
-    borderStyle: 'dashed',
-    overflow: 'hidden',
-  },
-  photoButtonFilled: {
-    width: '100%',
-    backgroundColor: palette.card,
-    borderRadius: radius.input,
-    ...border.thick,
-    overflow: 'hidden',
-  },
-  photoPreview: {
-    width: '100%',
-    height: '100%',
-  },
-  photoPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: space.xs,
-  },
-  photoPlaceholderText: {
-    ...type.bodyS,
-    color: palette.inkSoft,
-    fontWeight: '600',
-  },
-  removePhotoButton: {
-    position: 'absolute',
-    top: space.sm,
-    right: space.sm,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: palette.cream,
-    ...border.thick,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });
