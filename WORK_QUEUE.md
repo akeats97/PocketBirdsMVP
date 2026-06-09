@@ -146,6 +146,24 @@ Caveats to keep in mind: detection matches on exact `birdName` and needs connect
 For the next build (no fixed date), try producing an **APK** (instead of the AAB Play Store flow) and distributing via **Firebase App Distribution** so friends get updates faster than the Play Store internal-testing round-trip. Rough path: `eas build --platform android --profile preview` (or a profile with `android.buildType "apk"`) to get an installable APK, then upload to Firebase App Distribution (`firebase appdistribution:distribute <apk> --app <android-app-id> --groups friends`) and invite testers. Keep the existing Play Store production flow as-is; this is an additional, lower-latency channel to evaluate. Open questions: tester onboarding (Firebase invite email + App Tester app), whether to wire it into EAS build hooks, and signing (APK can use the same EAS keystore).
 - Friends feed + verification: how do non-bird entries read on a friend's card? Ties into UR-4 (Mystery Bird verification).
 
+### Q-5 — Consider enabling Firestore on-disk persistence — INVESTIGATE FIRST (noted Jun 9 2026)
+
+**Don't just flip this on — verify it has no unintended consequences before shipping.** Today `config/firebaseConfig.js` calls plain `getFirestore(app)`, so Firestore's cache is **memory-only** (one app session, wiped on restart). Auth persists via AsyncStorage; Firestore does not. The app rolls its own durable cache for *sightings* through `SightingsContext` + AsyncStorage, but **everything else that's a live Firestore listener — activity inbox, comments, proposals, hoots, the friends feed — is memory-only** and effectively empty on a cold offline launch.
+
+The candidate change is a one-liner: swap `getFirestore(app)` for `initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentSingleManager() }) })`. That gives Firestore an on-disk cache so cached reads survive restarts AND queued writes flush after an app kill.
+
+**Why it came up:** the Journal engagement feature (shipped Jun 9 2026 — per-card unread cue for hoots/comments/proposals) clears a card's unread dot by writing `read: true` to activity docs on detail-open. The optimistic local clear makes the in-session UX smooth regardless of network, but the *durable* read-state write can be lost if the user goes offline → opens a sighting → kills the app before reconnecting (the dot reappears). This is **not specific to that feature** — the existing inbox `markAllRead` has the identical property; it's the app-wide consequence of no Firestore persistence.
+
+**Things to actually check before enabling (the "unintended consequences" worry):**
+- **Interaction with the bespoke AsyncStorage sighting cache.** `SightingsContext` already manages offline sightings by hand (see Bug 3, the offline-data-loss work). Two caching layers for the same docs could double-write, race, or disagree on source of truth. Make sure Firestore's cache doesn't undermine the hand-rolled one.
+- **RN/Expo support + bundle.** Confirm `persistentLocalCache` actually works on the Firebase JS SDK in this RN/Hermes/bare-workflow setup (it historically needed IndexedDB on web; RN support has its own story). Don't assume.
+- **Storage growth / eviction.** On-disk cache grows; check default size limits and whether it needs `cacheSizeBytes` tuning.
+- **Stale-data UX.** More screens would render cached data instantly on launch (good) but could briefly show stale counts/feeds before the server syncs — verify nothing reads wrong as a result.
+- **Migration / first-launch.** Behavior for existing installs when the cache mode changes; make sure no one's queued local state is dropped on the upgrade.
+- **Re-verify Bug 3's repro** (airplane mode → log → force-quit → reopen offline → sync) still passes with the new cache mode.
+
+Scope it as a deliberate change with dev-client testing on both platforms, not a slip-in.
+
 ---
 
 ## SECURITY — Firestore rules hardened ✅ (DONE Jun 4 2026, commit 5ed3a6e)
