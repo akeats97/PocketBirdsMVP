@@ -416,7 +416,32 @@ exports.onCommentAdded = onDocumentCreated('sightings/{sightingId}/comments/{com
       topComment: { uid: comment.uid, username: comment.username, text: comment.text },
     });
 
-    // 2) record activity + push the sighting owner (never notify yourself)
+    // 2) if this is a reply, notify the person being replied to — UNLESS that's
+    // the commenter themselves (reply-to-self) or the sighting owner (who's
+    // already pinged by the comment notification below, so no double).
+    const replyTo = comment.replyTo;
+    if (
+      replyTo &&
+      replyTo.uid &&
+      replyTo.uid !== comment.uid &&
+      replyTo.uid !== sighting.userId
+    ) {
+      await writeActivity(replyTo.uid, {
+        type: 'reply',
+        actorUid: comment.uid,
+        actorUsername: comment.username,
+        sightingId,
+        birdName: sighting.birdName,
+        commentText: comment.text.slice(0, 140),
+      });
+      await pushSocial(replyTo.uid, {
+        title: `${comment.username} replied to you 💬`,
+        body: comment.text.slice(0, 120),
+        data: { type: 'reply', sightingId, birdName: sighting.birdName },
+      });
+    }
+
+    // 3) record activity + push the sighting owner (never notify yourself)
     if (sighting.userId === comment.uid) return;
     await writeActivity(sighting.userId, {
       type: 'comment',
@@ -435,6 +460,66 @@ exports.onCommentAdded = onDocumentCreated('sightings/{sightingId}/comments/{com
     console.error('Error in onCommentAdded:', error);
   }
 });
+
+// Comment hoots: sightings/{id}/comments/{cid}/hoots/{uid}. Maintain hootCount
+// on the comment doc and (on add) notify the comment's author — same policy as
+// sighting hoots: a social event, never gated by notificationPrefs, never self.
+exports.onCommentHootAdded = onDocumentCreated(
+  'sightings/{sightingId}/comments/{commentId}/hoots/{hooterUid}',
+  async (event) => {
+    const { sightingId, commentId, hooterUid } = event.params;
+    const hoot = event.data.data();
+    const commentRef = admin.firestore().doc(`sightings/${sightingId}/comments/${commentId}`);
+
+    try {
+      const commentSnap = await commentRef.get();
+      if (!commentSnap.exists) {
+        console.log('Comment not found for hoot:', commentId);
+        return;
+      }
+      const comment = commentSnap.data();
+
+      // 1) maintain the denormalized count on the comment doc
+      await commentRef.update({ hootCount: FieldValue.increment(1) });
+
+      // 2) notify the comment author (never notify yourself)
+      if (comment.uid === hooterUid) return;
+      const sightingSnap = await admin.firestore().doc(`sightings/${sightingId}`).get();
+      const birdName = sightingSnap.exists ? sightingSnap.data().birdName : undefined;
+      await writeActivity(comment.uid, {
+        type: 'comment_hoot',
+        actorUid: hooterUid,
+        actorUsername: hoot.username,
+        sightingId,
+        birdName,
+        commentText: (comment.text || '').slice(0, 140),
+      });
+      await pushSocial(comment.uid, {
+        title: `${hoot.username} hooted your comment 🦉`,
+        body: (comment.text || '').slice(0, 120),
+        data: { type: 'comment_hoot', sightingId, birdName },
+      });
+    } catch (error) {
+      console.error('Error in onCommentHootAdded:', error);
+    }
+  }
+);
+
+exports.onCommentHootRemoved = onDocumentDeleted(
+  'sightings/{sightingId}/comments/{commentId}/hoots/{hooterUid}',
+  async (event) => {
+    const { sightingId, commentId } = event.params;
+    const commentRef = admin.firestore().doc(`sightings/${sightingId}/comments/${commentId}`);
+    try {
+      const commentSnap = await commentRef.get();
+      // If the comment itself was deleted, there's no counter to maintain.
+      if (!commentSnap.exists) return;
+      await commentRef.update({ hootCount: FieldValue.increment(-1) });
+    } catch (error) {
+      console.error('Error in onCommentHootRemoved:', error);
+    }
+  }
+);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Community ID — proposals on Mystery Birds

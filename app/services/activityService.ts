@@ -13,6 +13,8 @@ import { db } from '../../config/firebaseConfig';
 export type ActivityType =
   | 'hoot'
   | 'comment'
+  | 'comment_hoot'       // someone hooted a comment you wrote
+  | 'reply'              // someone replied to a comment you wrote
   | 'follow'
   | 'proposal'           // someone proposed an ID on your Mystery Bird
   | 'proposal_accepted'; // the owner accepted your ID

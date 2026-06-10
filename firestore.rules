@@ -110,6 +110,17 @@ service cloud.firestore {
                       && canEngage();
         allow delete: if isSignedIn()
                       && (resource.data.uid == myUid() || sightingOwner() == myUid());
+
+        // Comment hoots: doc id == hooter's uid (one per user, structurally).
+        // Same 'hoots' collection group as sighting/proposal hoots, so the
+        // recursive-wildcard read rule at the top also covers reads here.
+        match /hoots/{hooterUid} {
+          allow read: if isSignedIn();
+          allow create: if hooterUid == myUid()
+                        && request.resource.data.uid == myUid()
+                        && canEngage();
+          allow delete: if hooterUid == myUid();
+        }
       }
 
       // Community ID proposals (Mystery Bird only — enforced client-side; the

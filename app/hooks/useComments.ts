@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { addComment as addCommentService, Comment, subscribeToComments } from '../services/commentService';
+import { addComment as addCommentService, Comment, ReplyTo, subscribeToComments } from '../services/commentService';
 
 // Live comment thread for a sighting. Subscribes while mounted; Firestore's
 // local cache surfaces a freshly-posted comment immediately, so `post` needs no
@@ -24,7 +24,8 @@ export function useComments(sightingId: string) {
     return () => unsubscribe();
   }, [sightingId]);
 
-  const post = (text: string) => addCommentService(sightingId, text);
+  const post = (text: string, replyTo?: ReplyTo) =>
+    addCommentService(sightingId, text, replyTo);
 
   return { comments, loading, post };
 }

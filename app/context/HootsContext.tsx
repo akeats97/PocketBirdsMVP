@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { auth } from '../../config/firebaseConfig';
 import { removeHoot, setHoot, subscribeToMyHoots } from '../services/hootService';
 import { removeProposalHoot, setProposalHoot } from '../services/proposalService';
+import { removeCommentHoot, setCommentHoot } from '../services/commentService';
 import { getCurrentUserProfile } from '../services/userService';
 
 interface HootsContextType {
@@ -15,6 +16,10 @@ interface HootsContextType {
   hasHootedProposal: (proposalId: string) => boolean;
   /** Optimistically toggle the current user's hoot on a proposal. */
   toggleProposalHoot: (sightingId: string, proposalId: string) => Promise<void>;
+  /** Has the current user hooted this comment? */
+  hasHootedComment: (commentId: string) => boolean;
+  /** Optimistically toggle the current user's hoot on a comment. */
+  toggleCommentHoot: (sightingId: string, commentId: string) => Promise<void>;
 }
 
 const HootsContext = createContext<HootsContextType | undefined>(undefined);
@@ -131,9 +136,54 @@ function HootsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Comment hoots live at sightings/{id}/comments/{cid}/hoots/{uid} — again the
+  // SAME 'hoots' collection group the subscribeToMyHoots listener watches, with
+  // the commentId as grandparent. commentIds are auto-ids (distinct from
+  // sighting/proposal ids), so reusing the one global hootedIds set is safe and
+  // needs no extra listener.
+  const hasHootedComment = (commentId: string) => hootedIds.has(commentId);
+
+  const toggleCommentHoot = async (sightingId: string, commentId: string) => {
+    const currentlyHooted = hootedIds.has(commentId);
+
+    setHootedIds((prev) => {
+      const next = new Set(prev);
+      if (currentlyHooted) next.delete(commentId);
+      else next.add(commentId);
+      return next;
+    });
+
+    try {
+      if (currentlyHooted) {
+        await removeCommentHoot(sightingId, commentId);
+      } else {
+        if (!usernameRef.current) {
+          usernameRef.current = (await getCurrentUserProfile())?.username ?? '';
+        }
+        await setCommentHoot(sightingId, commentId, usernameRef.current);
+      }
+    } catch (error) {
+      console.error('Error toggling comment hoot:', error);
+      setHootedIds((prev) => {
+        const next = new Set(prev);
+        if (currentlyHooted) next.add(commentId);
+        else next.delete(commentId);
+        return next;
+      });
+    }
+  };
+
   return (
     <HootsContext.Provider
-      value={{ hasHooted, hootCount, toggleHoot, hasHootedProposal, toggleProposalHoot }}
+      value={{
+        hasHooted,
+        hootCount,
+        toggleHoot,
+        hasHootedProposal,
+        toggleProposalHoot,
+        hasHootedComment,
+        toggleCommentHoot,
+      }}
     >
       {children}
     </HootsContext.Provider>

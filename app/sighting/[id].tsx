@@ -18,6 +18,7 @@ import {
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HardShadow } from '../../components/SightingCard';
+import { Owl } from '../../components/Owl';
 import { Avatar } from '../../components/social/Avatar';
 import { FacePile } from '../../components/social/FacePile';
 import { HootButton } from '../../components/social/HootButton';
@@ -88,7 +89,7 @@ export default function SightingDetailScreen() {
     // One-shot on mount for this sighting id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sightingId]);
-  const { hasHooted, hootCount, toggleHoot, hasHootedProposal, toggleProposalHoot } = useHoots();
+  const { hasHooted, hootCount, toggleHoot, hasHootedProposal, toggleProposalHoot, hasHootedComment, toggleCommentHoot } = useHoots();
   const { comments, loading, post } = useComments(sightingId);
   const { proposals, add, accept } = useProposals(sightingId);
 
@@ -129,6 +130,10 @@ export default function SightingDetailScreen() {
 
   const [text, setText] = useState('');
   const [posting, setPosting] = useState(false);
+  // The comment being replied to (null = a top-level comment). Drives the
+  // composer's "Replying to @name" banner and the replyTo written on send.
+  const [replyingTo, setReplyingTo] = useState<{ commentId: string; uid: string; username: string } | null>(null);
+  const composerRef = useRef<TextInput>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showPropose, setShowPropose] = useState(false);
   const [accepting, setAccepting] = useState(false);
@@ -159,16 +164,26 @@ export default function SightingDetailScreen() {
     if (!text.trim() || posting) return;
     setPosting(true);
     const body = text;
+    const reply = replyingTo;
     setText('');
+    setReplyingTo(null);
     try {
-      await post(body);
+      await post(body, reply ?? undefined);
       requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
     } catch (e) {
       console.error('Error posting comment:', e);
       setText(body); // restore so the user doesn't lose their text
+      setReplyingTo(reply); // and the reply target
     } finally {
       setPosting(false);
     }
+  };
+
+  // Aim the composer at a comment and focus it. Replying to your own comment is
+  // allowed but won't notify (the Cloud Function skips the self case).
+  const startReply = (c: { id: string; uid: string; username: string }) => {
+    setReplyingTo({ commentId: c.id, uid: c.uid, username: c.username });
+    composerRef.current?.focus();
   };
 
   const onSubmitProposal = (species: string, note?: string) =>
@@ -432,22 +447,50 @@ export default function SightingDetailScreen() {
         ) : comments.length === 0 ? (
           <Text style={styles.emptyComments}>No comments yet — be the first.</Text>
         ) : (
-          comments.map((c) => (
-            <View key={c.id} style={styles.commentRow}>
-              <Pressable onPress={() => router.push(`/profile/${c.uid}`)} hitSlop={4}>
-                <Avatar name={c.username} seed={c.uid} size={34} />
-              </Pressable>
-              <View style={styles.commentBody}>
-                <View style={styles.commentMetaRow}>
-                  <Pressable onPress={() => router.push(`/profile/${c.uid}`)} hitSlop={4}>
-                    <Text style={styles.commentName}>{c.username}</Text>
-                  </Pressable>
-                  <Text style={styles.commentTime}>{timeAgo(c.createdAt?.toDate?.() ?? null)}</Text>
+          comments.map((c) => {
+            const cHooted = hasHootedComment(c.id);
+            return (
+              <View key={c.id} style={styles.commentRow}>
+                <Pressable onPress={() => router.push(`/profile/${c.uid}`)} hitSlop={4}>
+                  <Avatar name={c.username} seed={c.uid} size={34} />
+                </Pressable>
+                <View style={styles.commentBody}>
+                  <View style={styles.commentMetaRow}>
+                    <Pressable onPress={() => router.push(`/profile/${c.uid}`)} hitSlop={4}>
+                      <Text style={styles.commentName}>{c.username}</Text>
+                    </Pressable>
+                    <Text style={styles.commentTime}>{timeAgo(c.createdAt?.toDate?.() ?? null)}</Text>
+                  </View>
+                  {c.replyTo && (
+                    <Text style={styles.commentReplyTo} numberOfLines={1}>
+                      ↳ replying to @{c.replyTo.username}
+                    </Text>
+                  )}
+                  <Text style={styles.commentText}>{c.text}</Text>
+                  <View style={styles.commentActions}>
+                    <Pressable
+                      onPress={() => toggleCommentHoot(sightingId, c.id)}
+                      hitSlop={8}
+                      style={styles.commentHootBtn}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: cHooted }}
+                      accessibilityLabel={cHooted ? 'Remove hoot' : 'Hoot this comment'}
+                    >
+                      <Owl size={15} filled={cHooted} color={cHooted ? palette.coral : palette.muted} />
+                      {c.hootCount > 0 && (
+                        <Text style={[styles.commentHootCount, cHooted && styles.commentHootCountActive]}>
+                          {c.hootCount}
+                        </Text>
+                      )}
+                    </Pressable>
+                    <Pressable onPress={() => startReply(c)} hitSlop={8}>
+                      <Text style={styles.commentReplyBtn}>Reply</Text>
+                    </Pressable>
+                  </View>
                 </View>
-                <Text style={styles.commentText}>{c.text}</Text>
               </View>
-            </View>
-          ))
+            );
+          })
         )}
         <View style={{ height: space.md }} />
       </ScrollView>
@@ -466,12 +509,25 @@ export default function SightingDetailScreen() {
           />
         )}
 
+        {/* Reply target banner — sits just above the composer when replying. */}
+        {replyingTo && (
+          <View style={styles.replyBanner}>
+            <Text style={styles.replyBannerText} numberOfLines={1}>
+              Replying to <Text style={styles.replyBannerName}>@{replyingTo.username}</Text>
+            </Text>
+            <Pressable onPress={() => setReplyingTo(null)} hitSlop={8} accessibilityLabel="Cancel reply">
+              <Ionicons name="close" size={16} color={palette.inkSoft} />
+            </Pressable>
+          </View>
+        )}
+
         {/* Composer */}
         <View style={[styles.composer, { paddingBottom: bottomInset + space.sm }]}>
           {me && <Avatar name={me.username} seed={me.uid} size={32} />}
           <TextInput
+            ref={composerRef}
             style={styles.input}
-            placeholder="Add a comment…"
+            placeholder={replyingTo ? `Reply to @${replyingTo.username}…` : 'Add a comment…'}
             placeholderTextColor={palette.muted}
             value={text}
             onChangeText={setText}
@@ -654,6 +710,26 @@ const styles = StyleSheet.create({
   commentName: { fontFamily: font.bodyBold, fontSize: 14, color: palette.ink },
   commentTime: { fontFamily: font.mono, fontSize: 10, color: palette.muted },
   commentText: { ...type.body, color: palette.ink, marginTop: 2, lineHeight: 20 },
+  commentReplyTo: { fontFamily: font.mono, fontSize: 11, color: palette.muted, marginTop: 1 },
+  commentActions: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginTop: 6 },
+  commentHootBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  commentHootCount: { fontFamily: font.monoBold, fontSize: 11, color: palette.muted },
+  commentHootCountActive: { color: palette.crimson },
+  commentReplyBtn: { fontFamily: font.bodyBold, fontSize: 12, color: palette.inkSoft },
+
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: 6,
+    backgroundColor: palette.card,
+    borderTopWidth: 2,
+    borderTopColor: palette.ink,
+  },
+  replyBannerText: { ...type.bodyS, color: palette.inkSoft, flex: 1 },
+  replyBannerName: { fontFamily: font.bodyBold, color: palette.ink },
 
   composer: {
     flexDirection: 'row',

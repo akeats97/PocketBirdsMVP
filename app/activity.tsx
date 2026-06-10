@@ -26,6 +26,9 @@ function typeBadge(t: ActivityItem['type']): { name: keyof typeof Ionicons.glyph
   switch (t) {
     case 'hoot':
       return { name: 'leaf', color: palette.leaf };
+    case 'comment_hoot':
+      return { name: 'leaf', color: palette.coral };
+    case 'reply':
     case 'comment':
       return { name: 'chatbubble', color: palette.sky ?? palette.ink };
     case 'proposal':
@@ -57,6 +60,8 @@ export default function ActivityScreen() {
     if (
       (item.type === 'hoot' ||
         item.type === 'comment' ||
+        item.type === 'comment_hoot' ||
+        item.type === 'reply' ||
         item.type === 'proposal' ||
         item.type === 'proposal_accepted') &&
       item.sightingId
@@ -90,6 +95,12 @@ export default function ActivityScreen() {
             {item.type === 'comment' && (
               <Text> commented on your {item.birdName ?? 'sighting'}</Text>
             )}
+            {item.type === 'comment_hoot' && (
+              <Text> hooted your comment 🦉</Text>
+            )}
+            {item.type === 'reply' && (
+              <Text> replied to your comment 💬</Text>
+            )}
             {item.type === 'follow' && <Text> started following you</Text>}
             {item.type === 'proposal' && (
               <Text> proposed {item.species ?? 'an ID'} for your Mystery Bird 🦉</Text>
@@ -98,7 +109,8 @@ export default function ActivityScreen() {
               <Text> accepted your ID{item.species ? ` — it's a ${item.species}` : ''} 🦉</Text>
             )}
           </Text>
-          {item.type === 'comment' && item.commentText ? (
+          {(item.type === 'comment' || item.type === 'comment_hoot' || item.type === 'reply') &&
+          item.commentText ? (
             <Text style={styles.preview} numberOfLines={2}>“{item.commentText}”</Text>
           ) : null}
           <Text style={styles.time}>{timeAgo(item.createdAt)}</Text>
