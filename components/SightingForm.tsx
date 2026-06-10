@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { HardShadow } from './SightingCard';
-import { birdNamesAlpha, birdNamesAlphaLower } from '../constants/birdNamesLower';
+import { birdNamesAlpha, birdNamesAlphaNorm, birdNamesAlphaCompact, normalizeSearch } from '../constants/birdNamesLower';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { CUSTOM_SPECIES } from '../constants/customSpecies';
 import { REPORT_TYPES, isReportEntry } from '../constants/reportTypes';
@@ -177,7 +177,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       return;
     }
     const handle = setTimeout(() => {
-      const q = searchQuery.toLowerCase();
+      const q = normalizeSearch(searchQuery);
 
       if (q.startsWith('?')) {
         setSuggestions([UNKNOWN_BIRD]);
@@ -185,11 +185,12 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       }
 
       const qSpace = ' ' + q;
-      const qDash = '-' + q;
+      const qCompact = q.replace(/ /g, '');
       const CAP = 20;
       const tier0: string[] = [];
       const tier1: string[] = [];
       const tier2: string[] = [];
+      const tier3: string[] = [];
 
       const reportMatches =
         q.length >= 2 ? REPORT_TYPES.filter(rt => rt.toLowerCase().startsWith(q)) : [];
@@ -197,20 +198,22 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
         q.length >= 2 ? CUSTOM_SPECIES.filter(c => c.toLowerCase().startsWith(q)) : [];
 
       for (let i = 0; i < birdNamesAlpha.length; i++) {
-        const lower = birdNamesAlphaLower[i];
-        if (lower.startsWith(q)) {
+        const norm = birdNamesAlphaNorm[i];
+        if (norm.startsWith(q)) {
           if (tier0.length < CAP) tier0.push(birdNamesAlpha[i]);
         } else if (tier0.length < CAP) {
-          if (lower.includes(qSpace) || lower.includes(qDash)) {
+          if (norm.includes(qSpace)) {
             if (tier1.length < CAP) tier1.push(birdNamesAlpha[i]);
-          } else if (lower.includes(q)) {
+          } else if (norm.includes(q)) {
             if (tier2.length < CAP) tier2.push(birdNamesAlpha[i]);
+          } else if (birdNamesAlphaCompact[i].includes(qCompact)) {
+            if (tier3.length < CAP) tier3.push(birdNamesAlpha[i]);
           }
         }
         if (tier0.length >= CAP) break;
       }
 
-      setSuggestions([...reportMatches, ...customMatches, ...tier0, ...tier1, ...tier2].slice(0, CAP));
+      setSuggestions([...reportMatches, ...customMatches, ...tier0, ...tier1, ...tier2, ...tier3].slice(0, CAP));
     }, 100);
     return () => clearTimeout(handle);
   }, [searchQuery, selectedBird]);

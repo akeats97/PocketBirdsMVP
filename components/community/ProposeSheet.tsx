@@ -22,7 +22,7 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { birdNamesAlpha, birdNamesAlphaLower } from '../../constants/birdNamesLower';
+import { birdNamesAlpha, birdNamesAlphaNorm, birdNamesAlphaCompact, normalizeSearch } from '../../constants/birdNamesLower';
 import { font, palette, radius, space, type } from '../../constants/Colors';
 import { HardShadow } from '../SightingCard';
 import { Owl } from '../Owl';
@@ -119,27 +119,30 @@ export function ProposeSheet({
       return;
     }
     const handle = setTimeout(() => {
-      const q = query.toLowerCase();
+      const q = normalizeSearch(query);
       const qSpace = ' ' + q;
-      const qDash = '-' + q;
+      const qCompact = q.replace(/ /g, '');
       const CAP = 20;
       const tier0: string[] = [];
       const tier1: string[] = [];
       const tier2: string[] = [];
+      const tier3: string[] = [];
       for (let i = 0; i < birdNamesAlpha.length; i++) {
-        const lower = birdNamesAlphaLower[i];
-        if (lower.startsWith(q)) {
+        const norm = birdNamesAlphaNorm[i];
+        if (norm.startsWith(q)) {
           if (tier0.length < CAP) tier0.push(birdNamesAlpha[i]);
         } else if (tier0.length < CAP) {
-          if (lower.includes(qSpace) || lower.includes(qDash)) {
+          if (norm.includes(qSpace)) {
             if (tier1.length < CAP) tier1.push(birdNamesAlpha[i]);
-          } else if (lower.includes(q)) {
+          } else if (norm.includes(q)) {
             if (tier2.length < CAP) tier2.push(birdNamesAlpha[i]);
+          } else if (birdNamesAlphaCompact[i].includes(qCompact)) {
+            if (tier3.length < CAP) tier3.push(birdNamesAlpha[i]);
           }
         }
         if (tier0.length >= CAP) break;
       }
-      setSuggestions([...tier0, ...tier1, ...tier2].slice(0, CAP));
+      setSuggestions([...tier0, ...tier1, ...tier2, ...tier3].slice(0, CAP));
     }, 100);
     return () => clearTimeout(handle);
   }, [query, selected]);
