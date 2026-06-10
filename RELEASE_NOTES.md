@@ -21,7 +21,7 @@
 • New ✕ clear button on the location, bird search, notes, and Dex search fields
 
 🔎 More forgiving bird search
-• "gray plover" finds Grey Plover, "red breasted" finds Red-breasted Nuthatch, "redeyed vireo" finds Red-eyed Vireo — spelling variants and missing spaces no longer matter
+• "gray plover" finds Grey Plover, "red breasted" finds Red-breasted Nuthatch, "redeyed vireo" finds Red-eyed Vireo. Spelling variants and missing spaces no longer matter.
 
 Plus:
 • Family progress bars now on your personal Bird Dex, not just profile views
@@ -33,20 +33,20 @@ Plus:
 
 🔍 Tap any bird in your Dex
 • Tap any species tile to open its detail page
-• Community tab: photos from other birders who've spotted it — tap any photo to visit their profile
+• Community tab: photos from other birders who've spotted it; tap any photo to visit their profile
 • Yours tab: all your logged sightings for that species, with dates, locations, and photos
 
 💬 Comment reactions and replies
-• Hoot on a comment (owl icon) to react to it — the author gets notified in their Activity inbox
+• Hoot on a comment (owl icon) to react to it; the author gets notified in their Activity inbox
 • Tap "reply" under any comment to thread your response directly beneath it
 
 📍 Smarter location entry
-• Tap the location field to see your 6 most recent logged spots — no typing for familiar places
+• Tap the location field to see your 6 most recent logged spots
 • Autocomplete now biases toward your current position for better local suggestions
-• New ✕ clear button on the location, bird search, notes, and Dex search fields
+• New clear (x) button on the location, bird search, notes, and Dex search fields
 
 🔎 More forgiving bird search
-• "gray plover" finds Grey Plover, "red breasted" finds Red-breasted Nuthatch, "redeyed vireo" finds Red-eyed Vireo — spelling variants and missing spaces no longer matter
+• "gray plover" finds Grey Plover, "red breasted" finds Red-breasted Nuthatch, "redeyed vireo" finds Red-eyed Vireo. Spelling variants and missing spaces no longer matter.
 
 Plus:
 • Family progress bars now on your personal Bird Dex, not just profile views
