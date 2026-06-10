@@ -1,5 +1,80 @@
 # PocketBirds — Release Notes
 
+## Tyrant - June 10 2026
+**Builds:** iOS 1.0.0 (11) · Android 1.0.0 (versionCode 26, **APK** for Firebase App Distribution)
+**Headline:** Tap any Dex bird to see community photos and your sightings, comment reactions and replies, smarter location entry, and more forgiving search.
+
+### Play Store - "What's new" (plain text, copy below this line)
+
+🔍 Tap any bird in your Dex
+• Tap any species tile to open its detail page
+• Community tab: photos from other birders who've spotted it — tap any photo to visit their profile
+• Yours tab: all your logged sightings for that species, with dates, locations, and photos
+
+💬 Comment reactions and replies
+• Hoot on a comment (owl icon) to react to it — the author gets notified in their Activity inbox
+• Tap "reply" under any comment to thread your response directly beneath it
+
+📍 Smarter location entry
+• Tap the location field to see your 6 most recent logged spots — no typing for familiar places
+• Autocomplete now biases toward your current position for better local suggestions
+• New ✕ clear button on the location, bird search, notes, and Dex search fields
+
+🔎 More forgiving bird search
+• "gray plover" finds Grey Plover, "red breasted" finds Red-breasted Nuthatch, "redeyed vireo" finds Red-eyed Vireo — spelling variants and missing spaces no longer matter
+
+Plus:
+• Family progress bars now on your personal Bird Dex, not just profile views
+• One-tap "?" button on Add Sighting to log a Mystery Bird
+• Domesticated Chicken is now a loggable species
+• Sighting dates now always include the year; "today"/"yesterday" now based on calendar day
+
+### TestFlight - "What's new" (plain text, copy below this line)
+
+🔍 Tap any bird in your Dex
+• Tap any species tile to open its detail page
+• Community tab: photos from other birders who've spotted it — tap any photo to visit their profile
+• Yours tab: all your logged sightings for that species, with dates, locations, and photos
+
+💬 Comment reactions and replies
+• Hoot on a comment (owl icon) to react to it — the author gets notified in their Activity inbox
+• Tap "reply" under any comment to thread your response directly beneath it
+
+📍 Smarter location entry
+• Tap the location field to see your 6 most recent logged spots — no typing for familiar places
+• Autocomplete now biases toward your current position for better local suggestions
+• New ✕ clear button on the location, bird search, notes, and Dex search fields
+
+🔎 More forgiving bird search
+• "gray plover" finds Grey Plover, "red breasted" finds Red-breasted Nuthatch, "redeyed vireo" finds Red-eyed Vireo — spelling variants and missing spaces no longer matter
+
+Plus:
+• Family progress bars now on your personal Bird Dex, not just profile views
+• One-tap "?" button on Add Sighting to log a Mystery Bird
+• Domesticated Chicken is now a loggable species
+• Sighting dates now always include the year; "today"/"yesterday" now based on calendar day
+
+### What shipped (engineering)
+- **Species Detail screen** (`742eab4`): `app/species/[name].tsx` — tapping any Dex tile (seen or unseen) navigates here. Community tab fetches other birders' photos via `sightingService.getCommunityPhotosForSpecies` (single-equality query, no composite index); Yours tab renders the existing `SightingCard` scoped to that species. Photo mosaic opens a lightbox with credit + profile tap-through. Mystery Bird and custom species tiles have no route. Route registered in `_layout.tsx`. Also includes `familyForBird` helper and a shared `app/utils/formatSightingDate.ts` fixing two date bugs: year always shown on absolute dates, and "today"/"yesterday" now compare local calendar days.
+- **Hoot and reply to comments** (`e7dff35`, `96d433d`, `4cae242`): hoot toggle on each comment stored at `comments/{id}/hoots/{uid}`, riding the existing `collectionGroup('hoots')` listener. `onCommentAdded` Cloud Function now also notifies replied-to users (deduped vs owner). `replyTo {commentId, uid, username}` field on comment docs; rendered inline with "↳ replying to @name." New activity types `comment_hoot` and `reply`. Comment hoot icon pinned right-side with count to its left, vertically centered.
+- **Recent locations dropdown + current-position bias + clear buttons** (`2b3f3a8`): `app/utils/recentLocations.ts` derives last 6 locations from sightings (Mystery included, reports excluded). `components/ClearableInput.tsx` wraps any TextInput with an inline ✕. `locationService.getCurrentPosition` (silent, never prompts) used to bias Places autocomplete. All wired into `SightingForm` so edit mode also gets recents and clear.
+- **Forgiving bird search** (`674abcf`): `normalizeSearch` maps grey→gray and strips/normalizes dashes and spaces. Precomputed `birdNamesAlphaNorm` + `birdNamesAlphaCompact` arrays (module load, hot-path safe). Closes WORK_QUEUE UR-6.
+- **Family progress bars on personal Dex** (`45c4679`): the leaf progress bar (already on profile Dex) added under each family header in `dex.tsx`, driven by existing `familySeen`/`familyTotal` counts. Region-aware.
+- **Mystery Bird "?" button** (`267814d`): icon-only toggle beside the BIRD field in `SightingForm`; fills/clears the `UNKNOWN_BIRD` sentinel. State derived from `selectedBird`, so it reflects correctly in edit mode.
+- **Domesticated Chicken** (`8377120`): `Gallus gallus domesticus` added to `constants/birdNames.ts` in the Pheasants/Fowl family, next to Red Junglefowl. Empty regions array → cosmopolitan (visible under all region filters). Derived search arrays pick it up automatically.
+
+### Known issues
+- "First on Pocket Birds" still has no dedicated sighting-card pill (`WORK_QUEUE.md` Q-3).
+- Android notification small icon renders inconsistently across OEMs (cosmetic; Bug 2).
+- iOS push entitlement (`aps-environment`) missing from provisioning profile — Android→iOS push still broken (`WORK_QUEUE.md` Bug 6). Requires interactive EAS re-credential.
+
+### Post-ship steps
+- **iOS:** build 1.0.0 (11) auto-submitted to TestFlight → "Friends" external group. No new capability; should skip Beta App Review.
+- **Android:** APK (not Play Store AAB). Distribute via Firebase App Distribution. Artifact: <https://expo.dev/artifacts/eas/OrvDSgzFMwUpG013GhPdu2nBUCpZLOwg_5MG4eEz1Pg.apk>
+- Fill the `release-names.csv` Tyrant date once shipped. Next release name after Tyrant: check `release-names.csv` (wingspan ascending).
+
+---
+
 ## Tyrannulet - June 9 2026
 **Builds:** iOS 1.0.0 (10) · Android 1.0.0 (versionCode 25, **APK** for Firebase App Distribution)
 **Headline:** Edit any past sighting, much smoother scrolling & tab-switching, and your own Field Journal cards now surface hoots, comments & IDs.
