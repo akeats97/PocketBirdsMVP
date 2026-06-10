@@ -468,26 +468,26 @@ export default function SightingDetailScreen() {
                   )}
                   <Text style={styles.commentText}>{c.text}</Text>
                   <View style={styles.commentActions}>
-                    <Pressable
-                      onPress={() => toggleCommentHoot(sightingId, c.id)}
-                      hitSlop={8}
-                      style={styles.commentHootBtn}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: cHooted }}
-                      accessibilityLabel={cHooted ? 'Remove hoot' : 'Hoot this comment'}
-                    >
-                      <Owl size={15} filled={cHooted} color={cHooted ? palette.coral : palette.muted} />
-                      {c.hootCount > 0 && (
-                        <Text style={[styles.commentHootCount, cHooted && styles.commentHootCountActive]}>
-                          {c.hootCount}
-                        </Text>
-                      )}
-                    </Pressable>
                     <Pressable onPress={() => startReply(c)} hitSlop={8}>
                       <Text style={styles.commentReplyBtn}>Reply</Text>
                     </Pressable>
                   </View>
                 </View>
+                <Pressable
+                  onPress={() => toggleCommentHoot(sightingId, c.id)}
+                  hitSlop={8}
+                  style={styles.commentHootBtn}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: cHooted }}
+                  accessibilityLabel={cHooted ? 'Remove hoot' : 'Hoot this comment'}
+                >
+                  <Owl size={15} filled={cHooted} color={cHooted ? palette.coral : palette.muted} />
+                  {c.hootCount > 0 && (
+                    <Text style={[styles.commentHootCount, cHooted && styles.commentHootCountActive]}>
+                      {c.hootCount}
+                    </Text>
+                  )}
+                </Pressable>
               </View>
             );
           })
@@ -712,7 +712,9 @@ const styles = StyleSheet.create({
   commentText: { ...type.body, color: palette.ink, marginTop: 2, lineHeight: 20 },
   commentReplyTo: { fontFamily: font.mono, fontSize: 11, color: palette.muted, marginTop: 1 },
   commentActions: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginTop: 6 },
-  commentHootBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  // Right-side hoot column, Instagram-style: small owl over its count, aligned
+  // near the comment's first line.
+  commentHootBtn: { alignItems: 'center', justifyContent: 'flex-start', width: 26, paddingTop: 2, gap: 2 },
   commentHootCount: { fontFamily: font.monoBold, fontSize: 11, color: palette.muted },
   commentHootCountActive: { color: palette.crimson },
   commentReplyBtn: { fontFamily: font.bodyBold, fontSize: 12, color: palette.inkSoft },
