@@ -527,6 +527,9 @@ export const birdFamilies: BirdFamily[] = [
     { name: "Red Junglefowl", regions: ["OR"] },
     { name: "Grey Junglefowl", regions: ["OR"] },
     { name: "Sri Lanka Junglefowl", regions: ["OR"] },
+    // Domesticated Chicken (Gallus gallus domesticus) — descends from Red
+    // Junglefowl; not an IOC species, added by request. Cosmopolitan, no region tag.
+    { name: "Domesticated Chicken", regions: [] },
     { name: "Latham's Francolin", regions: ["AF"] },
     { name: "Crested Francolin", regions: ["AF"] },
     { name: "Grey Francolin", regions: ["OR","PAL"] },
