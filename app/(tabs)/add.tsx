@@ -6,8 +6,8 @@ import { HardShadow } from '../../components/SightingCard';
 import { border, font, palette, radius, space } from '../../constants/Colors';
 import { isCustomSpecies } from '../../constants/customSpecies';
 import { isReportEntry } from '../../constants/reportTypes';
-import GlobalFirstCelebration from '../components/GlobalFirstCelebration';
-import MilestoneCelebration from '../components/MilestoneCelebration';
+import GlobalFirstCelebration from '../../components/GlobalFirstCelebration';
+import MilestoneCelebration from '../../components/MilestoneCelebration';
 import { useSightings } from '../context/SightingsContext';
 import { isGlobalFirstSpecies } from '../services/sightingService';
 

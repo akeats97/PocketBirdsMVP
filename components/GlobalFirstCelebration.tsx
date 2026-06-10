@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
-import { HardShadow } from '../../components/SightingCard';
-import { font, palette, radius, space } from '../../constants/Colors';
+import { HardShadow } from './SightingCard';
+import { font, palette, radius, space } from '../constants/Colors';
 import { ConfettiPiece, PIECE_COUNT } from './MilestoneCelebration';
 
 type Props = {

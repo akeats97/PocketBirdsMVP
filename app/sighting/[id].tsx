@@ -29,8 +29,8 @@ import { MysteryPhoto } from '../../components/community/MysteryPhoto';
 import { NeedsIdPill } from '../../components/community/NeedsIdPill';
 import { ProposalAcceptedCelebration } from '../../components/community/ProposalAcceptedCelebration';
 import { ProposeSheet } from '../../components/community/ProposeSheet';
-import GlobalFirstCelebration from '../components/GlobalFirstCelebration';
-import MilestoneCelebration from '../components/MilestoneCelebration';
+import GlobalFirstCelebration from '../../components/GlobalFirstCelebration';
+import MilestoneCelebration from '../../components/MilestoneCelebration';
 import { font, palette, radius, space, type } from '../../constants/Colors';
 import { isMysteryBird, isUnknownEntry } from '../../constants/unknownBird';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -46,19 +46,7 @@ import { getCurrentUserProfile, isFollowing } from '../services/userService';
 import { confirmDeleteSighting } from '../utils/confirmDeleteSighting';
 import { setPhotoUri } from '../utils/photoViewer';
 import { FriendSighting } from '../types';
-
-function timeAgo(date: Date | null): string {
-  if (!date) return 'now';
-  const secs = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (secs < 60) return 'now';
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+import { timeAgo } from '../utils/timeAgo';
 
 export default function SightingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

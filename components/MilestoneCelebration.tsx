@@ -9,9 +9,9 @@ import {
   Vibration,
   View,
 } from 'react-native';
-import { HardShadow } from '../../components/SightingCard';
-import { font, palette, radius, space } from '../../constants/Colors';
-import { milestoneTagline } from '../constants/milestones';
+import { HardShadow } from './SightingCard';
+import { font, palette, radius, space } from '../constants/Colors';
+import { milestoneTagline } from '../app/constants/milestones';
 
 const SCREEN = Dimensions.get('window');
 export const PIECE_COUNT = 45;

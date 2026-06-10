@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SightingForm, { SightingFormValues } from '../../../components/SightingForm';
 import { HardShadow } from '../../../components/SightingCard';
 import { border, font, palette, radius, space, type } from '../../../constants/Colors';
-import MilestoneCelebration from '../../components/MilestoneCelebration';
+import MilestoneCelebration from '../../../components/MilestoneCelebration';
 import { SightingPatch, useSightings } from '../../context/SightingsContext';
 
 // Map the form's single photo value back onto the sighting's two photo fields.
