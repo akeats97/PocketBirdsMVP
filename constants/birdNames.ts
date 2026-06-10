@@ -11764,3 +11764,15 @@ export const birdFamilies: BirdFamily[] = [
 // Flat list of species names in taxonomic order, derived from birdFamilies.
 // Kept for backwards compatibility (e.g. birdNamesLower.ts).
 export const birdNames: string[] = birdFamilies.flatMap(f => f.birds.map(b => b.name));
+
+// Lowercase species name -> family. Built once at module load.
+const _nameToFamily = new Map<string, string>();
+for (const fam of birdFamilies) {
+  for (const b of fam.birds) _nameToFamily.set(b.name.toLowerCase(), fam.family);
+}
+
+// Family a species belongs to, or null if the name isn't in the IOC list
+// (custom / legacy / orphan names). Case-insensitive.
+export function familyForBird(name: string): string | null {
+  return _nameToFamily.get(name.trim().toLowerCase()) ?? null;
+}

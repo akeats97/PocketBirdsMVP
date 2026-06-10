@@ -5,6 +5,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSightings } from '../app/context/SightingsContext';
 import { confirmDeleteSighting } from '../app/utils/confirmDeleteSighting';
+import { formatRelativeDate } from '../app/utils/formatSightingDate';
 import { setPhotoUri } from '../app/utils/photoViewer';
 import { BottomSheet } from './BottomSheet';
 import { Sighting } from '../app/types';
@@ -267,15 +268,6 @@ export function HardShadow({
       </View>
     </View>
   );
-}
-
-function formatRelativeDate(date: Date): string {
-  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} wk ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 const styles = StyleSheet.create({

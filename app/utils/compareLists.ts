@@ -14,6 +14,7 @@
 import { isReportEntry } from '../../constants/reportTypes';
 import { isUnknownEntry } from '../../constants/unknownBird';
 import { isCustomSpecies } from '../../constants/customSpecies';
+import { formatRelativeDate } from './formatSightingDate';
 import { Sighting } from '../types';
 
 /** True if this entry is a real, countable species (not a report / mystery / custom). */
@@ -99,15 +100,8 @@ export function latestBySpecies(list: Sighting[]): Map<string, Sighting> {
   return m;
 }
 
-/** "5 days ago", "2 wk ago", "Jun 6" — matches the app's card formatter. */
-export function relativeTime(date: Date): string {
-  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} wk ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+/** "5 days ago", "2 wk ago", "Sep 3, 2025" — the app's shared card formatter. */
+export const relativeTime = formatRelativeDate;
 
 /** The "where · when" hint line under a species in the Venn buckets. */
 export function hintFor(sighting: Sighting | undefined): string {

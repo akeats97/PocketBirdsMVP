@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useHoots } from '../app/context/HootsContext';
 import { setPhotoUri } from '../app/utils/photoViewer';
+import { formatRelativeDate } from '../app/utils/formatSightingDate';
 import { FriendSighting } from '../app/types';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { isMysteryBird } from '../constants/unknownBird';
@@ -38,15 +39,6 @@ function HootSummaryText({
       {others > 0 ? ` & ${others} other${others === 1 ? '' : 's'} hooted` : ' hooted'}
     </Text>
   );
-}
-
-function formatRelativeDate(date: Date): string {
-  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} wk ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSightingCardProps) {

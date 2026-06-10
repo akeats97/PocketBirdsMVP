@@ -164,6 +164,60 @@ export async function getSightingsByUid(uid: string): Promise<Sighting[]> {
   }
 }
 
+// A community photo of a species, by another birder — feeds the Species Detail
+// screen's Community gallery + lightbox. `username` is resolved from the
+// contributor's user doc so the gallery needs no extra reads at render time.
+export interface CommunityPhoto {
+  id: string;        // sighting id
+  uid: string;       // contributor's uid (resolves to their profile)
+  username: string;  // resolved display name (may be '' mid-sync)
+  photoUrl: string;
+  location: string;
+  date: Date;
+}
+
+// Photos of `birdName` taken by OTHER birders (excludes `excludeUid`, normally
+// the signed-in user). Uses a single equality filter (no composite index
+// needed — there is no birdName+date index) and sorts client-side. Capped at
+// `max` newest. Best effort: throws on failure so the caller can show an error.
+export async function getCommunityPhotosForSpecies(
+  birdName: string,
+  excludeUid?: string,
+  max = 30,
+): Promise<CommunityPhoto[]> {
+  const sightingsRef = collection(db, 'sightings');
+  const snap = await getDocs(query(sightingsRef, where('birdName', '==', birdName)));
+
+  const rows = snap.docs
+    .map(d => ({ id: d.id, data: d.data() }))
+    .filter(({ data }) => data.photoUrl && data.userId && data.userId !== excludeUid)
+    .map(({ id, data }) => ({
+      id,
+      uid: data.userId as string,
+      photoUrl: data.photoUrl as string,
+      location: (data.location as string) ?? '',
+      date: data.date?.toDate?.() ?? new Date(data.date),
+    }))
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, max);
+
+  // Resolve each distinct contributor's username once.
+  const uids = [...new Set(rows.map(r => r.uid))];
+  const names = new Map<string, string>();
+  await Promise.all(
+    uids.map(async uid => {
+      try {
+        const u = await getDoc(doc(db, 'users', uid));
+        names.set(uid, u.exists() ? (u.data().username ?? '') : '');
+      } catch {
+        names.set(uid, '');
+      }
+    }),
+  );
+
+  return rows.map(r => ({ ...r, username: names.get(r.uid) ?? '' }));
+}
+
 // Has ANY PocketBirds user ever logged this species? Returns true if no
 // matching sighting exists yet — i.e. the caller would be the global first.
 // Matches on exact birdName (canonical names come from the IOC picker, so

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -37,6 +38,7 @@ export default function DexScreen() {
   const [regionsModalOpen, setRegionsModalOpen] = useState(false);
   const { sightings } = useSightings();
   const { wishlist, toggle: toggleWishlist } = useWishlist();
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
@@ -198,9 +200,13 @@ export default function DexScreen() {
         // Mystery Bird gets a tile (count of how many you've logged) but can't be
         // wishlisted — there's no species to wish for.
         const isMystery = isUnknownEntry(name);
+        // Every real species tile opens its Species Detail screen. Mystery Bird
+        // and custom easter-egg species (e.g. Kelsey) have no species page.
+        const navigable = !isMystery && !isCustomSpecies(name);
         return (
-          <View
+          <Pressable
             key={name}
+            onPress={navigable ? () => router.push({ pathname: '/species/[name]', params: { name } }) : undefined}
             style={[styles.tile, seen ? styles.tileSeen : styles.tileUnseen]}
           >
             {globalFirst ? (
@@ -244,7 +250,7 @@ export default function DexScreen() {
                 <Text style={styles.countBadgeText}>×{times}</Text>
               </View>
             )}
-          </View>
+          </Pressable>
         );
       })}
       {item.length < COLUMNS &&
@@ -252,7 +258,7 @@ export default function DexScreen() {
           <View key={`spacer-${i}`} style={styles.tileSpacer} />
         ))}
     </View>
-  ), [seenMap, wishlist, toggleWishlist]);
+  ), [seenMap, wishlist, toggleWishlist, router]);
 
   const renderSectionHeader = useCallback(({ section }: { section: Section }) => (
     <View style={styles.sectionHeader}>

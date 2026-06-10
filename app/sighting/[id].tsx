@@ -37,6 +37,7 @@ import { useActivity } from '../context/ActivityContext';
 import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useHoots } from '../context/HootsContext';
 import { useSightings } from '../context/SightingsContext';
+import { formatRelativeDate } from '../utils/formatSightingDate';
 import { useComments } from '../hooks/useComments';
 import { useProposals } from '../hooks/useProposals';
 import { getCurrentUserProfile, isFollowing } from '../services/userService';
@@ -54,14 +55,6 @@ function timeAgo(date: Date | null): string {
   if (hrs < 24) return `${hrs}h`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function metaDate(date: Date): string {
-  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
@@ -389,7 +382,7 @@ export default function SightingDetailScreen() {
                 <Text style={styles.metaDivider}>·</Text>
               </>
             ) : null}
-            <Text style={styles.metaText}>{metaDate(sighting.date)}</Text>
+            <Text style={styles.metaText}>{formatRelativeDate(sighting.date)}</Text>
           </View>
 
           {sighting.notes ? (
