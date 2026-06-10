@@ -222,6 +222,23 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     Keyboard.dismiss();
   };
 
+  // Mystery Bird toggle. Mirrors handleBirdSelect(UNKNOWN_BIRD) on the way in
+  // and a full clear on the way out. isMystery is derived, so it also reflects
+  // active state when editing an existing Mystery Bird sighting.
+  const isMystery = selectedBird === UNKNOWN_BIRD;
+
+  const toggleMystery = () => {
+    Keyboard.dismiss();
+    setSuggestions([]);
+    if (isMystery) {
+      setSelectedBird('');
+      setSearchQuery('');
+    } else {
+      setSelectedBird(UNKNOWN_BIRD);
+      setSearchQuery(UNKNOWN_BIRD);
+    }
+  };
+
   const handleSelectPhoto = async () => {
     try {
       const result = await pickImage();
@@ -296,15 +313,30 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
             {/* Bird Name */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>BIRD</Text>
-              <TextInput
-                ref={textInputRef}
-                style={[styles.input, selectedBird ? styles.inputDisplay : null]}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="What'd you see?"
-                placeholderTextColor={palette.muted}
-                onBlur={() => setSuggestions([])}
-              />
+              <View style={styles.birdRow}>
+                <TextInput
+                  ref={textInputRef}
+                  style={[styles.input, { flex: 1 }, selectedBird ? styles.inputDisplay : null]}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="What'd you see?"
+                  placeholderTextColor={palette.muted}
+                  onBlur={() => setSuggestions([])}
+                />
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.mysteryButton,
+                    isMystery && styles.mysteryButtonActive,
+                    pressed && !isMystery && { backgroundColor: palette.sun },
+                  ]}
+                  onPress={toggleMystery}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isMystery }}
+                  accessibilityLabel={isMystery ? 'Clear Mystery Bird' : 'Log as Mystery Bird'}
+                >
+                  <Text style={[styles.mysteryGlyph, isMystery && styles.mysteryGlyphActive]}>?</Text>
+                </Pressable>
+              </View>
               {suggestions.length > 0 && (
                 <View style={styles.suggestionsContainer}>
                   <ScrollView
@@ -574,6 +606,34 @@ const styles = StyleSheet.create({
   cueBodyStrong: {
     fontFamily: font.bodyBold,
     color: palette.ink,
+  },
+
+  birdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  mysteryButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.input,
+    backgroundColor: palette.sunSoft,
+    ...border.thick,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mysteryButtonActive: {
+    backgroundColor: palette.ink,
+  },
+  mysteryGlyph: {
+    fontFamily: font.display,
+    fontSize: 24,
+    fontWeight: '800',
+    lineHeight: 28,
+    color: palette.ink,
+  },
+  mysteryGlyphActive: {
+    color: palette.cream,
   },
 
   locationRow: {
