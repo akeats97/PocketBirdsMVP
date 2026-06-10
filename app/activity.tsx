@@ -79,12 +79,18 @@ export default function ActivityScreen() {
         style={[styles.row, !item.read && styles.rowUnread]}
         onPress={() => openItem(item)}
       >
-        <View style={styles.avatarWrap}>
+        {/* Avatar links to the actor's profile; the rest of the row opens the content. */}
+        <Pressable
+          style={styles.avatarWrap}
+          onPress={() => item.actorUid && router.push(`/profile/${item.actorUid}`)}
+          disabled={!item.actorUid}
+          hitSlop={4}
+        >
           <Avatar name={item.actorUsername} seed={item.actorUid} size={42} />
           <View style={[styles.badge, { backgroundColor: badge.color }]}>
             <Ionicons name={badge.name} size={11} color="#fff" />
           </View>
-        </View>
+        </Pressable>
 
         <View style={styles.body}>
           <Text style={styles.text} numberOfLines={2}>

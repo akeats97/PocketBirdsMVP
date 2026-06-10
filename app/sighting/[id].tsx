@@ -22,6 +22,7 @@ import { Owl } from '../../components/Owl';
 import { Avatar } from '../../components/social/Avatar';
 import { FacePile } from '../../components/social/FacePile';
 import { HootButton } from '../../components/social/HootButton';
+import { HootListSheet } from '../../components/social/HootListSheet';
 import { AcceptBar } from '../../components/community/AcceptBar';
 import { CommunityIdSection } from '../../components/community/CommunityIdSection';
 import { MysteryPhoto } from '../../components/community/MysteryPhoto';
@@ -136,6 +137,7 @@ export default function SightingDetailScreen() {
   const composerRef = useRef<TextInput>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showPropose, setShowPropose] = useState(false);
+  const [showHootList, setShowHootList] = useState(false);
   const [accepting, setAccepting] = useState(false);
   // Resolution celebration + chained new-species machinery.
   const [accepted, setAccepted] = useState<{
@@ -378,11 +380,17 @@ export default function SightingDetailScreen() {
 
         {/* Meta */}
         <View style={styles.meta}>
+          {/* Owner tag — tappable, links to the poster's profile (same as the feed card) */}
           <View style={styles.friendTagRow}>
-            <View style={styles.friendTag}>
+            <Pressable
+              style={({ pressed }) => [styles.friendTag, pressed && ownerUid && { backgroundColor: palette.sky }]}
+              onPress={() => ownerUid && router.push(`/profile/${ownerUid}`)}
+              disabled={!ownerUid}
+              hitSlop={6}
+            >
               <Ionicons name="person" size={10} color={palette.ink} />
               <Text style={styles.friendTagText} numberOfLines={1}>{friendName.toUpperCase()}</Text>
-            </View>
+            </Pressable>
           </View>
 
           <Text style={styles.birdName}>{sighting.birdName}</Text>
@@ -404,16 +412,21 @@ export default function SightingDetailScreen() {
             <Text style={styles.note}>“{sighting.notes}”</Text>
           ) : null}
 
-          {/* Hoot summary + toggle */}
+          {/* Hoot summary + toggle. Tapping the face pile / count opens the
+              hooter list (same as the feed card), which links to profiles. */}
           <View style={styles.hootSummary}>
-            <View style={styles.hootSummaryLeft}>
+            <Pressable
+              style={styles.hootSummaryLeft}
+              onPress={() => setShowHootList(true)}
+              disabled={count === 0}
+            >
               {count > 0 && hooters.length > 0 && (
                 <FacePile people={hooters.map((h) => ({ name: h.username, seed: h.uid }))} max={3} size={26} />
               )}
               <Text style={styles.hootCountText}>
                 <Text style={styles.hootCountNum}>{count}</Text> {count === 1 ? 'hoot' : 'hoots'}
               </Text>
-            </View>
+            </Pressable>
             <HootButton hooted={hooted} count={count} onPress={() => toggleHoot(sightingId)} />
           </View>
         </View>
@@ -543,6 +556,13 @@ export default function SightingDetailScreen() {
           </Pressable>
         </View>
       </KeyboardStickyView>
+
+      {/* Who hooted — bottom sheet, rows link to profiles */}
+      <HootListSheet
+        sightingId={sightingId}
+        visible={showHootList}
+        onClose={() => setShowHootList(false)}
+      />
 
       {/* Propose composer */}
       <ProposeSheet

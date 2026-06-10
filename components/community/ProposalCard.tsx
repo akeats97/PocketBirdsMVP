@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { font, palette, radius, space } from '../../constants/Colors';
 import { Proposal } from '../../app/types';
 import { HardShadow } from '../SightingCard';
@@ -19,6 +20,7 @@ interface ProposalCardProps {
 // sun-yellow FRONT-RUNNER ribbon and a deeper hard shadow. Species is the
 // COMMON NAME ONLY — no Latin line, ever.
 export function ProposalCard({ proposal, rank, leader, hooted, onToggleHoot }: ProposalCardProps) {
+  const router = useRouter();
   const count = proposal.hootCount ?? 0;
   return (
     <View style={styles.wrap}>
@@ -51,12 +53,17 @@ export function ProposalCard({ proposal, rank, leader, hooted, onToggleHoot }: P
                 <Text style={[styles.species, { fontSize: leader ? 19 : 16 }]} numberOfLines={2}>
                   {proposal.species}
                 </Text>
-                <View style={styles.byRow}>
+                {/* Proposer credit — tappable, links to their profile */}
+                <Pressable
+                  style={styles.byRow}
+                  onPress={() => router.push(`/profile/${proposal.uid}`)}
+                  hitSlop={6}
+                >
                   <Avatar name={proposal.username} seed={proposal.uid} size={20} />
                   <Text style={styles.byText} numberOfLines={1}>
                     proposed by <Text style={styles.byName}>{proposal.username}</Text>
                   </Text>
-                </View>
+                </Pressable>
               </View>
             </View>
 
