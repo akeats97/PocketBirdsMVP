@@ -481,12 +481,12 @@ export default function SightingDetailScreen() {
                   accessibilityState={{ selected: cHooted }}
                   accessibilityLabel={cHooted ? 'Remove hoot' : 'Hoot this comment'}
                 >
-                  <Owl size={15} filled={cHooted} color={cHooted ? palette.coral : palette.muted} />
                   {c.hootCount > 0 && (
                     <Text style={[styles.commentHootCount, cHooted && styles.commentHootCountActive]}>
                       {c.hootCount}
                     </Text>
                   )}
+                  <Owl size={15} filled={cHooted} color={cHooted ? palette.coral : palette.muted} />
                 </Pressable>
               </View>
             );
@@ -712,9 +712,9 @@ const styles = StyleSheet.create({
   commentText: { ...type.body, color: palette.ink, marginTop: 2, lineHeight: 20 },
   commentReplyTo: { fontFamily: font.mono, fontSize: 11, color: palette.muted, marginTop: 1 },
   commentActions: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginTop: 6 },
-  // Right-side hoot column, Instagram-style: small owl over its count, aligned
-  // near the comment's first line.
-  commentHootBtn: { alignItems: 'center', justifyContent: 'flex-start', width: 26, paddingTop: 2, gap: 2 },
+  // Right-side hoot control: count to the left of the owl, vertically centered
+  // against the whole comment row.
+  commentHootBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 4, paddingLeft: 4 },
   commentHootCount: { fontFamily: font.monoBold, fontSize: 11, color: palette.muted },
   commentHootCountActive: { color: palette.crimson },
   commentReplyBtn: { fontFamily: font.bodyBold, fontSize: 12, color: palette.inkSoft },
