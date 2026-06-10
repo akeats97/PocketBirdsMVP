@@ -641,7 +641,23 @@ Restrictions take ~5 min to propagate. Once applied: only APKs signed by the EAS
 
 ---
 
-### Lock down Firestore security rules (CRITICAL)
+### Verify / harden Firebase Storage rules (HIGH PRIORITY, status unverified)
+
+**What's happening (found Jun 10 2026):** There is no `storage.rules` in the repo and no `storage` section in `firebase.json`, so the deployed Storage rules have never been version-controlled and are probably whatever the bucket got at project creation. The Firestore rules sat wide open until Jun 4 2026; Storage likely has the same history. All sighting photos live in this bucket. Couldn't read the deployed rules from the CLI (no `storage:rules:get` command, no gcloud auth on this machine), so the first step is just looking.
+
+**Why this matters:** If the bucket is in open/test mode, anyone with the bucket name (extractable from any APK) can read, overwrite, or delete every photo.
+
+**Fix:**
+1. Check Firebase console → Storage → Rules. If it says `allow read, write: if true` (or an expired test-mode date), proceed.
+2. Interim rule, safe with the current client code: `allow read, write: if request.auth != null;` on `/sightings/{file}`. Download URLs are token-based and keep working for the feed regardless of read rules.
+3. Proper owner-only writes need the uid in the storage path. `photoService.uploadPhoto` currently writes `sightings/{sightingId}.{ext}` with no uid segment, and Storage rules cannot look up the sighting owner in Firestore. Moving to `sightings/{uid}/{sightingId}.{ext}` lets a rule enforce `request.auth.uid == uid`. Existing photos keep their old paths and URLs (they don't need migrating; only new uploads use the new path).
+4. Whatever ships, save it as `storage.rules` in the repo and wire it into `firebase.json` so it's version-controlled like `firestore.rules`.
+
+**Open questions:** None blocking; step 2 alone closes the hole.
+
+---
+
+### Lock down Firestore security rules (CRITICAL) — ✅ DONE Jun 4 2026 (see "SECURITY — Firestore rules hardened" above; kept for the original write-up)
 
 **What's happening:** The project's Firestore security rules are wide open. The active ruleset (fetched May 26 2026 via the Rules API) is:
 
@@ -670,6 +686,28 @@ service cloud.firestore {
 **Before deploying:** a rules deploy replaces the live ruleset wholesale, so develop against the Firestore emulator or a throwaway project first, exercise login / add-sighting / friends feed / follow / notification bell, THEN deploy. Keep the file in the repo (`firestore.rules` wired into `firebase.json`) so it's version-controlled from then on.
 
 **Open questions:** Should sightings be readable by any signed-in user, or restricted to followers only? The friends-feed query uses `where('userId','in', followedIds)`, so a followers-only read rule needs to stay compatible with that query shape.
+
+---
+
+## Code health (notes from the Jun 10 2026 cleanup sweep)
+
+Low-priority items spotted during the cleanup sweep that removed the Expo template files, deduped `timeAgo`, swept debug `console.log`s, and moved `NotifPrefSheet` onto `BottomSheet`. None are urgent; pick up opportunistically.
+
+### Color token consolidation (do before dark mode)
+
+- 25 hardcoded `'#fff'` literals across components where `palette.card` (`#ffffff`) or a dedicated `palette.white` token should be used.
+- One-off grays that aren't in the palette: `#ccc`, `#eee`, `#666`, `#9aa396`.
+- Scrim/backdrop rgba values vary per file (0.18, 0.45, 0.5, 0.86 alphas on roughly the same ink color); a `palette.scrim` token (plus a heavier lightbox variant) would unify them.
+- Payoff: the deferred dark-mode work becomes a palette swap instead of a hunt through every component.
+
+### Split oversized screens (opportunistic only)
+
+`app/(tabs)/friends.tsx` is 1,137 lines and `components/SightingForm.tsx` is 847. Not broken; just where future changes will be slowest. Extract sections when next touching them, don't refactor for its own sake.
+
+### Remaining profile-link gaps (deliberately deferred Jun 10 2026)
+
+- Top-comment preview on the feed card (`FriendSightingCard.tsx`): the commenter's avatar + name open the sighting detail, not the commenter's profile. Defensible (the detail screen is one tap away and links from there), just inconsistent.
+- Small text mentions that aren't links: the "replying to @name" line in comment threads (`app/sighting/[id].tsx`) and "Called by {name}" in `ProposalAcceptedCelebration.tsx` (`proposerUid` is already available there; would need a dismiss-then-navigate dance).
 
 ---
 

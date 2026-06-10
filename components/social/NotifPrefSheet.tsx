@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NotificationMode } from '../../app/services/notificationPrefsService';
 import { font, palette, radius, space } from '../../constants/Colors';
+import { BottomSheet } from '../BottomSheet';
 import { Avatar } from './Avatar';
 import { BellGlyph, bellColor } from './NotifBell';
 
@@ -25,53 +26,40 @@ interface Props {
 // without change. Writes go through notificationPrefsService (caller's onPick).
 export function NotifPrefSheet({ visible, person, mode, onPick, onClose }: Props) {
   return (
-    <Modal
-      visible={visible && !!person}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <Pressable style={styles.scrim} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          {/* Header — who this is about */}
-          <View style={styles.header}>
-            {person && <Avatar name={person.username} seed={person.uid} size={34} />}
-            <View style={{ minWidth: 0 }}>
-              <Text style={styles.title}>Notifications</Text>
-              <Text style={styles.sub} numberOfLines={1}>about {person?.username}</Text>
-            </View>
+    <BottomSheet visible={visible && !!person} onClose={onClose}>
+      <View style={styles.sheet}>
+        {/* Header — who this is about */}
+        <View style={styles.header}>
+          {person && <Avatar name={person.username} seed={person.uid} size={34} />}
+          <View style={{ minWidth: 0 }}>
+            <Text style={styles.title}>Notifications</Text>
+            <Text style={styles.sub} numberOfLines={1}>about {person?.username}</Text>
           </View>
+        </View>
 
-          {OPTIONS.map((opt) => {
-            const on = mode === opt.mode;
-            return (
-              <Pressable
-                key={opt.mode}
-                style={[styles.option, on ? styles.optionOn : styles.optionOff]}
-                onPress={() => onPick(opt.mode)}
-              >
-                <BellGlyph mode={opt.mode} size={17} color={bellColor(opt.mode)} />
-                <View style={styles.optionText}>
-                  <Text style={styles.optionTitle}>{opt.title}</Text>
-                  <Text style={styles.optionSub}>{opt.sub}</Text>
-                </View>
-                {on && <Ionicons name="checkmark" size={16} color={palette.leaf} />}
-              </Pressable>
-            );
-          })}
-        </Pressable>
-      </Pressable>
-    </Modal>
+        {OPTIONS.map((opt) => {
+          const on = mode === opt.mode;
+          return (
+            <Pressable
+              key={opt.mode}
+              style={[styles.option, on ? styles.optionOn : styles.optionOff]}
+              onPress={() => onPick(opt.mode)}
+            >
+              <BellGlyph mode={opt.mode} size={17} color={bellColor(opt.mode)} />
+              <View style={styles.optionText}>
+                <Text style={styles.optionTitle}>{opt.title}</Text>
+                <Text style={styles.optionSub}>{opt.sub}</Text>
+              </View>
+              {on && <Ionicons name="checkmark" size={16} color={palette.leaf} />}
+            </Pressable>
+          );
+        })}
+      </View>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: {
-    flex: 1,
-    backgroundColor: 'rgba(26,36,23,0.45)',
-    justifyContent: 'flex-end',
-  },
   sheet: {
     backgroundColor: palette.cream,
     borderTopWidth: 2,
