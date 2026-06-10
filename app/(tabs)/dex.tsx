@@ -262,10 +262,20 @@ export default function DexScreen() {
 
   const renderSectionHeader = useCallback(({ section }: { section: Section }) => (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionHeaderTitle}>{section.title}</Text>
-      <Text style={styles.sectionHeaderCount}>
-        {section.familySeen}/{section.familyTotal}
-      </Text>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionHeaderTitle}>{section.title}</Text>
+        <Text style={styles.sectionHeaderCount}>
+          {section.familySeen}/{section.familyTotal}
+        </Text>
+      </View>
+      <View style={styles.dexBarTrack}>
+        <View
+          style={[
+            styles.dexBarFill,
+            { width: `${Math.min(100, (section.familySeen / Math.max(1, section.familyTotal)) * 100)}%` },
+          ]}
+        />
+      </View>
     </View>
   ), []);
 
@@ -537,9 +547,24 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
     paddingHorizontal: space.lg + 2,
+  },
+  sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
+  },
+  dexBarTrack: {
+    height: 8,
+    backgroundColor: palette.card,
+    borderWidth: 1.5,
+    borderColor: palette.ink,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  dexBarFill: {
+    height: '100%',
+    backgroundColor: palette.leaf,
   },
   sectionHeaderTitle: {
     fontFamily: font.display,
