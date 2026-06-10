@@ -24,6 +24,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { birdNamesAlpha, birdNamesAlphaNorm, birdNamesAlphaCompact, normalizeSearch } from '../../constants/birdNamesLower';
 import { font, palette, radius, space, type } from '../../constants/Colors';
+import ClearableInput from '../ClearableInput';
 import { HardShadow } from '../SightingCard';
 import { Owl } from '../Owl';
 import { MysteryPhoto } from './MysteryPhoto';
@@ -226,6 +227,19 @@ export function ProposeSheet({
                     autoCorrect={false}
                   />
                   {selected ? <Ionicons name="checkmark" size={18} color={palette.leaf} /> : null}
+                  {query.length > 0 && (
+                    <Pressable
+                      onPress={() => {
+                        setQuery('');
+                        setSelected('');
+                      }}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear species"
+                    >
+                      <Ionicons name="close-circle" size={18} color={palette.muted} />
+                    </Pressable>
+                  )}
                 </View>
               </HardShadow>
 
@@ -252,7 +266,7 @@ export function ProposeSheet({
               <Text style={[styles.label, { marginTop: space.lg }]}>
                 WHY? <Text style={styles.labelHint}>(helps others vote)</Text>
               </Text>
-              <TextInput
+              <ClearableInput
                 style={styles.noteInput}
                 value={note}
                 onChangeText={setNote}

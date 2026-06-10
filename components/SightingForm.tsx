@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import ClearableInput from './ClearableInput';
 import { HardShadow } from './SightingCard';
 import { birdNamesAlpha, birdNamesAlphaNorm, birdNamesAlphaCompact, normalizeSearch } from '../constants/birdNamesLower';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
@@ -11,8 +12,9 @@ import { REPORT_TYPES, isReportEntry } from '../constants/reportTypes';
 import { UNKNOWN_BIRD } from '../constants/unknownBird';
 import { useSightings } from '../app/context/SightingsContext';
 import { pickImage } from '../app/services/photoService';
-import { getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission } from '../app/services/locationService';
+import { getCurrentCoordinates, getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission } from '../app/services/locationService';
 import { getPlaceCoordinates, getPlacesAutocomplete, PlaceSuggestion } from '../app/services/placesService';
+import { buildRecentLocations, RecentLocation } from '../app/utils/recentLocations';
 import { Coordinates, Sighting } from '../app/types';
 
 export interface SightingFormValues {
@@ -68,7 +70,7 @@ function NotifyCue({ isNew, birdName }: { isNew: boolean; birdName: string }) {
 }
 
 export default function SightingForm({ mode, initial, onSubmit, submitting }: SightingFormProps) {
-  const { lastLocation, evaluateNewSpecies } = useSightings();
+  const { lastLocation, evaluateNewSpecies, sightings } = useSightings();
   const isEdit = mode === 'edit';
 
   const [searchQuery, setSearchQuery] = useState(isEdit ? initial?.birdName ?? '' : '');
@@ -80,6 +82,8 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
   );
   const [placeSuggestions, setPlaceSuggestions] = useState<PlaceSuggestion[]>([]);
   const [shouldAutocompleteLocation, setShouldAutocompleteLocation] = useState(false);
+  const [locationFocused, setLocationFocused] = useState(false);
+  const [biasCoords, setBiasCoords] = useState<Coordinates | undefined>(undefined);
   const [notes, setNotes] = useState(isEdit ? initial?.notes ?? '' : '');
   const [date, setDate] = useState(isEdit ? initial?.date ?? new Date() : new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -100,6 +104,23 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     setPlaceSuggestions([]);
   }, [lastLocation, isEdit]);
 
+  // The user's most-recently-logged locations, shown when the location field
+  // is focused and empty. Free path — no Google Places call.
+  const recentLocations = useMemo(() => buildRecentLocations(sightings), [sightings]);
+
+  // Silently resolve the user's current position for autocomplete biasing.
+  // Never prompts — getCurrentCoordinates returns null unless permission is
+  // already granted, and we fall back to lastLocation.coordinates below.
+  useEffect(() => {
+    let cancelled = false;
+    getCurrentCoordinates().then(coords => {
+      if (!cancelled && coords) setBiasCoords(coords);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Debounced Google Places autocomplete. Only fires when the user actively
   // typed into the location field (not on pre-fill, locate, or suggestion tap).
   useEffect(() => {
@@ -109,11 +130,11 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       return;
     }
     const handle = setTimeout(async () => {
-      const results = await getPlacesAutocomplete(location, lastLocation.coordinates);
+      const results = await getPlacesAutocomplete(location, biasCoords ?? lastLocation.coordinates);
       setPlaceSuggestions(results);
     }, 300);
     return () => clearTimeout(handle);
-  }, [location, shouldAutocompleteLocation, lastLocation.coordinates]);
+  }, [location, shouldAutocompleteLocation, biasCoords, lastLocation.coordinates]);
 
   const handleLocationChange = (text: string) => {
     setLocation(text);
@@ -153,6 +174,14 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       "We got your location, but we're offline so we couldn't look up the place name. Type the name of this spot and your coordinates will stay attached.",
       [{ text: 'OK', onPress: () => locationInputRef.current?.focus() }]
     );
+  };
+
+  const handleRecentSelect = (recent: RecentLocation) => {
+    setShouldAutocompleteLocation(false);
+    setPlaceSuggestions([]);
+    setLocation(recent.label);
+    setLocationCoords(recent.coordinates);
+    Keyboard.dismiss();
   };
 
   const handlePlaceSuggestionSelect = async (suggestion: PlaceSuggestion) => {
@@ -317,11 +346,17 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>BIRD</Text>
               <View style={styles.birdRow}>
-                <TextInput
+                <ClearableInput
                   ref={textInputRef}
-                  style={[styles.input, { flex: 1 }, selectedBird ? styles.inputDisplay : null]}
+                  containerStyle={{ flex: 1 }}
+                  style={[styles.input, selectedBird ? styles.inputDisplay : null]}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
+                  onClear={() => {
+                    setSelectedBird('');
+                    setSearchQuery('');
+                    setSuggestions([]);
+                  }}
                   placeholder="What'd you see?"
                   placeholderTextColor={palette.muted}
                   onBlur={() => setSuggestions([])}
@@ -401,14 +436,23 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>LOCATION</Text>
               <View style={styles.locationRow}>
-                <TextInput
+                <ClearableInput
                   ref={locationInputRef}
-                  style={[styles.input, { flex: 1 }]}
+                  containerStyle={{ flex: 1 }}
+                  style={styles.input}
                   value={location}
                   onChangeText={handleLocationChange}
+                  onClear={() => {
+                    handleLocationChange('');
+                    locationInputRef.current?.focus();
+                  }}
                   placeholder="Where did you see it?"
                   placeholderTextColor={palette.muted}
-                  onBlur={() => setPlaceSuggestions([])}
+                  onFocus={() => setLocationFocused(true)}
+                  onBlur={() => {
+                    setLocationFocused(false);
+                    setPlaceSuggestions([]);
+                  }}
                 />
                 <Pressable
                   style={({ pressed }) => [
@@ -425,7 +469,32 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                   />
                 </Pressable>
               </View>
-              {placeSuggestions.length > 0 && (
+              {locationFocused && location.trim() === '' && recentLocations.length > 0 ? (
+                <View style={styles.suggestionsContainer}>
+                  <Text style={styles.recentsHeader}>RECENT</Text>
+                  <ScrollView
+                    style={styles.suggestionsScrollView}
+                    keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled={true}
+                  >
+                    {recentLocations.map((r, i) => (
+                      <Pressable
+                        key={r.label}
+                        style={({ pressed }) => [
+                          styles.suggestionButton,
+                          styles.recentRow,
+                          i === recentLocations.length - 1 && styles.suggestionButtonLast,
+                          pressed && { backgroundColor: palette.leafSoft },
+                        ]}
+                        onPress={() => handleRecentSelect(r)}
+                      >
+                        <Ionicons name="time-outline" size={16} color={palette.inkSoft} />
+                        <Text style={styles.suggestionButtonText}>{r.label}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : placeSuggestions.length > 0 ? (
                 <View style={styles.suggestionsContainer}>
                   <ScrollView
                     style={styles.suggestionsScrollView}
@@ -450,7 +519,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                     ))}
                   </ScrollView>
                 </View>
-              )}
+              ) : null}
             </View>
 
             {/* Photo */}
@@ -487,7 +556,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
             {/* Notes */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>NOTES</Text>
-              <TextInput
+              <ClearableInput
                 ref={notesInputRef}
                 style={[styles.input, styles.notesInput]}
                 value={notes}
@@ -691,6 +760,17 @@ const styles = StyleSheet.create({
     ...type.bodyS,
     color: palette.inkSoft,
     marginTop: 2,
+  },
+  recentsHeader: {
+    ...recipes.fieldLabel,
+    marginBottom: 0,
+    paddingTop: space.sm,
+    paddingHorizontal: space.lg,
+  },
+  recentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
   },
 
   dateButton: {

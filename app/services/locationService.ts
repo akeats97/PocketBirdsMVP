@@ -105,10 +105,51 @@ export async function getCurrentLocationWithLabel(
   }
 }
 
+// Coords-only, silent variant for biasing Places autocomplete. NEVER prompts:
+// returns null unless location permission is already granted. Prefers the
+// OS-cached last-known position (instant, works offline) over a fresh fix.
+// No reverse-geocode.
+export async function getCurrentCoordinates(
+  opts: { timeoutMs?: number } = {}
+): Promise<Coordinates | null> {
+  const timeoutMs = opts.timeoutMs ?? 4000;
+
+  try {
+    if (!(await hasLocationPermission())) return null;
+
+    let position: Location.LocationObject | null = null;
+    try {
+      position = await Location.getLastKnownPositionAsync();
+    } catch (err) {
+      console.log('[locationService] getLastKnownPositionAsync failed:', err);
+    }
+
+    if (!position) {
+      position = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs)),
+      ]);
+    }
+
+    if (!position) return null;
+
+    return {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy ?? undefined,
+      capturedAt: new Date(),
+    };
+  } catch (err) {
+    console.log('[locationService] getCurrentCoordinates failed:', err);
+    return null;
+  }
+}
+
 const locationService = {
   hasLocationPermission,
   requestLocationPermission,
   getCurrentLocationWithLabel,
+  getCurrentCoordinates,
 };
 
 export default locationService;

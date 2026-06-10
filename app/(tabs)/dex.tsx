@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import ClearableInput from '../../components/ClearableInput';
 import { HardShadow } from '../../components/SightingCard';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
@@ -316,7 +317,8 @@ export default function DexScreen() {
           </HardShadow>
         </View>
 
-        <TextInput
+        <ClearableInput
+          containerStyle={styles.searchBarWrap}
           style={styles.searchBar}
           placeholder="Search birds..."
           placeholderTextColor={palette.muted}
@@ -496,9 +498,11 @@ const styles = StyleSheet.create({
   },
 
   // Search
-  searchBar: {
+  searchBarWrap: {
     marginHorizontal: space.xl,
     marginBottom: space.md,
+  },
+  searchBar: {
     backgroundColor: palette.card,
     borderRadius: radius.input,
     paddingVertical: space.sm + 2,
