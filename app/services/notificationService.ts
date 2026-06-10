@@ -13,17 +13,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export interface NotificationData {
-  title: string;
-  body: string;
-  data?: any;
-  sound?: boolean;
-  priority?: 'default' | 'normal' | 'high';
-}
-
 class NotificationService {
-  private expoPushToken: string | null = null;
-
   // Request permissions and get push token
   async registerForPushNotificationsAsync(): Promise<string | null> {
     let token;
@@ -58,123 +48,7 @@ class NotificationService {
       console.log('Must use physical device for Push Notifications');
     }
 
-    this.expoPushToken = token || null;
     return token || null;
-  }
-
-  // Send local notification
-  async sendLocalNotification(notification: NotificationData): Promise<string> {
-    const notificationId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: notification.title,
-        body: notification.body,
-        data: notification.data || {},
-        sound: notification.sound !== false,
-        priority: notification.priority || 'default',
-      },
-      trigger: null, // Send immediately
-    });
-    
-    return notificationId;
-  }
-
-  // Schedule notification for later
-  async scheduleNotification(
-    notification: NotificationData, 
-    trigger: Notifications.NotificationTriggerInput
-  ): Promise<string> {
-    const notificationId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: notification.title,
-        body: notification.body,
-        data: notification.data || {},
-        sound: notification.sound !== false,
-        priority: notification.priority || 'default',
-      },
-      trigger,
-    });
-    
-    return notificationId;
-  }
-
-  // Cancel a specific notification
-  async cancelNotification(notificationId: string): Promise<void> {
-    await Notifications.cancelScheduledNotificationAsync(notificationId);
-  }
-
-  // Cancel all notifications
-  async cancelAllNotifications(): Promise<void> {
-    await Notifications.cancelAllScheduledNotificationsAsync();
-  }
-
-  // Get all scheduled notifications
-  async getScheduledNotifications(): Promise<Notifications.NotificationRequest[]> {
-    return await Notifications.getAllScheduledNotificationsAsync();
-  }
-
-  // Send friend sighting notification
-  async sendFriendSightingNotification(friendName: string, birdName: string, location: string): Promise<string> {
-    return this.sendLocalNotification({
-      title: `🐦 ${friendName} spotted a bird!`,
-      body: `${birdName} at ${location}`,
-      data: {
-        type: 'friend_sighting',
-        friendName,
-        birdName,
-        location,
-      },
-      priority: 'high',
-    });
-  }
-
-  // Send new species notification
-  async sendNewSpeciesNotification(birdName: string): Promise<string> {
-    return this.sendLocalNotification({
-      title: '🎉 New Species Discovered!',
-      body: `You just logged your first ${birdName}!`,
-      data: {
-        type: 'new_species',
-        birdName,
-      },
-      priority: 'high',
-    });
-  }
-
-  // Send daily reminder
-  async scheduleDailyReminder(): Promise<string> {
-    return this.scheduleNotification(
-      {
-        title: '🦅 Time for Bird Watching!',
-        body: 'Grab your binoculars and head outside to spot some birds!',
-        data: {
-          type: 'daily_reminder',
-        },
-      },
-      {
-        hour: 8, // 8 AM
-        minute: 0,
-        repeats: true,
-      }
-    );
-  }
-
-  // Send rare bird alert
-  async sendRareBirdAlert(birdName: string, location: string): Promise<string> {
-    return this.sendLocalNotification({
-      title: '🔍 Rare Bird Alert!',
-      body: `${birdName} has been spotted at ${location}`,
-      data: {
-        type: 'rare_bird',
-        birdName,
-        location,
-      },
-      priority: 'high',
-    });
-  }
-
-  // Get push token
-  getPushToken(): string | null {
-    return this.expoPushToken;
   }
 }
 
