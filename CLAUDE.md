@@ -30,15 +30,11 @@ Features Alex wants to ship next. Not yet scoped or scheduled — capture ideas 
 
 ## Profiles, Venn Compare & Global-First (shipped Jun 6 2026)
 
-- **Profile pages.** `app/profile/[uid].tsx` (friend / public / self — self variant when `uid === auth.currentUser.uid`) and `app/profile/[uid]/compare.tsx` (the Venn screen). Pushed screens, no tab bar (registered in `app/_layout.tsx` with `headerShown:false`). Reached from the Friends search results and from the username pill on feed cards. The profile Field Journal reuses the full `FriendSightingCard` (taps through to `/sighting/[id]`); the Bird Dex tab uses `buildUserDex`.
-- **Data.** `sightingService.getSightingsByUid(uid)` + `userService.getPublicProfile(uid)` (joinDate from `users.createdAt`, falls back to earliest sighting). `firestore.rules` already allow any signed-in user to read `sightings` + `users`, so no rules change was needed. Compare math is `app/utils/compareLists.ts` (Jaccard overlap; same report/mystery/custom exclusions as the journal).
-- **Friends tab rewrite.** The old friend-filter dropdown is GONE. Search is now a **full-page birder list** (`searchUsers`, includes public strangers) that pushes profiles; the feed no longer filters by friend (always shows everyone). The "Add" button was removed — the Add-friends modal still exists but is only reachable from the empty-state "Find Friends" button (following now happens via search → profile → Follow). Usernames are the sole identity (no separate handle field), so search rows show `@lowercased(username)`.
-- **Global-first.** A sighting of a species **no one on PocketBirds had logged before** gets `sighting.globalFirst = true`. Detection: `sightingService.isGlobalFirstSpecies(birdName)` queries the whole `sightings` collection for an exact `birdName` match (`limit 1`). Runs at Add-time (`add.tsx`) for new, non-custom, non-mystery, non-report species; **needs connectivity**, matches **exact name**, and is **racy** (two simultaneous loggers can both flag). The flag is set on the still-pending local doc via `SightingsContext.markGlobalFirst` and rides normal sync.
-  - **"First" = when the log was INPUT into the app (`createdAt`), NOT the observation `date`.**
-  - **Visual:** a small **gold trophy** beside the species name on the still-green ("seen") Dex tile (`dex.tsx`) and profile Dex chips. We deliberately did NOT recolor the whole tile — a red/coral fill read as "missing" (opposite of seen) and a gold fill hid the gold camera icon. Celebration is `GlobalFirstCelebration.tsx` (gold takeover, "First birder on Pocket Birds to log this species!").
-  - **Backfill:** `functions/backfillGlobalFirst.js` seeded existing data (run once Jun 6 2026). Idempotent/re-runnable: `GOOGLE_APPLICATION_CREDENTIALS=~/Downloads/pocketbirds-firebase-adminsdk-fbsvc-19e23de9d2.json node backfillGlobalFirst.js [--commit]`. Flags the earliest-`createdAt` sighting per species across all users. Winners as of the backfill: alex 97, victoria 70, Ray 3, ooplena 1, penguin 1.
-  - **Open follow-ups (WORK_QUEUE):** Q-3 = a distinct "first on Pocket Birds" PILL on the sighting card (design pending; TODO comments sit next to the "1ST" lifer badge in both card components). Q-4 = "verified sightings" (photo + ≥1 other user confirms the ID); consider gating global-first on verified once that exists.
-- **Milestones.** `constants/milestones.ts` now fires at **1, 5, 10, 25, then every 50**. Reports / Mystery Bird / Kelsey are excluded from both milestone and global-first.
+- **Profile pages.** `app/profile/[uid].tsx` (friend / public / self) and `app/profile/[uid]/compare.tsx` (the Venn screen; math in `app/utils/compareLists.ts`, Jaccard overlap, same report/mystery/custom exclusions as the journal). Reached from Friends search results and the username pill on feed cards.
+- **Friends tab.** Search is a full-page birder list (`searchUsers`, includes public strangers) that pushes profiles; the feed always shows everyone (the old friend-filter dropdown and Add button are gone, following happens via search → profile → Follow). Usernames are the sole identity.
+- **Global-first.** The first sighting of a species app-wide gets `sighting.globalFirst = true`. **"First" = when the log was INPUT (`createdAt`), NOT the observation `date`.** Detection runs at Add-time (`sightingService.isGlobalFirstSpecies`, exact-name `limit 1` query); needs connectivity and is racy. Visual: a small gold trophy on the seen Dex tile and profile Dex chips. We deliberately did NOT recolor the whole tile (red read as "missing", gold hid the camera icon). Celebration: `GlobalFirstCelebration.tsx`. Backfill: `functions/backfillGlobalFirst.js`, idempotent, run once Jun 6 2026.
+- **Milestones.** `constants/milestones.ts` fires at **1, 5, 10, 25, then every 50**. Reports / Mystery Bird / Kelsey are excluded from both milestone and global-first.
+- Open follow-ups tracked in WORK_QUEUE.md: Q-3 (global-first pill on sighting cards) and Q-4 (verified sightings; consider gating global-first on verified once it exists).
 
 ---
 
@@ -208,65 +204,28 @@ The pod-install artifacts (`ios/PocketBirds4.xcodeproj/project.pbxproj`, `.xcwor
 
 ## Avatar "?" race (fixed Jun 8 2026)
 
-Header + profile avatars could render "?" for accounts that **have** a valid username. Root cause: the launch-time `savePushToken` `setDoc(..., {merge:true})` can seed a token-only snapshot of the user doc into Firestore's offline cache; a one-shot profile read resolving against it returned an empty `username`, and the avatar stuck on "?" for the session (no retry). It's racy/per-device — looked broken on a real phone but fine on the sim. Fixed in `AppHeader.tsx` + `profile/[uid].tsx`: refetch when auth resolves a user, retry with backoff to pick up the username once it syncs, and fall back to the **email initial** (avatar letter only — never shown as display text). Note: friends on an older shipped build keep seeing "?" until a new build ships.
+Avatars could stick on "?" for accounts with a valid username: the launch-time `savePushToken` `setDoc(..., {merge:true})` can seed a token-only user doc into Firestore's offline cache, so a one-shot profile read resolved an empty `username`. Fixed in `AppHeader.tsx` + `profile/[uid].tsx` (refetch when auth resolves, retry with backoff, email-initial fallback for the avatar letter only). Friends on older shipped builds keep seeing "?" until they update.
 
 ---
 
-## iOS / TestFlight Setup — in Apple Beta App Review (May 22 2026)
+## iOS / TestFlight
 
-Goal: ship PocketBirds to friends' iPhones via TestFlight. Bundle ID `com.akeats97.pocketbirds` (same as Android). App Store Connect app ID `6772308812`. Plan file: `~/.claude/plans/i-want-my-friends-humming-lighthouse.md`.
+Live on TestFlight since May 2026, external "Friends" group. Bundle ID `com.akeats97.pocketbirds` (same as Android), App Store Connect app ID `6772308812`, direct link: <https://appstoreconnect.apple.com/apps/6772308812/testflight/ios>. New builds to the existing group usually skip Beta App Review unless a major capability changes. TestFlight builds expire 90 days after upload, so ship a refresh build at least quarterly.
 
-### Current state (May 22 2026, ~5:00 PM EDT)
+### Architecture / config facts
 
-**Waiting on:** Apple Beta App Review of the first external-tester build. Expected 24–48h. Until approved, external testers (Victoria + any other friends added to the "Friends" External Group) will see "no builds available" in TestFlight. Subsequent builds to the same group usually skip review unless a major capability changes.
+- We use the Firebase JS SDK only (not @react-native-firebase). The committed `ios/PocketBirds4/GoogleService-Info.plist` is for forward compatibility, not active runtime use.
+- Push path is Expo Push Service → FCM → APNs. The APNs auth key uploaded to Firebase (both dev and prod FCM slots) relays FCM → APNs; the second APNs key EAS created is unused for our flow.
+- **iOS builds MUST use the Xcode 26+ EAS image**: `build.production.ios.image` is pinned to `macos-sequoia-15.6-xcode-26.2` in `eas.json`. Apple rejects older-SDK builds (error 90725) and the EAS default image is still too old, so this pin is mandatory.
+- **Credentials (all in Alex's 1Password; restore from there if EAS ever loses them):** APNs Auth Key `6TBT96JT76` (Team `WB8PNB2CCR`); ASC API Key `GFYGV5D864` (Issuer `877b4389-81c0-4cd8-8f5e-7e7a7f506e19`, stored on EAS servers, used automatically on submit); EAS-managed distribution cert + provisioning profile (expire 2027-05-22).
+- Privacy / deletion URLs (live, GitHub Pages on `akeats97/PocketBirdsMVP`): `/PRIVACY` and `/DELETION`.
 
-**Where the build is:** App Store Connect → PocketBirds → TestFlight → External Testing → Friends group. Build 1.0.0 (3) is in review. Direct link: <https://appstoreconnect.apple.com/apps/6772308812/testflight/ios>.
+### Known iOS bugs (found June 3 2026, fix paths in WORK_QUEUE.md)
 
-### Done so far
+- **Bug 6:** Android → iOS push is broken. iOS throws `no valid "aps-environment" entitlement string found for application`; the EAS provisioning profile is not embedding the push entitlement. (iOS → Android works, the sender needs no entitlement.)
+- **Bug 7:** the location feature crashes the app on iOS (likely missing `NSLocationWhenInUseUsageDescription`).
 
-**Apple Developer + Firebase:**
-- Apple Developer Program enrolled and approved May 22 2026.
-- App ID `com.akeats97.pocketbirds` registered with Push Notifications capability.
-- App Store Connect app PocketBirds (SKU `pocketbirds-ios`, ID `6772308812`).
-- Free Apps Agreement accepted in Agreements, Tax, and Banking.
-- Firebase iOS app added at <https://console.firebase.google.com/project/pocketbirds>, bundle `com.akeats97.pocketbirds`. `GoogleService-Info.plist` committed to `ios/PocketBirds4/`.
-
-**Credentials (all stored in Alex's 1Password, originals still in `~/Downloads/` for next session convenience — delete after final keystore migration):**
-- **APNs Auth Key** (Firebase → APNs relay): Key ID `6TBT96JT76`, Team ID `WB8PNB2CCR`. .p8 uploaded to BOTH the development and production slots in Firebase Cloud Messaging.
-- **App Store Connect API Key** (for `eas submit -p ios`): Key ID `GFYGV5D864`, Issuer ID `877b4389-81c0-4cd8-8f5e-7e7a7f506e19`, role App Manager. EAS has stored these and will reuse on future submits.
-- **EAS-managed**: Apple Distribution Certificate (serial `192C24093D549D4CDA4BCF6FCDF0F32F`, expires 2027-05-22), Provisioning Profile (`V4H2K892QC`, expires 2027-05-22). EAS also created a second APNs key (uses team's second slot) — independent from Firebase one and unused for our flow.
-
-**App config landed (committed):**
-- `app.json` ios block: bundleIdentifier, googleServicesFile path, infoPlist.UIBackgroundModes=`["remote-notification"]`, NSPhotoLibraryUsageDescription.
-- `eas.json`: `submit.production.ios` configured; **`build.production.ios.image` pinned to `macos-sequoia-15.6-xcode-26.2`** — Apple now requires apps to be built with Xcode 26 / iOS 26 SDK (rejection code 90725). Default EAS image is still Xcode 16.4, so this pin is mandatory for any future iOS build.
-- `ios/PocketBirds4/GoogleService-Info.plist` committed. Not wired into the Xcode project (no PBXFileReference); push works without it since Expo → FCM → APNs doesn't need native Firebase iOS SDK.
-- App icon + splash redone in cream `#fdf6e5` with bold black "PB" wordmark.
-
-**Privacy / Deletion URLs (live, GitHub Pages on `akeats97/PocketBirdsMVP`):**
-- <https://akeats97.github.io/PocketBirdsMVP/PRIVACY>
-- <https://akeats97.github.io/PocketBirdsMVP/DELETION>
-
-**Build + submit history (May 22 2026):**
-- Build 2 (Xcode 16.4): rejected at submission with error 90725 (SDK too old). EAS image pin added.
-- Build 3 (Xcode 26.2): built clean, submitted to App Store Connect via `eas submit`, accepted by Apple, finished processing, added to "Friends" External Group, submitted for Beta App Review.
-
-### Next steps (in order)
-
-1. **Wait for Beta App Review email from Apple.** 24–48h typical for first review.
-2. **When approved:** Victoria + any other invited friends get a TestFlight invite email. They install TestFlight from the App Store, accept invite, install PocketBirds.
-3. **Verify push notifications work end-to-end on iOS.** ⚠️ TESTED June 3 2026 (Sheartail build) — **BROKEN.** iOS throws `no valid "aps-environment" entitlement string found for application`; Android → iOS push does not deliver (iOS → Android does, because the sender needs no push entitlement). The EAS provisioning profile is NOT embedding the push entitlement. See WORK_QUEUE.md **Bug 6** for the fix path. Also found June 3: the **location feature crashes the app on iOS** (likely missing `NSLocationWhenInUseUsageDescription`), see WORK_QUEUE.md **Bug 7**. Original test flow: log in on iOS device → check `users/{uid}.expoPushToken` is populated in Firestore → have an Android user (Victoria's existing account) log a sighting → push should land on the iOS device within ~10s. Use the layer-by-layer pipeline in the "Push Notifications — Working Setup" section of this file if it doesn't.
-4. **Add more friends to the Friends External Group** as needed. They'll get builds immediately (no re-review).
-5. **Re-build + re-submit** whenever shipping new features. Build cadence ~quarterly minimum since TestFlight builds expire 90 days after upload.
-
-### Architecture refresher (so future-Claude doesn't re-derive)
-
-- We use Firebase JS SDK only (not @react-native-firebase). The iOS plist is committed for forward compatibility, not active runtime use.
-- Push notifications path is Expo Push Service → FCM → APNs. The APNs auth key in Firebase is what relays FCM → APNs. EAS's own APNs key is unused for our flow.
-- iOS builds MUST use the Xcode 26+ EAS image (pinned in eas.json). Apple rejects Xcode 16 builds since May 2026.
-- Builds expire 90 days after upload in TestFlight. Plan on a refresh build at least quarterly to keep external testers running.
-- Two .p8 secrets in 1Password: APNs (`AuthKey_6TBT96JT76.p8`) and ASC API (`AuthKey_GFYGV5D864.p8`). Restore from 1Password if EAS ever loses credentials.
-
-### Editing native iOS config — gotchas (learned Jun 3 2026)
+### Editing native iOS config (gotchas learned Jun 3 2026)
 
 - **NEVER validate a plist with `plutil -extract <key> <fmt> <file>`.** Without `-o -`, `-extract` REWRITES the file in place with just the extracted value, silently destroying it. On Jun 3 2026 this collapsed `ios/PocketBirds4/Info.plist` to a single `["remote-notification"]` line, which got committed and broke the iOS build (`Failed to parse Info.plist`). For read-only checks use ONLY `plutil -lint <file>` or `plutil -p <file>`. To extract to stdout, you must pass `-o -`.
 - **Adding an iOS entitlement requires regenerating the provisioning profile.** When `aps-environment` was added to `PocketBirds4.entitlements`, the first build failed at codesign: the existing profile `V4H2K892QC` (generated May 22) didn't grant Push Notifications. A profile is a frozen snapshot; Xcode requires every declared entitlement to be granted by the profile. Fix: run an **interactive** `eas build -p ios --profile production` (or `eas credentials -p ios`) so EAS authenticates to Apple (Apple ID + 2FA), enables the capability on the App ID, and re-issues the profile. Non-interactive builds skip Apple auth and can't do this. One-time per new capability; EAS reuses the fixed profile afterward.
@@ -275,17 +234,9 @@ Goal: ship PocketBirds to friends' iPhones via TestFlight. Bundle ID `com.akeats
 
 ---
 
-## Play Store Keystore — Recovery in progress (resolves May 23 2026)
+## Play Store Keystore
 
-Path A (upload key reset via Play Console) was submitted and approved May 21 2026. The new upload key (the EAS keystore "Build Credentials Mwm5hIy734", SHA-1 `9F:80:48:66:0E:82:8F:1B:85:6D:1D:9B:3A:C5:0F:55:2A:CA:6C:85`) becomes valid in Play Console on **May 23 2026 at 10:47 AM UTC (~6:47 AM EDT)**.
-
-**After that timestamp:** uploads work normally. The AAB from build `bcl6tdi7c` is already signed with the right keystore — just upload it to Play Console internal testing. No rebuild needed.
-
-**Original keystore status:** the original upload key (SHA-1 `F4:D0:DD:2D:6D:C6:CE:5C:CB:FE:B2:C4:FD:EA:0D:63:7D:90:61:8F`) is permanently lost. Was confirmed missing from EAS, local disk, iCloud, Time Machine, and Desktop Junk in the May 21 session. After the reset takes effect, Play Store no longer expects it.
-
-**Keystore backup:** Alex saved the .jks file + all three passwords (keystore password, key alias, key password) to his 1Password as of May 21. If EAS ever loses credentials again, restore from 1Password before letting EAS auto-generate yet another keystore — that avoids the whole reset cycle.
-
-The leftover `release-names.csv` dates for Thorntail (Apr 16) and Sheartail (Apr 19) were committed during the May 20 session.
+The original upload key was permanently lost; a Play Console upload-key reset took effect May 23 2026. The current upload key is the EAS keystore (SHA-1 `9F:80:48:66:0E:82:8F:1B:85:6D:1D:9B:3A:C5:0F:55:2A:CA:6C:85`). **The .jks file plus all three passwords are backed up in Alex's 1Password.** If EAS ever loses credentials, restore from 1Password instead of letting EAS auto-generate a new keystore (avoids another reset cycle).
 
 ---
 
@@ -320,56 +271,9 @@ Symptom when broken: Expo push API returns `InvalidCredentials` with wording "Un
 
 **Architecture note:** We send via Expo's push service (not direct FCM/`admin.messaging()`). Considered migrating to direct FCM but kept Expo because iOS is planned — Expo's unified abstraction saves us from setting up APNs separately.
 
-### Debugging methodology
+### Debugging
 
-Push delivery is a 4-layer pipeline. Isolate the broken layer by testing each one in order — don't guess, probe.
-
-```
-[1] App registers token → [2] Cloud Function fires → [3] Expo push API → [4] FCM → device
-```
-
-**Layer 1 — Token registration:** Check Firestore `users/{uid}` for a non-null `expoPushToken` and recent `lastTokenUpdate`. If missing: native FCM isn't initializing on device (check google-services.json placement + Gradle plugin) or permissions were denied.
-
-**Layer 2 — Cloud Function:** `firebase functions:log --only onSightingAdded -n 50`. Look for "Found push token for follower" lines. If function isn't firing or not finding tokens, problem is in `functions/index.js` or the follows query.
-
-**Layer 3 — Expo push API:** Skip the function entirely and send a push manually via curl. This is the critical diagnostic trick — it isolates the Expo↔FCM layer from your own code.
-```bash
-curl -s -H "Content-Type: application/json" -X POST https://exp.host/--/api/v2/push/send \
-  -d '{"to":"ExponentPushToken[...]","title":"test","body":"hi","channelId":"default"}'
-```
-Expected: `{"data":{"status":"ok","id":"<ticket>"}}`. If `status: error` with `InvalidCredentials`, the problem is your FCM V1 credential setup at Expo (IAM role or upload path — see above).
-
-**Layer 4 — FCM delivery:** Push tickets (from send) only confirm Expo accepted the payload. Push **receipts** confirm FCM actually delivered it. Wait 5+ seconds after send, then:
-```bash
-curl -s -H "Content-Type: application/json" -X POST https://exp.host/--/api/v2/push/getReceipts \
-  -d '{"ids":["<ticket-id-from-send>"]}'
-```
-Expected: `{"data":{"<ticket>":{"status":"ok"}}}`. If receipt has an error (e.g. `DeviceNotRegistered`), the user's token is stale — they need to reopen the app to re-register.
-
-### Other commands
-
-Query Firestore with admin:
-```bash
-cd /Users/alexkeats/Desktop/PocketBirds4/functions
-GOOGLE_APPLICATION_CREDENTIALS=~/Downloads/pocketbirds-firebase-adminsdk-fbsvc-19e23de9d2.json node -e "..."
-```
-Test that the service account key itself works against FCM V1 directly (rules out IAM issues independent of Expo):
-```bash
-cd /Users/alexkeats/Desktop/PocketBirds4/functions
-GOOGLE_APPLICATION_CREDENTIALS=~/Downloads/pocketbirds-firebase-adminsdk-fbsvc-19e23de9d2.json node -e "
-const {GoogleAuth} = require('google-auth-library');
-(async () => {
-  const auth = new GoogleAuth({scopes: ['https://www.googleapis.com/auth/firebase.messaging']});
-  const token = await (await auth.getClient()).getAccessToken();
-  const res = await fetch('https://fcm.googleapis.com/v1/projects/pocketbirds/messages:send', {
-    method: 'POST', headers: {'Authorization': 'Bearer ' + token.token, 'Content-Type': 'application/json'},
-    body: JSON.stringify({validate_only: true, message: {token: 'bogus', notification: {title: 't', body: 'b'}}})
-  });
-  console.log(res.status, await res.text());
-})();
-"
-```
-Expected: `400 ... INVALID_ARGUMENT` (the bogus token is rejected, but auth succeeded). If you see `403 PERMISSION_DENIED`, the service account lacks the Firebase Messaging API Admin role.
+Push delivery is a 4-layer pipeline (app registers token → Cloud Function → Expo push API → FCM → device). The layer-by-layer diagnostic playbook, including the manual curl send, push receipts, admin Firestore queries, and the direct FCM V1 auth test, lives in **`docs/push-debugging.md`**. Read it before guessing at a push failure.
 
 ---
 
