@@ -12,13 +12,11 @@ export interface UserProfile {
 // Search for users by username
 export async function searchUsers(usernameQuery: string, maxResults = 10): Promise<UserProfile[]> {
   if (!usernameQuery || usernameQuery.length < 2) {
-    console.log('Search query too short:', usernameQuery);
     return [];
   }
 
   try {
     const queryLower = usernameQuery.toLowerCase();
-    console.log('Searching for usernames starting with (case-insensitive):', queryLower);
 
     // Firestore document IDs are case-sensitive, so a range query on __name__ misses
     // any username whose case differs from the query. Fetch the collection and filter
@@ -29,8 +27,6 @@ export async function searchUsers(usernameQuery: string, maxResults = 10): Promi
     const matches = usernameSnapshot.docs
       .filter(d => d.id.toLowerCase().startsWith(queryLower))
       .slice(0, maxResults);
-
-    console.log(`Found ${matches.length} username matches for: "${usernameQuery}"`);
 
     if (matches.length === 0) {
       return [];
@@ -87,7 +83,6 @@ export async function followUser(targetUserId: string): Promise<void> {
       console.warn('Follow succeeded but failed to set default notification pref:', prefError);
     }
 
-    console.log(`Now following user: ${targetUserId}`);
   } catch (error) {
     console.error('Error following user:', error);
     throw error;
@@ -107,7 +102,6 @@ export async function unfollowUser(targetUserId: string): Promise<void> {
     const followingRef = doc(db, `following/${currentUser.uid}/following/${targetUserId}`);
     await deleteDoc(followingRef);
     
-    console.log(`Unfollowed user: ${targetUserId}`);
   } catch (error) {
     console.error('Error unfollowing user:', error);
     throw error;
@@ -375,7 +369,6 @@ export async function savePushToken(pushToken: string): Promise<void> {
       expoPushToken: pushToken,
       lastTokenUpdate: new Date(),
     }, { merge: true }); // merge: true means update existing document or create if doesn't exist
-    console.log('Push token saved to database');
   } catch (error) {
     console.error('Error saving push token:', error);
     throw error;

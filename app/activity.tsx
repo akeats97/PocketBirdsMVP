@@ -7,19 +7,7 @@ import { Avatar } from '../components/social/Avatar';
 import { font, palette, radius, space, type } from '../constants/Colors';
 import { useActivity } from './context/ActivityContext';
 import { ActivityItem } from './services/activityService';
-
-function timeAgo(date: Date | null): string {
-  if (!date) return 'now';
-  const secs = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (secs < 60) return 'now';
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+import { timeAgo } from './utils/timeAgo';
 
 // Icon + tint per activity type, shown as a small badge on the avatar.
 function typeBadge(t: ActivityItem['type']): { name: keyof typeof Ionicons.glyphMap; color: string } {

@@ -25,7 +25,7 @@ export default function LoginScreen() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-      console.log('Login error:', error);
+      console.error('Login error:', error);
       Alert.alert('nice try guy, go again');
     } finally {
       setIsLoading(false);
@@ -100,7 +100,7 @@ export default function LoginScreen() {
         );
       }
     } catch (error: any) {
-      console.log('Signup error:', error);
+      console.error('Signup error:', error);
       let errorMessage = 'Failed to create account';
       if (error.code === 'auth/email-already-in-use') {
         errorMessage = 'hmmm, do you have a twin with the same email? because that email already exists';
@@ -129,7 +129,7 @@ export default function LoginScreen() {
         'Check your email for instructions to reset your password'
       );
     } catch (error: any) {
-      console.log('Password reset error:', error);
+      console.error('Password reset error:', error);
       let errorMessage = 'Failed to send password reset email';
       if (error.code === 'auth/user-not-found') {
         errorMessage = 'No account found with this email address';

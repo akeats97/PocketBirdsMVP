@@ -267,16 +267,12 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user: User | null) => {
       if (user) {
-        console.log('User logged in, waiting for local data to load...');
         // Wait for AsyncStorage loading to complete before loading Firebase data
         if (!isLoading) {
-          console.log('Local data loaded, now loading Firebase data...');
           await loadFirebaseData();
         }
-      } else {
-        console.log('User logged out');
-        // Data is already cleared by clearLocalData in logout handler
       }
+      // On logout, data is already cleared by clearLocalData in the logout handler.
     });
 
     return () => unsubscribe();
@@ -286,7 +282,6 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     try {
       // First, process any pending deletions before fetching fresh data
       if (pendingDeletions.length > 0) {
-        console.log('Processing pending deletions before loading Firebase data...');
         await processPendingDeletions();
       }
 
@@ -299,9 +294,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      console.log('Fetching sightings from Firebase...');
       const firebaseSightings = await getUserSightingsFromFirebase();
-      console.log(`Loaded ${firebaseSightings.length} sightings from Firebase`);
       allowNextEmptyPersistRef.current = true;
       setSightings(prev => mergeFirebaseSightings(prev, firebaseSightings));
     } catch (error) {
@@ -315,14 +308,11 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   const processPendingDeletions = async () => {
     if (pendingDeletions.length === 0) return;
     
-    console.log(`Processing ${pendingDeletions.length} pending deletions:`, pendingDeletions);
     const successfulDeletions: string[] = [];
-    
+
     for (const sightingId of pendingDeletions) {
       try {
-        console.log(`Attempting to delete sighting ${sightingId} from Firebase...`);
         await deleteSightingFromFirebase(sightingId);
-        console.log(`Successfully deleted sighting ${sightingId} from Firebase`);
         successfulDeletions.push(sightingId);
       } catch (error: any) {
         if (error.message?.includes('Not authorized')) {
@@ -336,15 +326,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     
     // Remove successfully deleted items from pending deletions
     if (successfulDeletions.length > 0) {
-      console.log(`Removing ${successfulDeletions.length} successfully deleted sightings from pending queue:`, successfulDeletions);
       setPendingDeletions(prev => prev.filter(id => !successfulDeletions.includes(id)));
-    }
-    
-    const remainingDeletions = pendingDeletions.filter(id => !successfulDeletions.includes(id));
-    if (remainingDeletions.length > 0) {
-      console.log(`${remainingDeletions.length} deletions remain pending:`, remainingDeletions);
-    } else {
-      console.log('All pending deletions processed successfully');
     }
   };
 

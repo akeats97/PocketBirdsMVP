@@ -35,8 +35,6 @@ import LoginScreen from '../components/LoginScreen';
 import { notificationService } from './services/notificationService';
 import { savePushToken } from './services/userService';
 
-console.log('ROOT LAYOUT: Firebase imported'); //just for bug testing
-
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary
@@ -71,7 +69,6 @@ function AuthenticatedApp() {
         const token = await notificationService.registerForPushNotificationsAsync();
         if (token) {
           await savePushToken(token);
-          console.log('Push token saved:', token);
         } else {
           console.warn('Push token registration returned null — check permissions.');
         }
@@ -79,7 +76,6 @@ function AuthenticatedApp() {
         // Set up notification response handler (fires when app is warm)
         const subscription = Notifications.addNotificationResponseReceivedListener(response => {
           const data = response.notification.request.content.data;
-          console.log('Notification tapped:', data);
 
           if (data.type === 'friend_sighting') {
             router.push('/(tabs)/friends');
@@ -101,7 +97,6 @@ function AuthenticatedApp() {
         const lastResponse = await Notifications.getLastNotificationResponseAsync();
         if (lastResponse) {
           const data = lastResponse.notification.request.content.data;
-          console.log('Notification tapped (cold start):', data);
           if (data.type === 'friend_sighting') {
             router.push('/(tabs)/friends');
           } else if (
@@ -190,13 +185,9 @@ export default function RootLayout() {
 
   // Listen for auth state changes at the top level
   useEffect(() => {
-    console.log('Setting up auth listener...');
     const unsubscribe = auth.onAuthStateChanged((authUser) => {
-      console.log('Auth state changed. User:', authUser ? authUser.uid : 'null');
-      console.log('Previous user state:', user ? user.uid : 'null');
       setUser(authUser);
       setIsAuthLoading(false);
-      console.log('Auth loading set to false');
     });
 
     return () => unsubscribe();
@@ -213,24 +204,10 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
-  // Add a useEffect to ensure Firebase is initialized
-  useEffect(() => {
-    console.log('Firebase Auth initialized');
-  }, []);
-
   // Wait for BOTH fonts to load AND auth state to be confirmed
   if (!loaded || isAuthLoading) {
-    console.log('App loading - fonts:', loaded, 'auth:', isAuthLoading);
     return null;
   }
-
-  // Additional safety check - if we're still loading auth, don't render anything
-  if (isAuthLoading) {
-    console.log('Still loading auth state...');
-    return null;
-  }
-
-  console.log('App rendering - user:', user ? 'logged in' : 'not logged in');
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

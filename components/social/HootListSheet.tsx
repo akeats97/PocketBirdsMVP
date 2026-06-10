@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { HootEntry, subscribeToHoots } from '../../app/services/hootService';
+import { timeAgo } from '../../app/utils/timeAgo';
 import { font, palette, space, type } from '../../constants/Colors';
 import { Owl } from '../Owl';
 import { Avatar } from './Avatar';
@@ -10,19 +11,6 @@ interface HootListSheetProps {
   sightingId: string;
   visible: boolean;
   onClose: () => void;
-}
-
-function relativeTime(date: Date | null): string {
-  if (!date) return 'now';
-  const secs = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (secs < 60) return 'now';
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 // Bottom sheet listing everyone who hooted a sighting, live. Opened by tapping
@@ -142,7 +130,7 @@ export function HootListSheet({ sightingId, visible, onClose }: HootListSheetPro
                   <Text style={styles.name} numberOfLines={1}>{h.username}</Text>
                   <Text style={styles.handle} numberOfLines={1}>@{h.username}</Text>
                 </View>
-                <Text style={styles.time}>{relativeTime(h.createdAt?.toDate?.() ?? null)}</Text>
+                <Text style={styles.time}>{timeAgo(h.createdAt?.toDate?.() ?? null, true)}</Text>
               </Pressable>
             ))}
           </ScrollView>
