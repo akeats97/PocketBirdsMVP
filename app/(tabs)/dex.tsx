@@ -506,7 +506,7 @@ export default function DexScreen() {
                 disabled={!goalInputValid}
               >
                 <Text style={[styles.goalSaveText, !goalInputValid && { color: palette.inkSoft }]}>
-                  {goalInputValid ? `Chase ${goalInputNum} species` : 'Set a goal'}
+                  {goalInputValid ? `Find ${goalInputNum} species` : 'Set a goal'}
                 </Text>
               </Pressable>
             </HardShadow>
