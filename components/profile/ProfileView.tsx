@@ -275,7 +275,11 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
               : handleFollowToggle}
           />
           {!isSelf && following && (
-            <NotifBell mode={notifMode} onPress={() => setNotifSheetOpen(true)} />
+            // Raised like its pill neighbor — on this row the bell is a
+            // surface-level control, not an inline list chip.
+            <HardShadow offset={2} borderRadius={17} style={styles.pillShadow}>
+              <NotifBell mode={notifMode} onPress={() => setNotifSheetOpen(true)} />
+            </HardShadow>
           )}
         </View>
       )}
