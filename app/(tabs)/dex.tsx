@@ -2,8 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { BottomSheet } from '../../components/BottomSheet';
 import ClearableInput from '../../components/ClearableInput';
+import { ProgressRing } from '../../components/dex/ProgressRing';
 import { HardShadow } from '../../components/SightingCard';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
@@ -12,6 +14,9 @@ import { isUnknownEntry } from '../../constants/unknownBird';
 import { isCustomSpecies } from '../../constants/customSpecies';
 import { useSightings } from '../context/SightingsContext';
 import { useWishlist } from '../context/WishlistContext';
+import { isActiveGoal, useDexGoal } from '../services/goalService';
+
+const GOAL_PRESETS = [25, 50, 100, 200];
 
 type FilterMode = 'all' | 'seen' | 'wishlist';
 
@@ -108,6 +113,36 @@ export default function DexScreen() {
       photographedSpecies: realSpeciesNames.filter(n => seenMap[n].hasPhoto).length + mysteryPhotos,
     };
   }, [realSightings, seenMap]);
+
+  // Distinct countable species observed this calendar year — what the goal
+  // ring fills with.
+  const speciesThisYear = useMemo(() => {
+    const year = new Date().getFullYear();
+    return new Set(
+      realSightings
+        .filter(s => s.date.getFullYear() === year && !isCustomSpecies(s.birdName) && !isUnknownEntry(s.birdName))
+        .map(s => s.birdName.toLowerCase())
+    ).size;
+  }, [realSightings]);
+
+  const { goal, saveGoal } = useDexGoal();
+  const goalActive = isActiveGoal(goal);
+  const [goalSheetOpen, setGoalSheetOpen] = useState(false);
+  const [goalInput, setGoalInput] = useState('');
+
+  const openGoalSheet = () => {
+    setGoalInput(goalActive ? String(goal.target) : '');
+    setGoalSheetOpen(true);
+  };
+
+  const goalInputNum = parseInt(goalInput, 10);
+  const goalInputValid = Number.isFinite(goalInputNum) && goalInputNum > 0;
+
+  const handleSaveGoal = () => {
+    if (!goalInputValid) return;
+    saveGoal(goalInputNum);
+    setGoalSheetOpen(false);
+  };
 
   const sections = useMemo<Section[]>(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -289,31 +324,43 @@ export default function DexScreen() {
 
         <View style={styles.heroWrap}>
           <HardShadow borderRadius={radius.card}>
-            <View style={styles.hero}>
-              <View style={styles.statsRow}>
-                <View style={styles.statBlock}>
-                  <View style={styles.statCircle}>
-                    <Text style={styles.statCircleNumber}>{stats.uniqueSpecies}</Text>
-                  </View>
-                  <Text style={styles.statLabel}>species</Text>
+            {/* Tap anywhere on the hero to set / edit the annual goal */}
+            <Pressable style={styles.hero} onPress={openGoalSheet}>
+              <View style={styles.heroRow}>
+                {/* Goal ring — this year's species, filling toward the goal */}
+                <View style={styles.ringCol}>
+                  <ProgressRing
+                    progress={goalActive ? speciesThisYear / goal.target : 1}
+                    center={speciesThisYear}
+                  />
+                  <Text style={styles.ringSub}>
+                    {goalActive
+                      ? `of ${goal.target} this year`
+                      : `set a ${new Date().getFullYear()} goal`}
+                  </Text>
                 </View>
-                <View style={styles.statBlock}>
-                  <View style={styles.statCircle}>
-                    <Text style={styles.statCircleNumber}>{stats.totalSightings}</Text>
+
+                {/* All-time stats — species leads, the others support */}
+                <View style={styles.heroStats}>
+                  <View style={styles.heroStatRow}>
+                    <Text style={styles.heroStatLabel}>SPECIES</Text>
+                    <Text style={styles.heroStatBig}>{stats.uniqueSpecies}</Text>
                   </View>
-                  <Text style={styles.statLabel}>sightings</Text>
-                </View>
-                <View style={styles.statBlock}>
-                  <View style={styles.statCircle}>
-                    <Text style={styles.statCircleNumber}>{stats.photographedSpecies}</Text>
+                  <View style={styles.heroStatDivider} />
+                  <View style={styles.heroStatRow}>
+                    <Text style={styles.heroStatLabel}>SIGHTINGS</Text>
+                    <Text style={styles.heroStatSmall}>{stats.totalSightings}</Text>
                   </View>
-                  <View style={styles.statLabelRow}>
-                    <Ionicons name="camera" size={11} color={palette.cream} style={{ marginRight: 3, opacity: 0.7 }} />
-                    <Text style={styles.statLabel}>photographed</Text>
+                  <View style={styles.heroStatRow}>
+                    <View style={styles.heroStatLabelRow}>
+                      <Ionicons name="camera" size={10} color={palette.sun} style={{ marginRight: 4 }} />
+                      <Text style={styles.heroStatLabel}>PHOTOGRAPHED</Text>
+                    </View>
+                    <Text style={styles.heroStatSmall}>{stats.photographedSpecies}</Text>
                   </View>
                 </View>
               </View>
-            </View>
+            </Pressable>
           </HardShadow>
         </View>
 
@@ -417,6 +464,55 @@ export default function DexScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Annual goal sheet — set or edit the species goal the ring fills toward */}
+      <BottomSheet visible={goalSheetOpen} onClose={() => setGoalSheetOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.goalSheet}>
+            <Text style={styles.goalTitle}>Your {new Date().getFullYear()} species goal</Text>
+            <Text style={styles.goalSub}>
+              Pick a number that scares you a little. You can change it anytime, no judgment.
+            </Text>
+
+            <View style={styles.goalPresetsRow}>
+              {GOAL_PRESETS.map((n) => {
+                const active = goalInput === String(n);
+                return (
+                  <Pressable
+                    key={n}
+                    style={[styles.goalPreset, active && styles.goalPresetActive]}
+                    onPress={() => setGoalInput(String(n))}
+                  >
+                    <Text style={[styles.goalPresetText, active && styles.goalPresetTextActive]}>{n}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <TextInput
+              style={styles.goalInput}
+              value={goalInput}
+              onChangeText={(t) => setGoalInput(t.replace(/[^0-9]/g, ''))}
+              keyboardType="number-pad"
+              placeholder="or type your own"
+              placeholderTextColor={palette.muted}
+              maxLength={5}
+            />
+
+            <HardShadow offset={3} borderRadius={radius.input}>
+              <Pressable
+                style={[styles.goalSaveButton, !goalInputValid && styles.goalSaveDisabled]}
+                onPress={handleSaveGoal}
+                disabled={!goalInputValid}
+              >
+                <Text style={[styles.goalSaveText, !goalInputValid && { color: palette.inkSoft }]}>
+                  {goalInputValid ? `Chase ${goalInputNum} species` : 'Set a goal'}
+                </Text>
+              </Pressable>
+            </HardShadow>
+          </View>
+        </KeyboardAvoidingView>
+      </BottomSheet>
     </View>
   );
 }
@@ -461,40 +557,133 @@ const styles = StyleSheet.create({
     padding: space.lg,
     ...border.thick,
   },
-  statsRow: {
+  heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: space.xl,
   },
-  statBlock: {
-    flex: 1,
+  ringCol: {
     alignItems: 'center',
   },
-  statCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: palette.sun,
-    borderWidth: 2,
-    borderColor: palette.cream,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  statCircleNumber: {
-    fontFamily: font.displayBlack,
-    fontSize: 20,
-    color: palette.ink,
-    letterSpacing: -0.5,
-  },
-  statLabel: {
+  ringSub: {
     ...type.bodyS,
     color: palette.cream,
     opacity: 0.7,
+    marginTop: 6,
+    textAlign: 'center',
   },
-  statLabelRow: {
+  heroStats: {
+    flex: 1,
+    minWidth: 0,
+  },
+  heroStatRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
+  },
+  heroStatLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  heroStatLabel: {
+    fontFamily: font.mono,
+    fontSize: 9.5,
+    color: palette.cream,
+    opacity: 0.65,
+    letterSpacing: 0.8,
+  },
+  heroStatBig: {
+    fontFamily: font.displayBlack,
+    fontSize: 24,
+    color: palette.sun,
+    letterSpacing: -0.6,
+  },
+  heroStatSmall: {
+    fontFamily: font.displayBlack,
+    fontSize: 16,
+    color: palette.cream,
+    letterSpacing: -0.4,
+  },
+  heroStatDivider: {
+    height: 1,
+    backgroundColor: 'rgba(250, 246, 234, 0.18)',
+    marginVertical: 2,
+  },
+
+  // Goal sheet
+  goalSheet: {
+    backgroundColor: palette.cream,
+    borderTopWidth: 2,
+    borderColor: palette.ink,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
+    paddingHorizontal: space.xl,
+    paddingTop: space.lg,
+    paddingBottom: space.xl,
+  },
+  goalTitle: {
+    ...type.h2,
+    color: palette.ink,
+  },
+  goalSub: {
+    ...type.body,
+    color: palette.inkSoft,
+    marginTop: 4,
+    marginBottom: space.lg,
+  },
+  goalPresetsRow: {
+    flexDirection: 'row',
+    gap: space.sm,
+    marginBottom: space.md,
+  },
+  goalPreset: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: radius.input,
+    backgroundColor: palette.card,
+    ...border.thick,
+  },
+  goalPresetActive: {
+    backgroundColor: palette.sun,
+  },
+  goalPresetText: {
+    fontFamily: font.display,
+    fontSize: 15,
+    fontWeight: '700',
+    color: palette.ink,
+  },
+  goalPresetTextActive: {
+    color: palette.ink,
+  },
+  goalInput: {
+    backgroundColor: palette.card,
+    borderRadius: radius.input,
+    paddingVertical: space.sm + 2,
+    paddingHorizontal: space.lg,
+    ...border.thick,
+    fontFamily: font.body,
+    fontSize: 15,
+    color: palette.ink,
+    marginBottom: space.lg,
+  },
+  goalSaveButton: {
+    backgroundColor: palette.leaf,
+    paddingVertical: space.md,
+    borderRadius: radius.input,
+    ...border.thick,
+    alignItems: 'center',
+  },
+  goalSaveDisabled: {
+    backgroundColor: palette.card,
+  },
+  goalSaveText: {
+    fontFamily: font.display,
+    fontWeight: '700',
+    fontSize: 15,
+    color: '#fff',
+    letterSpacing: -0.3,
   },
 
   // Search
