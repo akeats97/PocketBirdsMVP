@@ -1,5 +1,9 @@
 # PocketBirds4 — Claude Context
 
+## Product North Star
+
+`PRD.md` (project root) is the product requirements / north-star doc: vision, bullseye user, core principles, anti-goals, mechanics, ethics, brand voice. **Read it before scoping a new feature, making a product or UX judgment call, or writing user-facing copy.** This file is the operational truth (what's currently true); PRD.md wins on questions of product direction. The always-true headlines: friends-only visibility is non-negotiable, leaderboards are friend-scoped never global, photos are celebrated never required, and the voice is cheeky about the app but respectful about the birds.
+
 ## Pending Design Work (Pocket Dex refactor, started May 21 2026)
 
 Visual-language refactor in progress. Handoff lives at `/Users/alexkeats/Downloads/design_handoff_pocket_dex/` (tokens, migration doc, prompts, reference HTML).
@@ -13,18 +17,6 @@ Visual-language refactor in progress. Handoff lives at `/Users/alexkeats/Downloa
 - **Leaderboard ribbon** on Friends. Alex said "no competition" — skip until requested, then gate behind a Settings flag default off.
 - **Latin names in feed cards.** Mockups show them, but `Sighting` has no Latin field. Look up at render time from `constants/birdNames.ts` (same name key as IUCN lookup).
 - **Dark mode.** Deferred until light-mode redesign settles. `theme` export in tokens already structured to swap palette values without touching consumers.
-
----
-
-## Feature Backlog (May 22 2026)
-
-Features Alex wants to ship next. Not yet scoped or scheduled — capture ideas here so they aren't lost between sessions. When picking one up, work with Alex to agree on scope before writing code.
-
-- **Edit a past sighting.** Currently sightings are append-only (and long-press → delete is the only mutation). Want to be able to open an existing sighting and change the date, change the location, or attach a photo if there wasn't one. Should re-use the Add Sighting form structure where possible. Open question: do edits trigger any kind of friend re-notification? Probably not — silent edit.
-- **Kudos on a friend's sighting.** Lightweight reaction — let the user tap a heart / star / "nice" on a friend's sighting. Single reaction per user per sighting (toggle). Surfaces a count + recent reactors on the SightingCard. Probably also fires a quiet push back to the original sighter ("Victoria liked your Robin").
-- **Push notifications deep-link to the sighting.** Today, tapping a friend-sighting push just opens the app to wherever it was last (or Field Journal). Want: tap → navigate directly to that friend's sighting card in the Friends feed. Will need to encode the sighting ID + friend ID in the push payload and handle the `Notifications.addNotificationResponseReceivedListener` route on cold start vs warm start. Existing push payload format is in `functions/index.js`.
-- **Bird detail screen from Dex tile.** Tapping a tile in the Bird Dex (currently does nothing) should open a detail view that lists all the user's previous sightings for that species (date, location, photo if any, notes). Re-uses the SightingCard component scoped to that bird. Consider also showing the Latin name there (Latin names are also wanted in feed cards per the Pending Design Work block).
-- **Friends — search + Dex view of a friend.** ~~(b) view a friend's Bird Dex (read-only)~~ **DONE Jun 6 2026** via profile pages (the profile's Bird Dex tab, fetched on demand with `getSightingsByUid`). Still open: **(a) search a friend's list for a specific bird** (and the Venn compare already surfaces "what should I be looking for"). The denormalized `users/{uid}.seenSpecies` idea is still worth doing if profile loads get heavy at scale — the full-page friend search currently fetches each result's sightings just to show a species count.
 
 ---
 
