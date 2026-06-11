@@ -20,6 +20,18 @@ Visual-language refactor in progress. Handoff lives at `/Users/alexkeats/Downloa
 
 ---
 
+## Navigation restructure (Jun 11 2026)
+
+Strava-style nav shipped; supersedes the "two feeds" layout (personal Log tab + Friends feed):
+
+- **Tab order: Journal · Dex · Log (center) · Friends · You.** Landing page is the Journal (was the Add form).
+- **Journal (`app/(tabs)/index.tsx`)** is the merged home feed: your sightings (SightingCard) + friends' (FriendSightingCard) in one day-grouped list. Friendless empty state has a Find Friends CTA (cold-start fix; real fix is the PRD's deep-link invite, still unbuilt).
+- **Log** is the Add Sighting form behind the raised gold center circle (`logButton` style in `app/(tabs)/_layout.tsx`).
+- **Friends (`app/(tabs)/friends.tsx`)** lost its feed and is now the flock hub: every friend plus a "You" row with species / sightings / photos counts, an **All time / This year** toggle, birder search, per-friend notification bells, and the Hep (feedback) view. Sorted by species count, no rank styling (PRD: no shame). Future leaderboards/challenges/map land here.
+- **You (`app/(tabs)/you.tsx`)** renders your own profile. The implementation moved from `app/profile/[uid].tsx` to **`components/profile/ProfileView.tsx`** (`uid` + `embedded` props); the stack route is now a thin wrapper. The header avatar also opens the You tab.
+- `friend_sighting` push taps land on the Journal (`/(tabs)`), not the Friends tab (`app/_layout.tsx`).
+- `FriendSightingsContext` now starts **empty** (the legacy mock sightings were removed; they'd flash in the merged feed) and dropped `filterByFriend` / `isFirstSightingForFriend`.
+
 ## Profiles, Venn Compare & Global-First (shipped Jun 6 2026)
 
 - **Profile pages.** `app/profile/[uid].tsx` (friend / public / self) and `app/profile/[uid]/compare.tsx` (the Venn screen; math in `app/utils/compareLists.ts`, Jaccard overlap, same report/mystery/custom exclusions as the journal). Reached from Friends search results and the username pill on feed cards.
@@ -82,21 +94,23 @@ A React Native bird sighting logger for Alex and his wife. Users log bird sighti
 | File | Purpose |
 |------|---------|
 | `config/firebaseConfig.js` | Firebase init — exports `app`, `auth`, `db` |
-| `app/index.tsx` | Redirects to `/(tabs)` — do not put login logic here |
+| `app/index.tsx` | Redirects to `/(tabs)` (Journal) — do not put login logic here |
 | `components/LoginScreen.tsx` | Login/signup form, rendered directly by `_layout.tsx` |
 | `app/_layout.tsx` | Root layout — handles auth state, shows LoginScreen or AuthenticatedApp |
 | `app/(tabs)/_layout.tsx` | Tab bar config |
-| `app/(tabs)/index.tsx` | Field Journal — personal sightings list |
-| `app/(tabs)/add.tsx` | Add Sighting form |
+| `app/(tabs)/index.tsx` | Journal — merged home feed (your + friends' sightings) |
+| `app/(tabs)/add.tsx` | Add Sighting form (gold center Log button) |
 | `app/(tabs)/dex.tsx` | Bird Dex — all species, seen/unseen status |
-| `app/(tabs)/friends.tsx` | Friends tab — search, follow, activity feed |
+| `app/(tabs)/friends.tsx` | Friends hub — flock list w/ stats, search, Hep feedback view |
+| `app/(tabs)/you.tsx` | You tab — own profile (thin wrapper over ProfileView) |
+| `components/profile/ProfileView.tsx` | The profile screen implementation (self / friend / public) |
 | `app/context/SightingsContext.tsx` | Sightings state — syncs Firestore + AsyncStorage |
 | `app/context/FriendSightingsContext.tsx` | Friends' sightings state |
 | `app/services/sightingService.ts` | Firestore read/write for sightings |
 | `app/services/userService.ts` | Firestore user/friend management |
 | `app/services/notificationService.ts` | Push notification registration + sending |
 | `app/services/photoService.ts` | Photo upload to Firebase Storage |
-| `app/profile/[uid].tsx` | Profile page (friend / public / self) — identity, stats, Field Journal, Bird Dex |
+| `app/profile/[uid].tsx` | Stack-pushed profile route — thin wrapper over ProfileView |
 | `app/profile/[uid]/compare.tsx` | Venn "You & {name}" compare screen |
 | `components/compare/CompareCard.tsx` | Overlap module shown on a profile |
 | `app/utils/compareLists.ts` | Overlap math (Jaccard) + `speciesSet`/`sightingCount` |
