@@ -1,10 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, { LinearTransition } from 'react-native-reanimated';
+import { BottomSheet } from '../../components/BottomSheet';
 import { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
+import { BellGlyph, bellColor } from '../../components/social/NotifBell';
 import { auth } from '../../config/firebaseConfig';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -12,8 +15,9 @@ import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useSightings } from '../context/SightingsContext';
 import { FriendSighting, Sighting } from '../types';
 import { sightingCount, speciesSet } from '../utils/compareLists';
+import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../services/notificationPrefsService';
 import { getSightingsByUid } from '../services/sightingService';
-import { getCurrentUserProfile, UserProfile, isFollowing, searchUsers } from '../services/userService';
+import { getCurrentUserProfile, UserProfile, isFollowing, searchUsers, unfollowUser } from '../services/userService';
 
 interface SearchResultUser extends UserProfile {
   isFollowing?: boolean;
@@ -21,6 +25,13 @@ interface SearchResultUser extends UserProfile {
 }
 
 type Period = 'all' | 'year';
+
+// Same copy as NotifPrefSheet — the three per-friend notification levels.
+const NOTIF_OPTIONS: { mode: NotificationMode; title: string; sub: string }[] = [
+  { mode: 'all', title: 'All sightings', sub: 'Push every time.' },
+  { mode: 'highlights', title: 'Highlights only', sub: 'New species and milestones.' },
+  { mode: 'none', title: 'Nothing', sub: 'Silent, but still in your feed.' },
+];
 
 interface FriendRow {
   uid: string;
@@ -56,6 +67,9 @@ export default function FriendsScreen() {
   const [period, setPeriod] = useState<Period>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [myName, setMyName] = useState('');
+  // Long-pressed friend — drives the follow/notification action sheet.
+  const [actionFor, setActionFor] = useState<FriendRow | null>(null);
+  const [notificationPrefs, setNotificationPrefs] = useState<Record<string, NotificationMode>>({});
   const searchInputRef = useRef<TextInput>(null);
 
   // Resolve my own username for the "You" row's avatar initial (falls back to
@@ -165,6 +179,57 @@ export default function FriendsScreen() {
     searchInputRef.current?.blur();
     Keyboard.dismiss();
     router.push(`/profile/${uid}`);
+  };
+
+  // Keep a live map of the current user's per-friend notification modes.
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    return subscribeToPrefs(uid, setNotificationPrefs);
+  }, []);
+
+  const modeFor = (uid: string): NotificationMode => notificationPrefs[uid] ?? DEFAULT_MODE;
+
+  const openActions = (row: FriendRow) => {
+    if (row.isSelf) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setActionFor(row);
+  };
+
+  const handleSelectMode = async (followedUid: string, mode: NotificationMode) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const previous = notificationPrefs[followedUid];
+    // Optimistic: update the map and close the sheet, revert on failure.
+    setNotificationPrefs(prev => ({ ...prev, [followedUid]: mode }));
+    setActionFor(null);
+    try {
+      await setPref(uid, followedUid, mode);
+    } catch (error) {
+      console.error('Failed to save notification preference:', error);
+      setNotificationPrefs(prev => ({ ...prev, [followedUid]: previous ?? DEFAULT_MODE }));
+      Alert.alert('Error', "Couldn't save that preference. Please try again.");
+    }
+  };
+
+  const handleUnfollow = (row: FriendRow) => {
+    setActionFor(null);
+    Alert.alert(`Unfollow ${row.name}?`, 'Their sightings will leave your feed. They won\'t be notified.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Unfollow',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await unfollowUser(row.uid);
+            await refreshFriends(); // row leaves the flock list
+          } catch (error) {
+            console.error('Unfollow failed:', error);
+            Alert.alert('Error', `Couldn't unfollow ${row.name}. Please try again.`);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -316,9 +381,13 @@ export default function FriendsScreen() {
           renderItem={({ item }) => (
             // Person left, stats right as fixed columns — the numbers line up
             // down the list so friends are comparable at a glance, and a row
-            // can never wrap. No controls in the row (notification level
-            // lives on the profile); the whole row is the tap target.
-            <Pressable style={styles.flockRow} onPress={() => goToProfile(item.uid)}>
+            // can never wrap. No controls in the row: tap opens the profile,
+            // long-press opens follow/notification actions.
+            <Pressable
+              style={styles.flockRow}
+              onPress={() => goToProfile(item.uid)}
+              onLongPress={() => openActions(item)}
+            >
               <Avatar name={item.avatarName} seed={item.uid} size={44} round />
               <Text style={styles.flockName} numberOfLines={1}>{item.name}</Text>
               <View style={styles.statCol}>
@@ -337,6 +406,49 @@ export default function FriendsScreen() {
           )}
         />
       )}
+
+      {/* Long-press actions: notification level + unfollow for one friend */}
+      <BottomSheet visible={actionFor !== null} onClose={() => setActionFor(null)}>
+        <View style={styles.actionSheet}>
+          <View style={styles.sheetHeader}>
+            {actionFor && <Avatar name={actionFor.avatarName} seed={actionFor.uid} size={34} round />}
+            <Text style={styles.sheetTitle} numberOfLines={1}>{actionFor?.name}</Text>
+          </View>
+
+          <Text style={styles.sheetSectionLabel}>NOTIFICATIONS</Text>
+          {NOTIF_OPTIONS.map((opt) => {
+            const on = actionFor ? modeFor(actionFor.uid) === opt.mode : false;
+            return (
+              <Pressable
+                key={opt.mode}
+                style={({ pressed }) => [styles.sheetRow, pressed && styles.sheetRowPressed]}
+                onPress={() => actionFor && handleSelectMode(actionFor.uid, opt.mode)}
+              >
+                <View style={styles.sheetRowIcon}>
+                  <BellGlyph mode={opt.mode} size={17} color={bellColor(opt.mode)} />
+                </View>
+                <View style={styles.sheetRowText}>
+                  <Text style={styles.sheetRowTitle}>{opt.title}</Text>
+                  <Text style={styles.sheetRowSub}>{opt.sub}</Text>
+                </View>
+                {on && <Ionicons name="checkmark" size={18} color={palette.leaf} />}
+              </Pressable>
+            );
+          })}
+
+          <View style={styles.sheetDivider} />
+
+          <Pressable
+            style={({ pressed }) => [styles.sheetRow, pressed && styles.sheetRowPressed]}
+            onPress={() => actionFor && handleUnfollow(actionFor)}
+          >
+            <View style={styles.sheetRowIcon}>
+              <Ionicons name="person-remove-outline" size={18} color={palette.crimson} />
+            </View>
+            <Text style={[styles.sheetRowTitle, { color: palette.crimson }]}>Unfollow</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
     </View>
   );
 }
@@ -540,6 +652,72 @@ const styles = StyleSheet.create({
     color: palette.inkSoft,
     letterSpacing: 0.7,
     marginTop: 2,
+  },
+
+  // Long-press action sheet
+  actionSheet: {
+    backgroundColor: palette.cream,
+    borderTopWidth: 2,
+    borderColor: palette.ink,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
+    paddingHorizontal: space.xl,
+    paddingTop: space.lg,
+    paddingBottom: space.xl,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: space.md,
+  },
+  sheetTitle: {
+    fontFamily: font.display,
+    fontSize: 18,
+    fontWeight: '700',
+    color: palette.ink,
+    letterSpacing: -0.4,
+    flexShrink: 1,
+  },
+  sheetSectionLabel: {
+    fontFamily: font.mono,
+    fontSize: 9,
+    color: palette.inkSoft,
+    letterSpacing: 0.8,
+    marginBottom: space.xs,
+  },
+  sheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.input,
+  },
+  sheetRowPressed: {
+    backgroundColor: palette.card,
+  },
+  sheetRowIcon: {
+    width: 24,
+    alignItems: 'center',
+  },
+  sheetRowText: {
+    flex: 1,
+  },
+  sheetRowTitle: {
+    ...type.bodyL,
+    color: palette.ink,
+    fontWeight: '700',
+  },
+  sheetRowSub: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    marginTop: 1,
+  },
+  sheetDivider: {
+    height: 1.5,
+    backgroundColor: palette.rule,
+    marginVertical: space.sm,
   },
 
   // Loading + empty
