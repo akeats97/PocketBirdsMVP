@@ -2,10 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, SectionList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { BottomSheet } from '../../components/BottomSheet';
+import { Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ClearableInput from '../../components/ClearableInput';
-import { ProgressRing } from '../../components/dex/ProgressRing';
 import { HardShadow } from '../../components/SightingCard';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
@@ -14,9 +12,6 @@ import { isUnknownEntry } from '../../constants/unknownBird';
 import { isCustomSpecies } from '../../constants/customSpecies';
 import { useSightings } from '../context/SightingsContext';
 import { useWishlist } from '../context/WishlistContext';
-import { isActiveGoal, useDexGoal } from '../services/goalService';
-
-const GOAL_PRESETS = [25, 50, 100, 200];
 
 type FilterMode = 'all' | 'seen' | 'wishlist';
 
@@ -114,8 +109,8 @@ export default function DexScreen() {
     };
   }, [realSightings, seenMap]);
 
-  // Distinct countable species observed this calendar year — what the goal
-  // ring fills with.
+  // Distinct countable species observed this calendar year, the hero's
+  // supporting "this year" stat.
   const speciesThisYear = useMemo(() => {
     const year = new Date().getFullYear();
     return new Set(
@@ -124,25 +119,6 @@ export default function DexScreen() {
         .map(s => s.birdName.toLowerCase())
     ).size;
   }, [realSightings]);
-
-  const { goal, saveGoal } = useDexGoal();
-  const goalActive = isActiveGoal(goal);
-  const [goalSheetOpen, setGoalSheetOpen] = useState(false);
-  const [goalInput, setGoalInput] = useState('');
-
-  const openGoalSheet = () => {
-    setGoalInput(goalActive ? String(goal.target) : '');
-    setGoalSheetOpen(true);
-  };
-
-  const goalInputNum = parseInt(goalInput, 10);
-  const goalInputValid = Number.isFinite(goalInputNum) && goalInputNum > 0;
-
-  const handleSaveGoal = () => {
-    if (!goalInputValid) return;
-    saveGoal(goalInputNum);
-    setGoalSheetOpen(false);
-  };
 
   const sections = useMemo<Section[]>(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -324,27 +300,20 @@ export default function DexScreen() {
 
         <View style={styles.heroWrap}>
           <HardShadow borderRadius={radius.card}>
-            {/* Tap anywhere on the hero to set / edit the annual goal */}
-            <Pressable style={styles.hero} onPress={openGoalSheet}>
+            <View style={styles.hero}>
               <View style={styles.heroRow}>
-                {/* Goal ring — this year's species, filling toward the goal */}
-                <View style={styles.ringCol}>
-                  <ProgressRing
-                    progress={goalActive ? speciesThisYear / goal.target : 1}
-                    center={speciesThisYear}
-                  />
-                  <Text style={styles.heroPeriodLabel}>THIS YEAR</Text>
-                  <Text style={styles.ringSub}>
-                    {goalActive ? `of ${goal.target}` : 'tap to set a goal'}
-                  </Text>
+                {/* The life list: lifetime species is THE headline metric */}
+                <View style={styles.lifeCol}>
+                  <Text style={styles.lifeNumber}>{stats.uniqueSpecies}</Text>
+                  <Text style={styles.lifeLabel}>LIFE LIST</Text>
+                  <Text style={styles.lifeSub}>species all time</Text>
                 </View>
 
-                {/* All-time stats — species leads, the others support */}
+                {/* Supporting stats */}
                 <View style={styles.heroStats}>
-                  <Text style={[styles.heroPeriodLabel, styles.heroStatsHeader]}>ALL TIME</Text>
                   <View style={styles.heroStatRow}>
-                    <Text style={styles.heroStatLabel}>SPECIES</Text>
-                    <Text style={styles.heroStatBig}>{stats.uniqueSpecies}</Text>
+                    <Text style={styles.heroStatLabel}>THIS YEAR</Text>
+                    <Text style={styles.heroStatSmall}>{speciesThisYear}</Text>
                   </View>
                   <View style={styles.heroStatDivider} />
                   <View style={styles.heroStatRow}>
@@ -360,7 +329,7 @@ export default function DexScreen() {
                   </View>
                 </View>
               </View>
-            </Pressable>
+            </View>
           </HardShadow>
         </View>
 
@@ -464,52 +433,6 @@ export default function DexScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-
-      {/* Annual goal sheet — set or edit the species goal the ring fills toward */}
-      <BottomSheet visible={goalSheetOpen} onClose={() => setGoalSheetOpen(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.goalSheet}>
-            <Text style={styles.goalTitle}>Your {new Date().getFullYear()} species goal</Text>
-
-            <View style={styles.goalPresetsRow}>
-              {GOAL_PRESETS.map((n) => {
-                const active = goalInput === String(n);
-                return (
-                  <Pressable
-                    key={n}
-                    style={[styles.goalPreset, active && styles.goalPresetActive]}
-                    onPress={() => setGoalInput(String(n))}
-                  >
-                    <Text style={[styles.goalPresetText, active && styles.goalPresetTextActive]}>{n}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <TextInput
-              style={styles.goalInput}
-              value={goalInput}
-              onChangeText={(t) => setGoalInput(t.replace(/[^0-9]/g, ''))}
-              keyboardType="number-pad"
-              placeholder="or type your own"
-              placeholderTextColor={palette.muted}
-              maxLength={5}
-            />
-
-            <HardShadow offset={3} borderRadius={radius.input}>
-              <Pressable
-                style={[styles.goalSaveButton, !goalInputValid && styles.goalSaveDisabled]}
-                onPress={handleSaveGoal}
-                disabled={!goalInputValid}
-              >
-                <Text style={[styles.goalSaveText, !goalInputValid && { color: palette.inkSoft }]}>
-                  {goalInputValid ? `Find ${goalInputNum} species` : 'Set a goal'}
-                </Text>
-              </Pressable>
-            </HardShadow>
-          </View>
-        </KeyboardAvoidingView>
-      </BottomSheet>
     </View>
   );
 }
@@ -559,29 +482,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.xl,
   },
-  ringCol: {
+  lifeCol: {
     alignItems: 'center',
   },
-  ringSub: {
-    ...type.bodyS,
-    color: palette.cream,
-    opacity: 0.7,
-    marginTop: 2,
-    textAlign: 'center',
+  lifeNumber: {
+    fontFamily: font.displayBlack,
+    fontSize: 44,
+    color: palette.sun,
+    letterSpacing: -1.2,
+    lineHeight: 48,
   },
-  // Shared period tag — under the ring and atop the stat column, so the
-  // year-scoped and lifetime numbers can't be confused.
-  heroPeriodLabel: {
+  lifeLabel: {
     fontFamily: font.mono,
     fontSize: 9,
     color: palette.sun,
     opacity: 0.9,
     letterSpacing: 1,
-    marginTop: 8,
+    marginTop: 2,
   },
-  heroStatsHeader: {
-    marginTop: 0,
-    marginBottom: 2,
+  lifeSub: {
+    ...type.bodyS,
+    color: palette.cream,
+    opacity: 0.7,
+    marginTop: 1,
+    textAlign: 'center',
   },
   heroStats: {
     flex: 1,
@@ -604,12 +528,6 @@ const styles = StyleSheet.create({
     opacity: 0.65,
     letterSpacing: 0.8,
   },
-  heroStatBig: {
-    fontFamily: font.displayBlack,
-    fontSize: 24,
-    color: palette.sun,
-    letterSpacing: -0.6,
-  },
   heroStatSmall: {
     fontFamily: font.displayBlack,
     fontSize: 16,
@@ -620,76 +538,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: 'rgba(250, 246, 234, 0.18)',
     marginVertical: 2,
-  },
-
-  // Goal sheet
-  goalSheet: {
-    backgroundColor: palette.cream,
-    borderTopWidth: 2,
-    borderColor: palette.ink,
-    borderTopLeftRadius: radius.card,
-    borderTopRightRadius: radius.card,
-    paddingHorizontal: space.xl,
-    paddingTop: space.lg,
-    paddingBottom: space.xl,
-  },
-  goalTitle: {
-    ...type.h2,
-    color: palette.ink,
-    marginBottom: space.lg,
-  },
-  goalPresetsRow: {
-    flexDirection: 'row',
-    gap: space.sm,
-    marginBottom: space.md,
-  },
-  goalPreset: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: radius.input,
-    backgroundColor: palette.card,
-    ...border.thick,
-  },
-  goalPresetActive: {
-    backgroundColor: palette.sun,
-  },
-  goalPresetText: {
-    fontFamily: font.display,
-    fontSize: 15,
-    fontWeight: '700',
-    color: palette.ink,
-  },
-  goalPresetTextActive: {
-    color: palette.ink,
-  },
-  goalInput: {
-    backgroundColor: palette.card,
-    borderRadius: radius.input,
-    paddingVertical: space.sm + 2,
-    paddingHorizontal: space.lg,
-    ...border.thick,
-    fontFamily: font.body,
-    fontSize: 15,
-    color: palette.ink,
-    marginBottom: space.lg,
-  },
-  goalSaveButton: {
-    backgroundColor: palette.leaf,
-    paddingVertical: space.md,
-    borderRadius: radius.input,
-    ...border.thick,
-    alignItems: 'center',
-  },
-  goalSaveDisabled: {
-    backgroundColor: palette.card,
-  },
-  goalSaveText: {
-    fontFamily: font.display,
-    fontWeight: '700',
-    fontSize: 15,
-    color: '#fff',
-    letterSpacing: -0.3,
   },
 
   // Search
