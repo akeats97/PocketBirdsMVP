@@ -4,8 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
-import { NotifBell } from '../../components/social/NotifBell';
-import { NotifPrefSheet } from '../../components/social/NotifPrefSheet';
 import { auth } from '../../config/firebaseConfig';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -13,7 +11,6 @@ import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useSightings } from '../context/SightingsContext';
 import { FriendSighting, Sighting } from '../types';
 import { sightingCount, speciesSet } from '../utils/compareLists';
-import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../services/notificationPrefsService';
 import { getSightingsByUid } from '../services/sightingService';
 import { getCurrentUserProfile, UserProfile, isFollowing, searchUsers } from '../services/userService';
 
@@ -57,8 +54,6 @@ export default function FriendsScreen() {
   const [isSearchingBirders, setIsSearchingBirders] = useState(false);
   const [period, setPeriod] = useState<Period>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [notificationPrefs, setNotificationPrefs] = useState<Record<string, NotificationMode>>({});
-  const [prefPickerFor, setPrefPickerFor] = useState<{ uid: string; name: string } | null>(null);
   const [myName, setMyName] = useState('');
   const searchInputRef = useRef<TextInput>(null);
 
@@ -169,31 +164,6 @@ export default function FriendsScreen() {
     searchInputRef.current?.blur();
     Keyboard.dismiss();
     router.push(`/profile/${uid}`);
-  };
-
-  // Keep a live map of the current user's per-friend notification modes.
-  useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
-    return subscribeToPrefs(uid, setNotificationPrefs);
-  }, []);
-
-  const modeFor = (uid: string): NotificationMode => notificationPrefs[uid] ?? DEFAULT_MODE;
-
-  const handleSelectMode = async (followedUid: string, mode: NotificationMode) => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
-    const previous = notificationPrefs[followedUid];
-    // Optimistic: update the map and close the picker, revert on failure.
-    setNotificationPrefs(prev => ({ ...prev, [followedUid]: mode }));
-    setPrefPickerFor(null);
-    try {
-      await setPref(uid, followedUid, mode);
-    } catch (error) {
-      console.error('Failed to save notification preference:', error);
-      setNotificationPrefs(prev => ({ ...prev, [followedUid]: previous ?? DEFAULT_MODE }));
-      Alert.alert('Error', "Couldn't save that preference. Please try again.");
-    }
   };
 
   return (
@@ -340,41 +310,29 @@ export default function FriendsScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <Pressable style={styles.birderRow} onPress={() => goToProfile(item.uid)}>
-              <Avatar name={item.avatarName} seed={item.uid} size={48} round />
-              <View style={styles.birderInfo}>
-                <Text style={styles.birderName} numberOfLines={1}>{item.name}</Text>
-                <View style={styles.birderMetaRow}>
-                  <Text style={styles.statText}>
-                    <Text style={styles.statNumber}>{item.species}</Text> species
-                  </Text>
-                  <Text style={styles.birderDot}>·</Text>
-                  <Text style={styles.statText}>
-                    <Text style={styles.statNumber}>{item.sightings}</Text> {item.sightings === 1 ? 'sighting' : 'sightings'}
-                  </Text>
-                  <Text style={styles.birderDot}>·</Text>
-                  <Text style={styles.statText}>
-                    <Text style={styles.statNumber}>{item.photos}</Text> {item.photos === 1 ? 'photo' : 'photos'}
-                  </Text>
-                </View>
+            // Person left, stats right as fixed columns — the numbers line up
+            // down the list so friends are comparable at a glance, and a row
+            // can never wrap. No controls in the row (notification level
+            // lives on the profile); the whole row is the tap target.
+            <Pressable style={styles.flockRow} onPress={() => goToProfile(item.uid)}>
+              <Avatar name={item.avatarName} seed={item.uid} size={44} round />
+              <Text style={styles.flockName} numberOfLines={1}>{item.name}</Text>
+              <View style={styles.statCol}>
+                <Text style={styles.statColNum}>{item.species}</Text>
+                <Text style={styles.statColLabel}>SPECIES</Text>
               </View>
-              {!item.isSelf && (
-                <NotifBell mode={modeFor(item.uid)} onPress={() => setPrefPickerFor({ uid: item.uid, name: item.name })} />
-              )}
-              <Ionicons name="chevron-forward" size={20} color={palette.muted} />
+              <View style={styles.statCol}>
+                <Text style={styles.statColNum}>{item.sightings}</Text>
+                <Text style={styles.statColLabel}>SIGHTINGS</Text>
+              </View>
+              <View style={styles.statCol}>
+                <Text style={styles.statColNum}>{item.photos}</Text>
+                <Text style={styles.statColLabel}>PHOTOS</Text>
+              </View>
             </Pressable>
           )}
         />
       )}
-
-      {/* Per-friend notification preference picker */}
-      <NotifPrefSheet
-        visible={prefPickerFor !== null}
-        person={prefPickerFor ? { uid: prefPickerFor.uid, username: prefPickerFor.name } : null}
-        mode={prefPickerFor ? modeFor(prefPickerFor.uid) : DEFAULT_MODE}
-        onPick={(mode) => prefPickerFor && handleSelectMode(prefPickerFor.uid, mode)}
-        onClose={() => setPrefPickerFor(null)}
-      />
     </View>
   );
 }
@@ -529,16 +487,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: palette.leaf,
   },
-  statText: {
-    ...type.bodyS,
-    color: palette.inkSoft,
-    fontWeight: '500',
-  },
-  statNumber: {
-    color: palette.ink,
-    fontFamily: font.bodyBold,
-    fontWeight: '700',
-  },
   notFollowingTag: {
     fontFamily: font.mono,
     fontSize: 9,
@@ -551,6 +499,43 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     paddingHorizontal: 6,
     overflow: 'hidden',
+  },
+
+  // Flock rows — person left, aligned stat columns right
+  flockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.rule,
+  },
+  flockName: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: font.display,
+    fontSize: 17,
+    fontWeight: '700',
+    color: palette.ink,
+    letterSpacing: -0.4,
+  },
+  statCol: {
+    width: 58,
+    alignItems: 'center',
+  },
+  statColNum: {
+    fontFamily: font.displayBlack,
+    fontSize: 17,
+    color: palette.ink,
+    letterSpacing: -0.5,
+  },
+  statColLabel: {
+    fontFamily: font.mono,
+    fontSize: 8,
+    color: palette.inkSoft,
+    letterSpacing: 0.7,
+    marginTop: 2,
   },
 
   // Loading + empty
