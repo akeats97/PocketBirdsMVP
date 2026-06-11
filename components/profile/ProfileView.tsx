@@ -181,6 +181,8 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
   const stats = useMemo(() => ({
     species: speciesSet(sightings).size,
     sightings: sightingCount(sightings),
+    // Same rule as the flock list: real sightings carrying a photo.
+    photos: sightings.filter(s => !isReportEntry(s.birdName) && !!s.photoUrl).length,
   }), [sightings]);
 
   const liferIds = useMemo(() => computeLiferIds(sightings), [sightings]);
@@ -302,6 +304,10 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
             <View style={styles.statCellDivided}>
               <Text style={styles.statValue}>{stats.sightings}</Text>
               <Text style={styles.statLabel}>SIGHTINGS</Text>
+            </View>
+            <View style={styles.statCellDivided}>
+              <Text style={styles.statValue}>{stats.photos}</Text>
+              <Text style={styles.statLabel}>PHOTOS</Text>
             </View>
           </View>
         </HardShadow>
