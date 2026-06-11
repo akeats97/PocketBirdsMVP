@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { PlatformPressable } from '@react-navigation/elements';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -55,6 +56,12 @@ export default function TabLayout() {
           fontWeight: '600',
           letterSpacing: 0.2,
         },
+        // Kill the Android press ripple (the grey circle behind tab icons);
+        // iOS keeps its default opacity dim. The focused TabPill background is
+        // the press feedback.
+        tabBarButton: (props) => (
+          <PlatformPressable {...props} pressColor="transparent" />
+        ),
         // Custom JS header (wordmark + bell + avatar) shared by every tab. We
         // render it ourselves rather than using the native-stack header to dodge
         // iOS 26's glass bar-button styling — see components/AppHeader.tsx.
