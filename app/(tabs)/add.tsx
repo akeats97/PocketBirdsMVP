@@ -9,12 +9,15 @@ import { isReportEntry } from '../../constants/reportTypes';
 import GlobalFirstCelebration from '../../components/GlobalFirstCelebration';
 import MilestoneCelebration from '../../components/MilestoneCelebration';
 import { useSightings } from '../context/SightingsContext';
+import { useWishlist } from '../context/WishlistContext';
 import { isGlobalFirstSpecies } from '../services/sightingService';
 
 export default function AddSightingScreen() {
   const { addSighting, markGlobalFirst } = useSightings();
+  const { wishlist } = useWishlist();
   const [showSuccess, setShowSuccess] = useState(false);
   const [isNewSpecies, setIsNewSpecies] = useState(false);
+  const [wishlistCrossOff, setWishlistCrossOff] = useState(false);
   const [submittedReport, setSubmittedReport] = useState(false);
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const [globalFirstBird, setGlobalFirstBird] = useState<string | null>(null);
@@ -60,6 +63,7 @@ export default function AddSightingScreen() {
     if (isReport) {
       setSubmittedReport(true);
       setIsNewSpecies(false);
+      setWishlistCrossOff(false);
       setShowSuccess(true);
       playSuccessBanner();
       return;
@@ -89,6 +93,10 @@ export default function AddSightingScreen() {
     }
 
     setIsNewSpecies(newSpeciesDetected);
+    // Wishlist cross-off: first sighting of a species the user had starred.
+    // The star itself stays (deliberate); the global-first and milestone
+    // takeovers above outrank this and skip it via their early returns.
+    setWishlistCrossOff(newSpeciesDetected && wishlist.has(birdName));
     setShowSuccess(true);
 
     if (newSpeciesDetected) {
@@ -121,21 +129,24 @@ export default function AddSightingScreen() {
               style={[
                 styles.successPopupContent,
                 (isNewSpecies || submittedReport) && styles.newSpeciesPopupContent,
+                wishlistCrossOff && styles.wishlistPopupContent,
               ]}
             >
               {!submittedReport && (
                 <Ionicons
                   name={isNewSpecies ? 'star' : 'checkmark-circle'}
                   size={22}
-                  color="#fff"
+                  color={wishlistCrossOff ? palette.ink : '#fff'}
                 />
               )}
-              <Text style={styles.successPopupText}>
+              <Text style={[styles.successPopupText, wishlistCrossOff && styles.wishlistPopupText]}>
                 {submittedReport
                   ? 'thank you for your hep ❤️'
-                  : isNewSpecies
-                    ? 'New species added to your dex!'
-                    : 'Sighting logged successfully!'}
+                  : wishlistCrossOff
+                    ? 'One off the wishlist!'
+                    : isNewSpecies
+                      ? 'New species added to your dex!'
+                      : 'Sighting logged successfully!'}
               </Text>
             </View>
           </HardShadow>
@@ -169,6 +180,14 @@ const styles = StyleSheet.create({
   },
   newSpeciesPopupContent: {
     backgroundColor: palette.coral,
+  },
+  // Wishlist cross-off wears the wishlist's gold (star = sun across the Dex),
+  // so it needs ink text instead of white.
+  wishlistPopupContent: {
+    backgroundColor: palette.sun,
+  },
+  wishlistPopupText: {
+    color: palette.ink,
   },
   successPopupText: {
     fontFamily: font.bodyBold,
