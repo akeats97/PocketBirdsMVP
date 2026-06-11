@@ -325,6 +325,10 @@ Sightings can now carry optional GPS coordinates alongside the freeform location
 
 ---
 
+## UI Conventions — Hard shadow rule (added Jun 11 2026)
+
+**The ink offset shadow (`HardShadow` in `components/SightingCard.tsx`) marks raised surfaces sitting directly on the cream page: cards, inputs, primary/peer action buttons (Save Sighting, Follow pill, search bar, stat strip). Inline elements living inside another surface (Dex chips, feed-card tags, 1ST badge, list-row controls like the connections-row bell) stay flat: border only, no shadow.** When two same-rank controls sit side by side on the page, they must match (both raised or both flat) — a flat control next to a raised peer reads as a mistake.
+
 ## UI Conventions — Modal animation rule (added Jun 9 2026)
 
 **Every bottom sheet / action sheet must use the app's standard sheet motion: the content slides UP from the bottom while the translucent backdrop just FADES in. The scrim never slides.** On dismiss, the backdrop blinks out fast while the content slides back down.
