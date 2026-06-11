@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import type { NotificationMode } from '../../app/services/notificationPrefsService';
-import { palette, radius } from '../../constants/Colors';
+import { palette } from '../../constants/Colors';
 
 // The bell glyph whose shape encodes the push level (YouTube-style convention,
 // no color fill):
@@ -51,8 +51,10 @@ export function bellColor(mode: NotificationMode): string {
   return mode === 'none' ? palette.muted : palette.ink;
 }
 
-// A 34×34 chip carrying the bell glyph. All three states share the neutral card
-// background; the icon carries the meaning. Tapping opens the level picker.
+// A 34×34 circular chip carrying the bell glyph — same border + corner
+// language as the action pills it sits next to. All three states share the
+// neutral card background; the icon carries the meaning. Tapping opens the
+// level picker.
 export function NotifBell({
   mode,
   onPress,
@@ -71,8 +73,8 @@ const styles = StyleSheet.create({
   chip: {
     width: 34,
     height: 34,
-    borderRadius: radius.chip,
-    borderWidth: 1.5,
+    borderRadius: 17,
+    borderWidth: 2,
     borderColor: palette.ink,
     backgroundColor: palette.card,
     alignItems: 'center',
