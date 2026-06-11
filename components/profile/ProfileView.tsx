@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
 import CompareCard from '../compare/CompareCard';
 import FriendSightingCard from '../FriendSightingCard';
+import { DayHeader } from '../journal/DayHeader';
 import { HardShadow } from '../SightingCard';
 import { Avatar } from '../social/Avatar';
 import { NotifBell } from '../social/NotifBell';
@@ -20,6 +21,7 @@ import { getSightingsByUid } from '../../app/services/sightingService';
 import { FriendSighting, Sighting } from '../../app/types';
 import { sightingCount, speciesSet } from '../../app/utils/compareLists';
 import { groupSightingsByDay } from '../../app/utils/groupSightingsByDay';
+import { useCollapsedDays } from '../../app/utils/useCollapsedDays';
 import { buildUserDex } from '../../app/utils/userDex';
 
 type Tab = 'journal' | 'dex';
@@ -186,12 +188,17 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
   // Render the journal with the full FriendSightingCard (tap → sighting detail,
   // social footer). Map to the FriendSighting shape; the owner tag is hidden on
   // a profile since whose page it is, is already clear.
+  const { collapsedDays, toggleDay } = useCollapsedDays();
+
   const journalSections = useMemo(() => {
     const tagged: FriendSighting[] = sightings
       .filter(s => !isReportEntry(s.birdName))
       .map(s => ({ ...s, friendName: isSelf ? 'You' : (name || 'Birder') }));
-    return groupSightingsByDay(tagged);
-  }, [sightings, isSelf, name]);
+    // Collapsed days keep their header (with counts) but render no rows.
+    return groupSightingsByDay(tagged).map(s =>
+      collapsedDays.has(s.key) ? { ...s, data: [] } : s
+    );
+  }, [sightings, isSelf, name, collapsedDays]);
 
   const dexFamilies = useMemo(() => buildUserDex(sightings), [sightings]);
 
@@ -360,12 +367,13 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
             />
           )}
           renderSectionHeader={({ section }) => (
-            <View style={styles.dayHeader}>
-              <Text style={styles.dayTitle}>{section.title}</Text>
-              <Text style={styles.dayCounts}>
-                {section.sightingCount} {section.sightingCount === 1 ? 'sighting' : 'sightings'} · {section.speciesCount} {section.speciesCount === 1 ? 'species' : 'species'}
-              </Text>
-            </View>
+            <DayHeader
+              title={section.title}
+              sightingCount={section.sightingCount}
+              speciesCount={section.speciesCount}
+              collapsed={collapsedDays.has(section.key)}
+              onToggle={() => toggleDay(section.key)}
+            />
           )}
           stickySectionHeadersEnabled={false}
           contentContainerStyle={styles.scrollContent}
@@ -635,16 +643,6 @@ const styles = StyleSheet.create({
   segmentBtnActive: { backgroundColor: palette.ink },
   segmentText: { fontFamily: font.display, fontSize: 13, fontWeight: '700', color: palette.inkSoft, letterSpacing: -0.2 },
   segmentTextActive: { color: palette.cream },
-
-  // Day header
-  dayHeader: {
-    paddingHorizontal: space.xl,
-    paddingTop: space.lg,
-    paddingBottom: space.sm,
-    backgroundColor: palette.cream,
-  },
-  dayTitle: { ...type.h3, color: palette.ink, fontWeight: '700' },
-  dayCounts: { ...type.bodyS, color: palette.inkSoft, marginTop: 2, fontWeight: '500' },
 
   // Dex tab
   dexWrap: { paddingHorizontal: space.xl, paddingTop: space.md },

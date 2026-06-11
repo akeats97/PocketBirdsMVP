@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
+import { DayHeader } from '../../components/journal/DayHeader';
 import SightingCard, { HardShadow } from '../../components/SightingCard';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -12,6 +13,7 @@ import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useSightings } from '../context/SightingsContext';
 import { FriendSighting, Sighting } from '../types';
 import { groupSightingsByDay } from '../utils/groupSightingsByDay';
+import { useCollapsedDays } from '../utils/useCollapsedDays';
 
 // The merged feed mixes your sightings with your friends'. Tagged union so the
 // renderer knows which card to draw; both sides extend Sighting, which is all
@@ -97,7 +99,15 @@ export default function JournalScreen() {
     return [...own, ...theirs];
   }, [sightings, friendSightings]);
 
-  const sections = useMemo(() => groupSightingsByDay(feedItems), [feedItems]);
+  const { collapsedDays, toggleDay } = useCollapsedDays();
+
+  // Collapsed days keep their header (with counts) but render no rows.
+  const sections = useMemo(
+    () => groupSightingsByDay(feedItems).map(s =>
+      collapsedDays.has(s.key) ? { ...s, data: [] } : s
+    ),
+    [feedItems, collapsedDays]
+  );
 
   // Precompute the set of YOUR sighting ids that are the "1ST" (first-of-
   // species) record, once per sightings change, instead of calling
@@ -181,12 +191,13 @@ export default function JournalScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         renderSectionHeader={({ section }) => (
-          <View style={styles.dayHeader}>
-            <Text style={styles.dayTitle}>{section.title}</Text>
-            <Text style={styles.dayCounts}>
-              {section.sightingCount} {section.sightingCount === 1 ? 'sighting' : 'sightings'} · {section.speciesCount} {section.speciesCount === 1 ? 'species' : 'species'}
-            </Text>
-          </View>
+          <DayHeader
+            title={section.title}
+            sightingCount={section.sightingCount}
+            speciesCount={section.speciesCount}
+            collapsed={collapsedDays.has(section.key)}
+            onToggle={() => toggleDay(section.key)}
+          />
         )}
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={JournalHeader}
@@ -231,23 +242,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: space.xl,
-  },
-  dayHeader: {
-    paddingHorizontal: space.xl,
-    paddingTop: space.lg,
-    paddingBottom: space.sm,
-    backgroundColor: palette.cream,
-  },
-  dayTitle: {
-    ...type.h3,
-    color: palette.ink,
-    fontWeight: '700',
-  },
-  dayCounts: {
-    ...type.bodyS,
-    color: palette.inkSoft,
-    marginTop: 2,
-    fontWeight: '500',
   },
   emptyListContent: {
     flexGrow: 1,
