@@ -10,7 +10,6 @@ import { HardShadow } from '../SightingCard';
 import { Avatar } from '../social/Avatar';
 import { NotifBell } from '../social/NotifBell';
 import { NotifPrefSheet } from '../social/NotifPrefSheet';
-import { SocialCounts, ConnectionTab } from '../social/SocialCounts';
 import { auth } from '../../config/firebaseConfig';
 import { font, palette, radius, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -240,18 +239,34 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
   // Rendered as the journal SectionList header and atop the dex ScrollView.
   const chrome = (
     <View>
-      {/* Identity */}
+      {/* Identity — the name owns the full row; actions live below it, so a
+          long username never fights a pill for space. */}
       <View style={styles.identity}>
-        <Avatar name={avatarName} seed={uid ?? ''} size={72} />
+        <Avatar name={avatarName} seed={uid ?? ''} size={64} />
         <View style={styles.identityCol}>
           <Text style={styles.name} numberOfLines={1}>{name || 'Birder'}</Text>
           {since && <Text style={styles.since}>Since {since}</Text>}
+          {/* Compact, tappable follower counts (replaces the SocialCounts module) */}
+          <View style={styles.countsRow}>
+            <Pressable hitSlop={6} onPress={() => router.push(`/profile/${uid}/connections?tab=followers`)}>
+              <Text style={styles.countText}>
+                <Text style={styles.countNum}>{followCounts.followers}</Text> followers
+              </Text>
+            </Pressable>
+            <Text style={styles.countDot}>·</Text>
+            <Pressable hitSlop={6} onPress={() => router.push(`/profile/${uid}/connections?tab=following`)}>
+              <Text style={styles.countText}>
+                <Text style={styles.countNum}>{followCounts.following}</Text> following
+              </Text>
+            </Pressable>
+          </View>
         </View>
-        {!isSelf && following && (
-          <NotifBell mode={notifMode} onPress={() => setNotifSheetOpen(true)} />
-        )}
-        {/* Embedded self profile: edit lives in the AppHeader, no pill here */}
-        {!embedded && (
+      </View>
+
+      {/* Actions — follow/edit pill + bell. Embedded self profile: edit lives
+          in the AppHeader's ⋯ menu, no row at all. */}
+      {!embedded && (
+        <View style={styles.actionsRow}>
           <ActionPill
             variant={isSelf ? 'edit' : following ? 'following' : 'follow'}
             busy={followBusy}
@@ -259,15 +274,11 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
               ? () => Alert.alert('Coming soon', 'Profile editing is on the way.')
               : handleFollowToggle}
           />
-        )}
-      </View>
-
-      {/* Social graph — tappable Followers / Following on every profile */}
-      <SocialCounts
-        followers={followCounts.followers}
-        following={followCounts.following}
-        onOpen={(t: ConnectionTab) => router.push(`/profile/${uid}/connections?tab=${t}`)}
-      />
+          {!isSelf && following && (
+            <NotifBell mode={notifMode} onPress={() => setNotifSheetOpen(true)} />
+          )}
+        </View>
+      )}
 
       {/* Stat strip */}
       <View style={styles.statWrap}>
@@ -318,13 +329,11 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
             <Ionicons name="chevron-back" size={20} color={palette.ink} />
             <Text style={styles.navLabel}>{isSelf ? 'POCKET BIRDS' : 'FRIENDS'}</Text>
           </Pressable>
-          {isSelf ? (
+          {isSelf && (
             <Pressable onPress={handleLogout} hitSlop={8} style={styles.logoutPill}>
               <Ionicons name="log-out-outline" size={14} color={palette.crimson} />
               <Text style={styles.logoutText}>Log out</Text>
             </Pressable>
-          ) : (
-            <Ionicons name="ellipsis-horizontal" size={18} color={palette.inkSoft} />
           )}
         </View>
       )}
@@ -517,8 +526,37 @@ const styles = StyleSheet.create({
     fontFamily: font.mono,
     fontSize: 11.5,
     color: palette.inkSoft,
-    marginTop: 7,
+    marginTop: 5,
     letterSpacing: 0.2,
+  },
+
+  // Compact follower / following line
+  countsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  countText: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+  },
+  countNum: {
+    fontFamily: font.bodyBold,
+    fontWeight: '700',
+    color: palette.ink,
+  },
+  countDot: {
+    color: palette.muted,
+  },
+
+  // Actions row under the identity block
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.xl,
+    paddingTop: space.md,
   },
 
   // Action pill
@@ -527,17 +565,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingVertical: 8,
-    paddingHorizontal: 15,
+    paddingVertical: 6,
+    paddingHorizontal: 13,
     borderRadius: radius.pill,
     borderWidth: 2,
     borderColor: palette.ink,
-    minWidth: 86,
     justifyContent: 'center',
   },
   pillNeutral: { backgroundColor: palette.card },
   pillFollow: { backgroundColor: palette.leaf },
-  pillText: { fontFamily: font.display, fontSize: 13, fontWeight: '700', color: palette.ink },
+  pillText: { fontFamily: font.display, fontSize: 12.5, fontWeight: '700', color: palette.ink },
   pillTextFollow: { color: '#fff' },
 
   // Stat strip
