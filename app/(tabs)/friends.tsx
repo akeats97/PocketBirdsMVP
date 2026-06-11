@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, { LinearTransition } from 'react-native-reanimated';
 import { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
 import { auth } from '../../config/firebaseConfig';
@@ -281,9 +282,12 @@ export default function FriendsScreen() {
           </HardShadow>
         </View>
       ) : (
-        <FlatList
+        <Animated.FlatList
           data={rows}
           keyExtractor={(item) => item.uid}
+          // Toggling the period re-sorts the rows; each row springs to its new
+          // spot (same spring as the app's sheet motion) instead of jumping.
+          itemLayoutAnimation={LinearTransition.springify().damping(20).stiffness(160)}
           contentContainerStyle={styles.searchResultsContent}
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
