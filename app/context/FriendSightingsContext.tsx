@@ -4,94 +4,20 @@ import { Alert } from 'react-native';
 import { auth, db } from '../../config/firebaseConfig';
 import { UserProfile, getFollowing } from '../services/userService';
 import { FriendSighting } from '../types';
-import { isReportEntry } from '../../constants/reportTypes';
-import { isUnknownEntry } from '../../constants/unknownBird';
-
-// Still keeping these for initial state/fallback
-const initialFriendSightings: FriendSighting[] = [
-  {
-    id: 'fs-1',
-    birdName: 'Northern Cardinal',
-    location: 'Central Park, NY',
-    date: new Date('2023-06-15'),
-    notes: 'Spotted early morning near the lake',
-    friendName: 'Emma Wilson',
-    syncStatus: 'synced',
-    lastModified: new Date('2023-06-15'),
-  },
-  {
-    id: 'fs-2',
-    birdName: 'Blue Jay',
-    location: 'Prospect Park, Brooklyn',
-    date: new Date('2023-06-12'),
-    notes: 'Very vocal, making quite a racket!',
-    friendName: 'Marcus Johnson',
-    syncStatus: 'synced',
-    lastModified: new Date('2023-06-12'),
-  },
-  {
-    id: 'fs-3',
-    birdName: 'American Robin',
-    location: 'Golden Gate Park, SF',
-    date: new Date('2023-06-10'),
-    friendName: 'Sara Chen',
-    syncStatus: 'synced',
-    lastModified: new Date('2023-06-10'),
-  },
-  {
-    id: 'fs-4',
-    birdName: 'Red-tailed Hawk',
-    location: 'Yellowstone National Park',
-    date: new Date('2023-06-08'),
-    notes: 'Soaring high above the valley',
-    friendName: 'James Rodriguez',
-    syncStatus: 'synced',
-    lastModified: new Date('2023-06-08'),
-  },
-  {
-    id: 'fs-5',
-    birdName: 'Great Blue Heron',
-    location: 'Everglades, FL',
-    date: new Date('2023-06-05'),
-    notes: 'Wading in shallow water',
-    friendName: 'Emma Wilson',
-    syncStatus: 'synced',
-    lastModified: new Date('2023-06-05'),
-  },
-  {
-    id: 'fs-6',
-    birdName: 'Barn Owl',
-    location: 'Yosemite National Park',
-    date: new Date('2023-06-03'),
-    friendName: 'Alex Taylor',
-    syncStatus: 'synced',
-    lastModified: new Date('2023-06-03'),
-  },
-  {
-    id: 'fs-7',
-    birdName: 'American Goldfinch',
-    location: 'Boston Common, MA',
-    date: new Date('2023-05-30'),
-    notes: 'Bright yellow plumage, feeding on thistle',
-    friendName: 'Marcus Johnson',
-    syncStatus: 'synced',
-    lastModified: new Date('2023-05-30'),
-  },
-];
 
 interface FriendSightingsContextType {
   friendSightings: FriendSighting[];
   friends: { id: string; name: string }[];
-  filterByFriend: (friendName: string) => FriendSighting[];
   isLoadingFriends: boolean;
   refreshFriends: () => Promise<void>;
-  isFirstSightingForFriend: (friendName: string, birdName: string, sightingDate: Date) => boolean;
 }
 
 const FriendSightingsContext = createContext<FriendSightingsContextType | undefined>(undefined);
 
 function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
-  const [friendSightings, setFriendSightings] = useState<FriendSighting[]>(initialFriendSightings);
+  // Starts empty — the merged home feed renders this directly, so it must
+  // never contain placeholder data.
+  const [friendSightings, setFriendSightings] = useState<FriendSighting[]>([]);
   const [friends, setFriends] = useState<{ id: string; name: string }[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(true);
   // Holds the active sightings onSnapshot unsubscribe so we can tear it down on
@@ -209,9 +135,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           console.error('Error fetching sightings:', error);
-          // If there's an error, we'll use mock data for now
-          // In production, you should handle this error properly
-          setFriendSightings(initialFriendSightings);
+          // Keep whatever was last loaded; never inject placeholder data.
         }
       );
       
@@ -250,54 +174,13 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
     await fetchFollowing();
   };
 
-  const filterByFriend = (friendName: string): FriendSighting[] => {
-    if (!friendName) return friendSightings;
-    const filtered = friendSightings.filter(sighting => 
-      sighting.friendName.toLowerCase().includes(friendName.toLowerCase())
-    );
-    // Sort filtered results by date, newest first
-    return filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
-  };
-
-  const isFirstSightingForFriend = (friendName: string, birdName: string, sightingDate: Date): boolean => {
-    // Bug Report / Feature Request and Mystery Bird entries aren't real
-    // identified species — never a "1ST".
-    if (isReportEntry(birdName) || isUnknownEntry(birdName)) {
-      return false;
-    }
-
-    // Get all sightings from this friend for this bird species
-    const friendSightingsForSpecies = friendSightings.filter(sighting => 
-      sighting.friendName === friendName && 
-      sighting.birdName.toLowerCase() === birdName.toLowerCase()
-    );
-    
-    // If no sightings found, this shouldn't happen but return false as fallback
-    if (friendSightingsForSpecies.length === 0) {
-      return false;
-    }
-    
-    // Sort by date to find the earliest sighting
-    const sortedSightings = friendSightingsForSpecies.sort((a, b) => a.date.getTime() - b.date.getTime());
-    const firstSighting = sortedSightings[0];
-    
-    // Check if the provided sighting date matches the first sighting date
-    // Using same-day comparison to handle potential time differences
-    const sightingDateStr = sightingDate.toDateString();
-    const firstSightingDateStr = firstSighting.date.toDateString();
-    
-    return sightingDateStr === firstSightingDateStr;
-  };
-
   return (
-    <FriendSightingsContext.Provider 
-      value={{ 
-        friendSightings, 
-        friends, 
-        filterByFriend,
+    <FriendSightingsContext.Provider
+      value={{
+        friendSightings,
+        friends,
         isLoadingFriends,
-        refreshFriends,
-        isFirstSightingForFriend
+        refreshFriends
       }}
     >
       {children}

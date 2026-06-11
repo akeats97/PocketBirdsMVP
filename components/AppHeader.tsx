@@ -70,7 +70,7 @@ export function AppHeader() {
         </TouchableOpacity>
         {me && (
           <TouchableOpacity
-            onPress={() => router.push(`/profile/${me.uid}`)}
+            onPress={() => router.push('/(tabs)/you')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityLabel="Your profile"
           >

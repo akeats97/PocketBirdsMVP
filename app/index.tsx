@@ -1,5 +1,6 @@
 import { Redirect } from 'expo-router';
 
 export default function Index() {
-  return <Redirect href="/(tabs)/add" />;
+  // Land on the Journal feed — the merged you + friends home screen.
+  return <Redirect href="/(tabs)" />;
 }

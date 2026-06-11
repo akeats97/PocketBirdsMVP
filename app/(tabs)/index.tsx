@@ -1,13 +1,24 @@
-import React, { useCallback, useMemo } from 'react';
-import { SectionList, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import FriendSightingCard from '../../components/FriendSightingCard';
 import SightingCard, { HardShadow } from '../../components/SightingCard';
-import { palette, recipes, space, type } from '../../constants/Colors';
+import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
 import { isUnknownEntry } from '../../constants/unknownBird';
 import { isCustomSpecies } from '../../constants/customSpecies';
 import { useActivity } from '../context/ActivityContext';
+import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useSightings } from '../context/SightingsContext';
+import { FriendSighting, Sighting } from '../types';
 import { groupSightingsByDay } from '../utils/groupSightingsByDay';
+
+// The merged feed mixes your sightings with your friends'. Tagged union so the
+// renderer knows which card to draw; both sides extend Sighting, which is all
+// groupSightingsByDay needs.
+type FeedItem =
+  | (Sighting & { kind: 'own' })
+  | (FriendSighting & { kind: 'friend' });
 
 function JournalHeader() {
   const { sightings } = useSightings();
@@ -30,45 +41,69 @@ function JournalHeader() {
     <View style={styles.header}>
       <Text style={styles.title}>Field Journal</Text>
       <Text style={styles.subtitle}>
-        {visible.length} {visible.length === 1 ? 'sighting' : 'sightings'} · {speciesCount} {speciesCount === 1 ? 'species' : 'species'}
+        Yours: {visible.length} {visible.length === 1 ? 'sighting' : 'sightings'} · {speciesCount} {speciesCount === 1 ? 'species' : 'species'}
       </Text>
     </View>
   );
 }
 
-function EmptyState() {
+// Friendless + birdless cold start — the feed's job is to feel alive, so the
+// empty state points at both ways to fill it.
+function EmptyState({ hasFriends, onFindFriends }: { hasFriends: boolean; onFindFriends: () => void }) {
   return (
     <View style={styles.emptyWrap}>
       <HardShadow>
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>Nothing logged yet.</Text>
-          <Text style={styles.emptySubtitle}>
-            Tap the + below when you see something.
+          <Text style={styles.emptyTitle}>
+            {hasFriends ? 'Nothing logged yet.' : "It's quiet out here."}
           </Text>
+          <Text style={styles.emptySubtitle}>
+            {hasFriends
+              ? 'Tap the + below when you see something.'
+              : 'Log your first bird with the + below, and find your friends to bring this feed to life.'}
+          </Text>
+          {!hasFriends && (
+            <HardShadow offset={3} borderRadius={radius.input} style={{ marginTop: space.md }}>
+              <Pressable
+                style={({ pressed }) => [styles.findFriendsButton, pressed && { backgroundColor: palette.ink }]}
+                onPress={onFindFriends}
+              >
+                <Text style={styles.findFriendsButtonText}>Find Friends</Text>
+              </Pressable>
+            </HardShadow>
+          )}
         </View>
       </HardShadow>
     </View>
   );
 }
 
-export default function LogScreen() {
+export default function JournalScreen() {
+  const router = useRouter();
   const { sightings } = useSightings();
+  const { friendSightings, friends, refreshFriends } = useFriendSightings();
   const { unreadBySighting } = useActivity();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Bug Report / Feature Request entries are hidden from the user's own
-  // Field Journal (they still appear in friends' feeds and Firestore).
-  const visible = useMemo(
-    () => sightings.filter((s) => !isReportEntry(s.birdName)),
-    [sightings]
-  );
+  // Bug Report / Feature Request entries are hidden from the feed on both
+  // sides (they live in the Friends tab's Hep view).
+  const feedItems = useMemo<FeedItem[]>(() => {
+    const own: FeedItem[] = sightings
+      .filter((s) => !isReportEntry(s.birdName))
+      .map((s) => ({ ...s, kind: 'own' as const }));
+    const theirs: FeedItem[] = friendSightings
+      .filter((s) => !isReportEntry(s.birdName))
+      .map((s) => ({ ...s, kind: 'friend' as const }));
+    return [...own, ...theirs];
+  }, [sightings, friendSightings]);
 
-  const sections = useMemo(() => groupSightingsByDay(visible), [visible]);
+  const sections = useMemo(() => groupSightingsByDay(feedItems), [feedItems]);
 
-  // Precompute the set of sighting ids that are the "1ST" (first-of-species)
-  // record, once per sightings change, instead of calling isNewSpeciesForUser
-  // (an O(n) filter+sort) for every card on every render. Reproduces that
-  // helper exactly: the earliest sighting of a species by timestamp, plus any
-  // other sighting on that same local day.
+  // Precompute the set of YOUR sighting ids that are the "1ST" (first-of-
+  // species) record, once per sightings change, instead of calling
+  // isNewSpeciesForUser (an O(n) filter+sort) for every card on every render.
+  // Reproduces that helper exactly: the earliest sighting of a species by
+  // timestamp, plus any other sighting on that same local day.
   const newSpeciesIds = useMemo(() => {
     const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
     const earliestTime: Record<string, number> = {};
@@ -88,18 +123,56 @@ export default function LogScreen() {
     return ids;
   }, [sightings]);
 
-  // Stable renderItem: paired with React.memo on SightingCard, unchanged rows
-  // skip re-render. Each card's flags are now O(1) lookups.
+  // Same precompute for friends' "1ST" badges: earliest sighting of a
+  // (friend, species) by timestamp, plus any on that same calendar day.
+  // Reports / Mystery excluded.
+  const firstSightingIds = useMemo(() => {
+    const earliestTime: Record<string, number> = {};
+    const earliestDateStr: Record<string, string> = {};
+    for (const s of friendSightings) {
+      if (isReportEntry(s.birdName) || isUnknownEntry(s.birdName)) continue;
+      const key = s.friendName + ' ' + s.birdName.toLowerCase();
+      const t = s.date.getTime();
+      if (earliestTime[key] === undefined || t < earliestTime[key]) {
+        earliestTime[key] = t;
+        earliestDateStr[key] = s.date.toDateString();
+      }
+    }
+    const ids = new Set<string>();
+    for (const s of friendSightings) {
+      if (isReportEntry(s.birdName) || isUnknownEntry(s.birdName)) continue;
+      const key = s.friendName + ' ' + s.birdName.toLowerCase();
+      if (s.date.toDateString() === earliestDateStr[key]) ids.add(s.id);
+    }
+    return ids;
+  }, [friendSightings]);
+
+  // Stable renderItem: paired with React.memo on both cards, unchanged rows
+  // skip re-render on each live snapshot.
   const renderItem = useCallback(
-    ({ item }: { item: typeof visible[number] }) => (
-      <SightingCard
-        sighting={item}
-        isNewSpecies={!isUnknownEntry(item.birdName) && newSpeciesIds.has(item.id)}
-        unreadCount={unreadBySighting[item.id] ?? 0}
-      />
-    ),
-    [newSpeciesIds, unreadBySighting]
+    ({ item }: { item: FeedItem }) =>
+      item.kind === 'own' ? (
+        <SightingCard
+          sighting={item}
+          isNewSpecies={!isUnknownEntry(item.birdName) && newSpeciesIds.has(item.id)}
+          unreadCount={unreadBySighting[item.id] ?? 0}
+        />
+      ) : (
+        <FriendSightingCard sighting={item} isFirstSighting={firstSightingIds.has(item.id)} />
+      ),
+    [newSpeciesIds, unreadBySighting, firstSightingIds]
   );
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshFriends();
+    } catch (error) {
+      console.error('Error refreshing friends:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -117,9 +190,16 @@ export default function LogScreen() {
         )}
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={JournalHeader}
-        ListEmptyComponent={EmptyState}
+        ListEmptyComponent={
+          <EmptyState
+            hasFriends={friends.length > 0}
+            onFindFriends={() => router.push('/(tabs)/friends')}
+          />
+        }
+        refreshing={isRefreshing}
+        onRefresh={handleRefresh}
         contentContainerStyle={
-          visible.length === 0
+          feedItems.length === 0
             ? styles.emptyListContent
             : styles.listContent
         }
@@ -183,6 +263,7 @@ const styles = StyleSheet.create({
     padding: space.xl,
     alignItems: 'center',
     minWidth: 260,
+    maxWidth: 320,
   },
   emptyTitle: {
     ...type.h2,
@@ -194,5 +275,20 @@ const styles = StyleSheet.create({
     ...type.body,
     color: palette.inkSoft,
     textAlign: 'center',
+  },
+  findFriendsButton: {
+    backgroundColor: palette.leaf,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderRadius: radius.input,
+    ...border.thick,
+    alignItems: 'center',
+  },
+  findFriendsButtonText: {
+    fontFamily: font.display,
+    fontWeight: '700',
+    fontSize: 15,
+    color: '#fff',
+    letterSpacing: -0.3,
   },
 });

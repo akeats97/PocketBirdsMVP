@@ -78,7 +78,8 @@ function AuthenticatedApp() {
           const data = response.notification.request.content.data;
 
           if (data.type === 'friend_sighting') {
-            router.push('/(tabs)/friends');
+            // Friend sightings live in the merged Journal feed (home tab).
+            router.push('/(tabs)');
           } else if (
             (data.type === 'hoot' ||
               data.type === 'comment' ||
@@ -98,7 +99,8 @@ function AuthenticatedApp() {
         if (lastResponse) {
           const data = lastResponse.notification.request.content.data;
           if (data.type === 'friend_sighting') {
-            router.push('/(tabs)/friends');
+            // Friend sightings live in the merged Journal feed (home tab).
+            router.push('/(tabs)');
           } else if (
             (data.type === 'hoot' ||
               data.type === 'comment' ||

@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '../../components/AppHeader';
 import { font, palette, radius } from '../../constants/Colors';
@@ -61,25 +61,15 @@ export default function TabLayout() {
         headerShown: true,
         header: () => <AppHeader />,
       }}
-      initialRouteName="add"
+      initialRouteName="index"
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Log',
+          title: 'Journal',
           tabBarShowLabel: true,
           tabBarIcon: ({ focused, color }) => (
-            <TabPill name={focused ? 'list' : 'list-outline'} color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="add"
-        options={{
-          title: 'Add Sighting',
-          tabBarShowLabel: true,
-          tabBarIcon: ({ focused, color }) => (
-            <TabPill name={focused ? 'add-circle' : 'add-circle-outline'} color={color} focused={focused} />
+            <TabPill name={focused ? 'home' : 'home-outline'} color={color} focused={focused} />
           ),
         }}
       />
@@ -94,6 +84,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="add"
+        options={{
+          title: 'Add Sighting',
+          // Center "Log" button — the app's most important action gets the
+          // celebratory gold circle, raised Strava-style above the bar.
+          tabBarLabel: () => null,
+          tabBarIcon: () => (
+            <View style={styles.logButton}>
+              <Ionicons name="add" size={30} color={palette.ink} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="friends"
         options={{
           title: 'Friends',
@@ -103,6 +107,33 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="you"
+        options={{
+          title: 'You',
+          tabBarShowLabel: true,
+          tabBarIcon: ({ focused, color }) => (
+            <TabPill name={focused ? 'person' : 'person-outline'} color={color} focused={focused} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  // The raised gold Log circle. The tab bar doesn't clip overflow, so the
+  // negative top margin lets it poke above the bar.
+  logButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    marginTop: -18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.sun,
+    borderWidth: 2,
+    borderColor: palette.ink,
+    boxShadow: `2px 2px 0 ${palette.ink}`,
+  },
+});
