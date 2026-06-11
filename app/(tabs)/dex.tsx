@@ -333,15 +333,15 @@ export default function DexScreen() {
                     progress={goalActive ? speciesThisYear / goal.target : 1}
                     center={speciesThisYear}
                   />
+                  <Text style={styles.heroPeriodLabel}>THIS YEAR</Text>
                   <Text style={styles.ringSub}>
-                    {goalActive
-                      ? `of ${goal.target} this year`
-                      : `set a ${new Date().getFullYear()} goal`}
+                    {goalActive ? `of ${goal.target}` : 'tap to set a goal'}
                   </Text>
                 </View>
 
                 {/* All-time stats — species leads, the others support */}
                 <View style={styles.heroStats}>
+                  <Text style={[styles.heroPeriodLabel, styles.heroStatsHeader]}>ALL TIME</Text>
                   <View style={styles.heroStatRow}>
                     <Text style={styles.heroStatLabel}>SPECIES</Text>
                     <Text style={styles.heroStatBig}>{stats.uniqueSpecies}</Text>
@@ -470,9 +470,6 @@ export default function DexScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.goalSheet}>
             <Text style={styles.goalTitle}>Your {new Date().getFullYear()} species goal</Text>
-            <Text style={styles.goalSub}>
-              Pick a number that scares you a little. You can change it anytime, no judgment.
-            </Text>
 
             <View style={styles.goalPresetsRow}>
               {GOAL_PRESETS.map((n) => {
@@ -569,8 +566,22 @@ const styles = StyleSheet.create({
     ...type.bodyS,
     color: palette.cream,
     opacity: 0.7,
-    marginTop: 6,
+    marginTop: 2,
     textAlign: 'center',
+  },
+  // Shared period tag — under the ring and atop the stat column, so the
+  // year-scoped and lifetime numbers can't be confused.
+  heroPeriodLabel: {
+    fontFamily: font.mono,
+    fontSize: 9,
+    color: palette.sun,
+    opacity: 0.9,
+    letterSpacing: 1,
+    marginTop: 8,
+  },
+  heroStatsHeader: {
+    marginTop: 0,
+    marginBottom: 2,
   },
   heroStats: {
     flex: 1,
@@ -625,11 +636,6 @@ const styles = StyleSheet.create({
   goalTitle: {
     ...type.h2,
     color: palette.ink,
-  },
-  goalSub: {
-    ...type.body,
-    color: palette.inkSoft,
-    marginTop: 4,
     marginBottom: space.lg,
   },
   goalPresetsRow: {
