@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, Vibration, View } from 'react-native';
 import SightingForm, { SightingFormValues } from '../../components/SightingForm';
 import { HardShadow } from '../../components/SightingCard';
@@ -7,7 +7,7 @@ import { border, font, palette, radius, space } from '../../constants/Colors';
 import { isCustomSpecies } from '../../constants/customSpecies';
 import { isReportEntry } from '../../constants/reportTypes';
 import GlobalFirstCelebration from '../../components/GlobalFirstCelebration';
-import MilestoneCelebration from '../../components/MilestoneCelebration';
+import MilestoneCelebration, { ConfettiPiece, PIECE_COUNT } from '../../components/MilestoneCelebration';
 import { useSightings } from '../context/SightingsContext';
 import { useWishlist } from '../context/WishlistContext';
 import { isGlobalFirstSpecies } from '../services/sightingService';
@@ -22,6 +22,22 @@ export default function AddSightingScreen() {
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const [globalFirstBird, setGlobalFirstBird] = useState<string | null>(null);
   const slideAnim = useRef(new Animated.Value(-100)).current;
+
+  // Confetti rain over the form for every new species (the milestone and
+  // global-first takeovers bring their own). The key remounts the pieces so
+  // back-to-back new species re-fire the burst.
+  const [confettiKey, setConfettiKey] = useState(0);
+  const confettiTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const rainConfetti = () => {
+    setConfettiKey(k => k + 1);
+    if (confettiTimer.current) clearTimeout(confettiTimer.current);
+    confettiTimer.current = setTimeout(() => setConfettiKey(0), 5000);
+  };
+
+  useEffect(() => () => {
+    if (confettiTimer.current) clearTimeout(confettiTimer.current);
+  }, []);
 
   const playSuccessBanner = () => {
     Animated.sequence([
@@ -101,6 +117,7 @@ export default function AddSightingScreen() {
 
     if (newSpeciesDetected) {
       Vibration.vibrate([0, 150, 100, 150, 100, 300]);
+      rainConfetti();
     }
 
     playSuccessBanner();
@@ -119,6 +136,14 @@ export default function AddSightingScreen() {
         birdName={globalFirstBird}
         onDismiss={() => setGlobalFirstBird(null)}
       />
+
+      {confettiKey > 0 && (
+        <View key={confettiKey} pointerEvents="none" style={styles.confettiLayer}>
+          {Array.from({ length: PIECE_COUNT }).map((_, i) => (
+            <ConfettiPiece key={i} index={i} />
+          ))}
+        </View>
+      )}
 
       {showSuccess && (
         <Animated.View
@@ -159,6 +184,11 @@ export default function AddSightingScreen() {
 }
 
 const styles = StyleSheet.create({
+  confettiLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1001,
+    elevation: 11,
+  },
   successPopup: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 60 : 40,
