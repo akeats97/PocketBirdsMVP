@@ -111,6 +111,9 @@ export default function TabLayout() {
         name="you"
         options={{
           title: 'You',
+          // The shared header grows edit + logout icons on this tab only, so
+          // the profile content doesn't need its own action row.
+          header: () => <AppHeader youActions />,
           tabBarShowLabel: true,
           tabBarIcon: ({ focused, color }) => (
             <TabPill name={focused ? 'person' : 'person-outline'} color={color} focused={focused} />

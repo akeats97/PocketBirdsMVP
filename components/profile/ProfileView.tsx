@@ -250,13 +250,16 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
         {!isSelf && following && (
           <NotifBell mode={notifMode} onPress={() => setNotifSheetOpen(true)} />
         )}
-        <ActionPill
-          variant={isSelf ? 'edit' : following ? 'following' : 'follow'}
-          busy={followBusy}
-          onPress={isSelf
-            ? () => Alert.alert('Coming soon', 'Profile editing is on the way.')
-            : handleFollowToggle}
-        />
+        {/* Embedded self profile: edit lives in the AppHeader, no pill here */}
+        {!embedded && (
+          <ActionPill
+            variant={isSelf ? 'edit' : following ? 'following' : 'follow'}
+            busy={followBusy}
+            onPress={isSelf
+              ? () => Alert.alert('Coming soon', 'Profile editing is on the way.')
+              : handleFollowToggle}
+          />
+        )}
       </View>
 
       {/* Social graph — tappable Followers / Following on every profile */}
@@ -306,25 +309,25 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
 
   return (
     <View style={styles.screen}>
-      {/* Nav row — embedded (You tab) drops the back affordance */}
-      <View style={[styles.navRow, { paddingTop: topInset + space.sm }]}>
-        {embedded ? (
-          <View />
-        ) : (
+      {/* Nav row — only for stack-pushed profiles. The You tab's edit/logout
+          actions live in the AppHeader above it instead, so embedded mode
+          starts straight at the identity block. */}
+      {!embedded && (
+        <View style={[styles.navRow, { paddingTop: topInset + space.sm }]}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={styles.navLeft}>
             <Ionicons name="chevron-back" size={20} color={palette.ink} />
             <Text style={styles.navLabel}>{isSelf ? 'POCKET BIRDS' : 'FRIENDS'}</Text>
           </Pressable>
-        )}
-        {isSelf ? (
-          <Pressable onPress={handleLogout} hitSlop={8} style={styles.logoutPill}>
-            <Ionicons name="log-out-outline" size={14} color={palette.crimson} />
-            <Text style={styles.logoutText}>Log out</Text>
-          </Pressable>
-        ) : (
-          <Ionicons name="ellipsis-horizontal" size={18} color={palette.inkSoft} />
-        )}
-      </View>
+          {isSelf ? (
+            <Pressable onPress={handleLogout} hitSlop={8} style={styles.logoutPill}>
+              <Ionicons name="log-out-outline" size={14} color={palette.crimson} />
+              <Text style={styles.logoutText}>Log out</Text>
+            </Pressable>
+          ) : (
+            <Ionicons name="ellipsis-horizontal" size={18} color={palette.inkSoft} />
+          )}
+        </View>
+      )}
 
       {loading && !profile ? (
         <View style={styles.loadingWrap}>
