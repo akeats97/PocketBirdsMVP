@@ -69,7 +69,7 @@ export default function TabLayout() {
           title: 'Journal',
           tabBarShowLabel: true,
           tabBarIcon: ({ focused, color }) => (
-            <TabPill name={focused ? 'home' : 'home-outline'} color={color} focused={focused} />
+            <TabPill name={focused ? 'list' : 'list-outline'} color={color} focused={focused} />
           ),
         }}
       />
