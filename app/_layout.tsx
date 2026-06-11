@@ -158,6 +158,7 @@ function AuthenticatedApp() {
           <Stack.Screen name="sighting/[id]/edit" options={{ headerShown: false }} />
           <Stack.Screen name="photo" options={{ headerShown: false, animation: 'fade' }} />
           <Stack.Screen name="activity" options={{ headerShown: false }} />
+          <Stack.Screen name="hep" options={{ headerShown: false }} />
           <Stack.Screen name="species/[name]" options={{ headerShown: false }} />
           <Stack.Screen name="profile/[uid]" options={{ headerShown: false }} />
           <Stack.Screen name="profile/[uid]/compare" options={{ headerShown: false }} />

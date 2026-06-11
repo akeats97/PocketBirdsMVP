@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import FriendSightingCard from '../../components/FriendSightingCard';
 import { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
 import { NotifBell } from '../../components/social/NotifBell';
@@ -56,10 +55,6 @@ export default function FriendsScreen() {
   // friends, so the search box is a doorway to any profile.
   const [birderResults, setBirderResults] = useState<SearchResultUser[]>([]);
   const [isSearchingBirders, setIsSearchingBirders] = useState(false);
-  // 'friends' = the flock list with per-birder stats. 'feedback' = all Bug
-  // Report / Feature Request entries, including the user's own (which are
-  // hidden from the Field Journal but surfaced here).
-  const [viewMode, setViewMode] = useState<'friends' | 'feedback'>('friends');
   const [period, setPeriod] = useState<Period>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notificationPrefs, setNotificationPrefs] = useState<Record<string, NotificationMode>>({});
@@ -111,22 +106,6 @@ export default function FriendsScreen() {
     );
     return list;
   }, [friends, friendSightings, ownSightings, period, myName]);
-
-  // The user's own Bug Report / Feature Request entries, shaped like a friend
-  // sighting so they render in the Feedback view. They stay hidden from the
-  // Field Journal; this is the one place a user can see what they submitted.
-  const ownReports = useMemo<FriendSighting[]>(
-    () => ownSightings
-      .filter(s => isReportEntry(s.birdName))
-      .map(s => ({ ...s, friendName: 'You', friendId: auth.currentUser?.uid })),
-    [ownSightings]
-  );
-
-  // Feedback feed: everyone's reports (friends' + own), newest first.
-  const reportItems = useMemo<FriendSighting[]>(() => {
-    const friendReports = friendSightings.filter(s => isReportEntry(s.birdName));
-    return [...ownReports, ...friendReports].sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [friendSightings, ownReports]);
 
   // Search is active (replaces the page with a full-page birder list) the
   // moment there's any query text.
@@ -253,56 +232,6 @@ export default function FriendsScreen() {
           </HardShadow>
         </View>
 
-        {/* View toggle: the flock list vs everyone's feedback. Hidden while
-            searching — search takes over the whole page. */}
-        {!searching && (
-          <View style={styles.feedPillsRow}>
-            <Pressable
-              style={[styles.feedPill, viewMode === 'friends' && styles.feedPillActive]}
-              onPress={() => setViewMode('friends')}
-            >
-              <Ionicons
-                name="people"
-                size={14}
-                color={viewMode === 'friends' ? palette.cream : palette.ink}
-              />
-              <Text style={[styles.feedPillText, viewMode === 'friends' && styles.feedPillTextActive]}>
-                Flock
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.feedPill, viewMode === 'feedback' && styles.feedPillActive]}
-              onPress={() => setViewMode('feedback')}
-            >
-              <Ionicons
-                name="chatbox-ellipses"
-                size={14}
-                color={viewMode === 'feedback' ? palette.cream : palette.ink}
-              />
-              <Text style={[styles.feedPillText, viewMode === 'feedback' && styles.feedPillTextActive]}>
-                Hep
-              </Text>
-            </Pressable>
-
-            {/* Period toggle — scopes the stat columns, all-time by default */}
-            {viewMode === 'friends' && (
-              <View style={styles.periodSegment}>
-                <Pressable
-                  style={[styles.periodBtn, period === 'all' && styles.periodBtnActive]}
-                  onPress={() => setPeriod('all')}
-                >
-                  <Text style={[styles.periodText, period === 'all' && styles.periodTextActive]}>All time</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.periodBtn, period === 'year' && styles.periodBtnActive]}
-                  onPress={() => setPeriod('year')}
-                >
-                  <Text style={[styles.periodText, period === 'year' && styles.periodTextActive]}>This year</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
-        )}
       </View>
 
       {/* Search active → full-page birder results, replacing the page */}
@@ -362,28 +291,6 @@ export default function FriendsScreen() {
           <ActivityIndicator size="large" color={palette.leaf} />
           <Text style={styles.loadingText}>Loading your flock...</Text>
         </View>
-      ) : viewMode === 'feedback' ? (
-        reportItems.length === 0 ? (
-          <View style={styles.emptyState}>
-            <HardShadow>
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>No feedback yet.</Text>
-                <Text style={styles.emptySubtitle}>
-                  Bug reports and feature requests (yours and your friends’) show up here.
-                </Text>
-              </View>
-            </HardShadow>
-          </View>
-        ) : (
-          <FlatList
-            data={reportItems}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => <FriendSightingCard sighting={item} />}
-            contentContainerStyle={styles.listContent}
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-          />
-        )
       ) : friends.length === 0 ? (
         <View style={styles.emptyState}>
           <HardShadow>
@@ -410,6 +317,28 @@ export default function FriendsScreen() {
           contentContainerStyle={styles.searchResultsContent}
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
+          ListHeaderComponent={
+            // The toggle lives with the list it scopes — count left, period right.
+            <View style={styles.listMetaRow}>
+              <Text style={styles.listMetaText}>
+                {rows.length} {rows.length === 1 ? 'BIRDER' : 'BIRDERS'}
+              </Text>
+              <View style={styles.periodSegment}>
+                <Pressable
+                  style={[styles.periodBtn, period === 'all' && styles.periodBtnActive]}
+                  onPress={() => setPeriod('all')}
+                >
+                  <Text style={[styles.periodText, period === 'all' && styles.periodTextActive]}>All time</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.periodBtn, period === 'year' && styles.periodBtnActive]}
+                  onPress={() => setPeriod('year')}
+                >
+                  <Text style={[styles.periodText, period === 'year' && styles.periodTextActive]}>This year</Text>
+                </Pressable>
+              </View>
+            </View>
+          }
           renderItem={({ item }) => (
             <Pressable style={styles.birderRow} onPress={() => goToProfile(item.uid)}>
               <Avatar name={item.avatarName} seed={item.uid} size={48} round />
@@ -471,39 +400,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // View pills + period toggle
-  feedPillsRow: {
+  // List meta row — birder count left, period toggle right
+  listMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
-    marginBottom: space.md,
+    justifyContent: 'space-between',
+    paddingHorizontal: space.xl,
+    paddingTop: space.sm,
+    paddingBottom: space.xs,
   },
-  feedPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: radius.pill,
-    backgroundColor: palette.card,
-    ...border.thick,
-  },
-  feedPillActive: {
-    backgroundColor: palette.ink,
-  },
-  feedPillText: {
-    fontFamily: font.display,
-    fontSize: 13,
-    fontWeight: '700',
-    color: palette.ink,
-    letterSpacing: -0.2,
-  },
-  feedPillTextActive: {
-    color: palette.cream,
+  listMetaText: {
+    ...type.mono,
+    color: palette.inkSoft,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   periodSegment: {
     flexDirection: 'row',
-    marginLeft: 'auto',
     backgroundColor: palette.card,
     ...border.thick,
     borderRadius: radius.pill,
@@ -650,10 +563,6 @@ const styles = StyleSheet.create({
   loadingText: {
     ...type.body,
     color: palette.inkSoft,
-  },
-  listContent: {
-    paddingVertical: space.sm,
-    paddingBottom: space.xl,
   },
   emptyState: {
     flex: 1,
