@@ -109,15 +109,24 @@ export default function DexScreen() {
     };
   }, [realSightings, seenMap]);
 
-  // Distinct countable species observed this calendar year, the hero's
-  // supporting "this year" stat.
-  const speciesThisYear = useMemo(() => {
+  // Species ADDED to the life list this calendar year (first-ever sighting
+  // falls in this year), the hero's "+N this year" stat. Not the same as
+  // species seen this year, which would also count old friends revisited.
+  const newSpeciesThisYear = useMemo(() => {
     const year = new Date().getFullYear();
-    return new Set(
-      realSightings
-        .filter(s => s.date.getFullYear() === year && !isCustomSpecies(s.birdName) && !isUnknownEntry(s.birdName))
-        .map(s => s.birdName.toLowerCase())
-    ).size;
+    const firstSeen = new Map<string, number>();
+    realSightings.forEach(s => {
+      if (isCustomSpecies(s.birdName) || isUnknownEntry(s.birdName)) return;
+      const key = s.birdName.toLowerCase();
+      const t = s.date.getTime();
+      const prev = firstSeen.get(key);
+      if (prev === undefined || t < prev) firstSeen.set(key, t);
+    });
+    let count = 0;
+    firstSeen.forEach(t => {
+      if (new Date(t).getFullYear() === year) count += 1;
+    });
+    return count;
   }, [realSightings]);
 
   const sections = useMemo<Section[]>(() => {
@@ -313,7 +322,7 @@ export default function DexScreen() {
                 <View style={styles.heroStats}>
                   <View style={styles.heroStatRow}>
                     <Text style={styles.heroStatLabel}>THIS YEAR</Text>
-                    <Text style={styles.heroStatSmall}>{speciesThisYear}</Text>
+                    <Text style={styles.heroStatSmall}>+{newSpeciesThisYear}</Text>
                   </View>
                   <View style={styles.heroStatDivider} />
                   <View style={styles.heroStatRow}>
