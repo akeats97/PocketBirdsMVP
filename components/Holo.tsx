@@ -13,7 +13,16 @@ import { holo } from '../constants/Colors';
 // measure with onLayout and draw the <Rect> at the measured size. Each instance
 // also gets a unique gradient id — <Defs> ids are shared across <Svg> elements,
 // so a fixed id collides when several holo tiles render at once.
+//
+// We round the measured size up and paint a 1px BLEED past every edge, offset to
+// overhang. On Android a fractional layout height (e.g. 18.48) gets truncated
+// when the SVG rasterizes, leaving an unpainted sliver at the bottom/right edge
+// (visible on small surfaces like the global-first "1ST" pill). Overdrawing then
+// letting the parent's overflow:'hidden' clip it back guarantees full coverage.
+// Every HoloFill consumer clips, so the bleed is never visible.
 let holoSeq = 0;
+
+const BLEED = 1;
 
 export function HoloFill() {
   const id = React.useMemo(() => `holo${holoSeq++}`, []);
@@ -22,17 +31,19 @@ export function HoloFill() {
     const { width, height } = e.nativeEvent.layout;
     setSize(prev => (prev.w === width && prev.h === height ? prev : { w: width, h: height }));
   };
+  const w = Math.ceil(size.w) + BLEED * 2;
+  const h = Math.ceil(size.h) + BLEED * 2;
   return (
     <View style={StyleSheet.absoluteFill} onLayout={onLayout} pointerEvents="none">
       {size.w > 0 && size.h > 0 && (
-        <Svg width={size.w} height={size.h}>
+        <Svg width={w} height={h} style={{ position: 'absolute', top: -BLEED, left: -BLEED }}>
           <Defs>
             <LinearGradient
               id={id}
-              x1={holo.start.x * size.w}
-              y1={holo.start.y * size.h}
-              x2={holo.end.x * size.w}
-              y2={holo.end.y * size.h}
+              x1={holo.start.x * w}
+              y1={holo.start.y * h}
+              x2={holo.end.x * w}
+              y2={holo.end.y * h}
               gradientUnits="userSpaceOnUse"
             >
               {holo.colors.map((c, i) => (
@@ -40,7 +51,7 @@ export function HoloFill() {
               ))}
             </LinearGradient>
           </Defs>
-          <Rect x={0} y={0} width={size.w} height={size.h} fill={`url(#${id})`} />
+          <Rect x={0} y={0} width={w} height={h} fill={`url(#${id})`} />
         </Svg>
       )}
     </View>
