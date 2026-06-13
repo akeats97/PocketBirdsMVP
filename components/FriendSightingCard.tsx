@@ -14,6 +14,7 @@ import { border, font, palette, radius, recipes, space, type } from '../constant
 import { isMysteryBird } from '../constants/unknownBird';
 import { BottomSheet } from './BottomSheet';
 import { HardShadow } from './SightingCard';
+import { GlobalFirstBadge } from './GlobalFirstBadge';
 import { NeedsIdPill } from './community/NeedsIdPill';
 import { Avatar } from './social/Avatar';
 import { FacePile } from './social/FacePile';
@@ -112,15 +113,17 @@ function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSighti
               <Text style={styles.birdName} numberOfLines={2}>{sighting.birdName}</Text>
             </View>
 
-            {/* TODO (global-first): when sighting.globalFirst is true, show a
-                special "FIRST ON POCKET BIRDS" pill here (design TBD).
-                See WORK_QUEUE Q-3. */}
-            {isFirstSighting && (
+            {/* A verified global-first wears the holo "1ST" globe pill (same as
+                the Dex), which supersedes the coral lifer badge — a global-first
+                is always a personal first too. See WORK_QUEUE Q-3. */}
+            {sighting.globalFirst && sighting.verified ? (
+              <GlobalFirstBadge />
+            ) : isFirstSighting ? (
               <View style={recipes.liferBadge}>
                 <Ionicons name="star" size={9} color="#fff" />
                 <Text style={recipes.liferBadgeText}>1ST</Text>
               </View>
-            )}
+            ) : null}
           </View>
 
           <View style={styles.metaRow}>

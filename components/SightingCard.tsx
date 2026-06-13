@@ -14,6 +14,7 @@ import { Sighting } from '../app/types';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { isMysteryBird } from '../constants/unknownBird';
 import { NeedsIdPill } from './community/NeedsIdPill';
+import { GlobalFirstBadge } from './GlobalFirstBadge';
 import { Owl } from './Owl';
 
 interface SightingCardProps {
@@ -96,16 +97,17 @@ function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardP
               <Text style={styles.birdName} numberOfLines={2}>{sighting.birdName}</Text>
             </View>
 
-            {/* TODO (global-first): when sighting.globalFirst is true, show a
-                special "FIRST ON POCKET BIRDS" pill here (design TBD). The flag
-                already exists on the sighting; only the pill UI is pending.
-                See WORK_QUEUE Q-3. */}
-            {isNewSpecies && (
+            {/* A verified global-first wears the holo "1ST" globe pill (same as
+                the Dex), which supersedes the coral lifer badge — a global-first
+                is always your personal first too. See WORK_QUEUE Q-3. */}
+            {sighting.globalFirst && sighting.verified ? (
+              <GlobalFirstBadge />
+            ) : isNewSpecies ? (
               <View style={recipes.liferBadge}>
                 <Ionicons name="star" size={9} color="#fff" />
                 <Text style={recipes.liferBadgeText}>1ST</Text>
               </View>
-            )}
+            ) : null}
           </View>
 
           <View style={styles.metaRow}>

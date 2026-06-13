@@ -5,7 +5,6 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SightingCard, { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
-import { auth } from '../../config/firebaseConfig';
 import { familyForBird } from '../../constants/birdNames';
 import { font, palette, radius, space } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -29,7 +28,6 @@ export default function SpeciesScreen() {
   const name = Array.isArray(rawName) ? rawName[0] : rawName ?? '';
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const myUid = auth.currentUser?.uid;
 
   const { sightings } = useSightings();
   const { wishlist } = useWishlist();
@@ -70,12 +68,15 @@ export default function SpeciesScreen() {
   useEffect(() => {
     let cancelled = false;
     setLoadingCommunity(true);
-    getCommunityPhotosForSpecies(name, myUid)
+    // Community = every photo of this species from anyone, your own included
+    // (a full gallery, not an others-only split). The "Yours" tab stays your
+    // subset. See WORK_QUEUE Q-13.
+    getCommunityPhotosForSpecies(name)
       .then(photos => { if (!cancelled) setCommunity(photos); })
       .catch(err => { console.error('Failed to load community photos:', err); })
       .finally(() => { if (!cancelled) setLoadingCommunity(false); });
     return () => { cancelled = true; };
-  }, [name, myUid]);
+  }, [name]);
 
   return (
     <View style={styles.screen}>
@@ -177,7 +178,7 @@ function SpeciesTabs({ tab, setTab, community, yours }: {
   );
 }
 
-// ─── Community zone — other birders' photos ──────────────────────────────────
+// ─── Community zone — every birder's photos (yours included) ─────────────────
 function CommunityZone({ photos, loading, onOpen }: {
   photos: CommunityPhoto[]; loading: boolean; onOpen: (p: CommunityPhoto) => void;
 }) {

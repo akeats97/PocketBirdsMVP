@@ -172,10 +172,12 @@ export interface CommunityPhoto {
   date: Date;
 }
 
-// Photos of `birdName` taken by OTHER birders (excludes `excludeUid`, normally
-// the signed-in user). Uses a single equality filter (no composite index
-// needed — there is no birdName+date index) and sorts client-side. Capped at
-// `max` newest. Best effort: throws on failure so the caller can show an error.
+// Photos of `birdName` from every birder. Pass `excludeUid` to drop one
+// contributor (e.g. the signed-in user) — omit it for a full gallery that
+// includes your own photos (WORK_QUEUE Q-13). Uses a single equality filter (no
+// composite index needed — there is no birdName+date index) and sorts
+// client-side. Capped at `max` newest. Best effort: throws on failure so the
+// caller can show an error.
 export async function getCommunityPhotosForSpecies(
   birdName: string,
   excludeUid?: string,

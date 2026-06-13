@@ -133,7 +133,10 @@ Open questions to work through before building:
 
 ## Queued (June 6 2026)
 
-### Q-1 — Profile icon in the top-right header → your own profile; move logout off the main pages — FEATURE
+### Q-1 — Profile icon in the top-right header → your own profile; move logout off the main pages — FEATURE ✅ DONE (shipped via the Jun 11 2026 You-tab nav restructure)
+
+Shipped differently than originally specced: the Strava-style nav restructure replaced the header-avatar idea with a dedicated **You** tab (own profile), and logout moved into the You tab's ⋯ overflow menu (Edit profile / Hep / Log out). Net effect Alex asked for — logout off the main pages, profile one tap away — was achieved. Original write-up kept below.
+
 
 Now that profiles exist (`app/profile/[uid].tsx`), put a small avatar/profile button in the top-right of the main header (next to / replacing part of the current header actions). Tapping it pushes the current user's own profile (`/profile/{auth.currentUser.uid}` — the self variant). **The logout button should move into that flow** (e.g. an action on the self-profile screen, or behind the profile's `•••` overflow) so logout is no longer always visible on the main tab pages. Net effect: the main pages get a cleaner header with just the activity bell + a profile avatar; logout lives one level in, on your own profile. Header is configured in `app/_layout.tsx` (`AuthenticatedApp` → `Stack.Screen name="(tabs)" headerRight`). The self-profile screen currently has a stub **Edit** pill and a `•••` overflow that does nothing yet — the overflow is a natural home for Logout (and later, Edit profile / settings).
 
@@ -141,7 +144,9 @@ Now that profiles exist (`app/profile/[uid].tsx`), put a small avatar/profile bu
 
 Add a notion of a **verified** sighting, gated by trust rules so a log can be marked legit. Alex's initial criteria: **(1) a photo is uploaded**, AND **(2) the species ID is confirmed by at least 1 other user**. Open design questions: who can confirm (any user, or only people you follow / who follow you?), what the confirm UI is (a "confirm ID" action on the sighting detail, distinct from a hoot/comment), how confirmations are stored (a `verifications` subcollection à la hoots, with `verifiedBy`/`verifiedCount` denormalized onto the doc), and how "verified" is surfaced (a badge on the card + Dex). **Ties into global-first (Q-3 / shipped):** consider awarding/keeping the gold global-first only for *verified* first sightings, so an unverified or photo-less log can't permanently claim a species — possibly recompute global-first among verified sightings once verification exists. Relates to UR-4(b) (friends help verify a Mystery Bird ID) — same confirm-an-ID mechanic, so build them together.
 
-### Q-3 — Special "first on Pocket Birds" pill on the sighting card — FEATURE (design pending)
+### Q-3 — Special "first on Pocket Birds" pill on the sighting card — ✅ DONE Jun 13 2026
+
+Ported the Dex tile's holographic globe "1ST" pill onto both `SightingCard` and `FriendSightingCard` via a shared `components/GlobalFirstBadge.tsx` (HoloFill + `globe-outline` + "1ST", matching the Dex `globePill` style). Shown only when `sighting.globalFirst && sighting.verified` — so it appears **retroactively once an admin verifies** the claim, consistent with the Dex (which also gates the gold/holo treatment on `verified`). The pill **supersedes** the coral lifer "1ST" badge (a global-first is always your personal first too, so it'd otherwise be two "1ST"s). Original write-up below.
 
 The **global-first** feature shipped Jun 6 2026: when a user logs a species nobody on PocketBirds has ever logged, it's flagged `sighting.globalFirst = true` (set at log time via `isGlobalFirstSpecies()` in `sightingService.ts`), it fires the gold `GlobalFirstCelebration` popup ("First birder on Pocket Birds to log this species!"), and the Dex tile renders bold gold (`tileGlobalFirst`) instead of green. **Still TODO:** a distinct pill/badge on the sighting card itself (own `SightingCard` + `FriendSightingCard`) for global-first sightings — Alex hasn't designed it yet. The flag is already on the sighting, so this is purely the badge UI. TODO comments are in both card components next to the existing "1ST" lifer badge. Decide how it reads vs. the coral "1ST" lifer badge (global-first is rarer — maybe a gold trophy pill). Possible follow-up: also color the profile Bird Dex (`buildUserDex`/`app/profile/[uid].tsx`) gold for global-first, to match the main Dex.
 
@@ -235,9 +240,9 @@ Users still read the bird-name field as **required** ("if I don't know the name 
 
 Scope note: ordering + copy only; don't touch the photo upload pipeline or the Mystery detection logic.
 
-### Q-13 — Species Dex "Community" tab = all photos from everyone (P2)
+### Q-13 — Species Dex "Community" tab = all photos from everyone (P2) — ✅ DONE Jun 13 2026
 
-On the per-species screen (`app/species/[name].tsx`) there's a **Community** tab and a **You** tab. Alex wants the Community tab to show **every photo submitted for that species by anybody** (your own included), i.e. a full gallery, not a friends-only or others-only split. Confirm the visibility model first: PRD says friends-only is non-negotiable, so "everybody" likely means **you + your friends** (not literally all app users) unless Alex explicitly wants public photos here — flag this before widening. Implementation: query sightings for the species with a photo across the visible set, render as a grid; the You tab stays your own subset.
+The Community tab already queried sightings **app-wide** (no friends filter) and only **excluded the signed-in user**; the fix was to stop excluding yourself so it's a full gallery (your photos included). One-line change at the call site in `app/species/[name].tsx` (drop the `excludeUid` arg) + removed the now-unused `myUid`/`auth`; `getCommunityPhotosForSpecies` already handled an omitted `excludeUid`. The "Yours" tab stays your subset. **Note on the PRD friends-only flag from the original write-up:** the existing tab was already all-users, not friends-scoped, so including your own photos doesn't widen visibility (self is the least-private case). If app-wide community photos should actually be narrowed to you+friends, that's a separate decision — not touched here. Original write-up below.
 
 ### Q-14 — Dex bird reference data: range/migration maps, wingspan, ID info (P3, blocked on sourcing)
 
