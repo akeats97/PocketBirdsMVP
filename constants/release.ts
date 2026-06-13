@@ -1,1 +1,1 @@
-export const CURRENT_RELEASE_NAME = 'Plumed-Warbler';
+export const CURRENT_RELEASE_NAME = 'Fairywren';

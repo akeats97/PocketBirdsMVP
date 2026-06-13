@@ -13,6 +13,10 @@ export interface Sighting {
   notes?: string;
   syncStatus: 'synced' | 'pending' | 'error';
   lastModified: Date;
+  // When the log was INPUT (post time), distinct from the observation `date`
+  // the user picks. Drives within-day feed ordering (most recently posted on
+  // top). Falls back to `date` for older docs that predate the field.
+  createdAt?: Date;
   photoUrl?: string;  // URL to the photo in Firebase Storage
   photoPath?: string; // Local path to the photo before upload
   coordinates?: Coordinates;

@@ -7,7 +7,6 @@ import SightingCard, { HardShadow } from '../../components/SightingCard';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
 import { isUnknownEntry } from '../../constants/unknownBird';
-import { isCustomSpecies } from '../../constants/customSpecies';
 import { useActivity } from '../context/ActivityContext';
 import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useSightings } from '../context/SightingsContext';
@@ -23,28 +22,9 @@ type FeedItem =
   | (FriendSighting & { kind: 'friend' });
 
 function JournalHeader() {
-  const { sightings } = useSightings();
-  const visible = useMemo(
-    () => sightings.filter((s) => !isReportEntry(s.birdName)),
-    [sightings]
-  );
-  // "Mystery Bird" entries count as sightings but not as a species; custom
-  // easter-egg species (e.g. Kelsey) likewise don't add to the species count.
-  const speciesCount = useMemo(
-    () => new Set(
-      visible
-        .filter((s) => !isUnknownEntry(s.birdName) && !isCustomSpecies(s.birdName))
-        .map((s) => s.birdName)
-    ).size,
-    [visible]
-  );
-
   return (
     <View style={styles.header}>
       <Text style={styles.title}>Field Journal</Text>
-      <Text style={styles.subtitle}>
-        Yours: {visible.length} {visible.length === 1 ? 'sighting' : 'sightings'} · {speciesCount} {speciesCount === 1 ? 'species' : 'species'}
-      </Text>
     </View>
   );
 }
@@ -233,12 +213,6 @@ const styles = StyleSheet.create({
     ...type.h1,
     color: palette.ink,
     fontWeight: '700',
-  },
-  subtitle: {
-    ...type.body,
-    color: palette.inkSoft,
-    marginTop: 4,
-    fontWeight: '500',
   },
   listContent: {
     paddingBottom: space.xl,

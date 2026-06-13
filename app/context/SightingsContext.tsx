@@ -125,6 +125,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
               ...sighting,
               date: new Date(sighting.date),
               lastModified: new Date(sighting.lastModified || sighting.date),
+              createdAt: new Date(sighting.createdAt || sighting.date),
               syncStatus: sighting.syncStatus || 'pending'
             };
             if (sighting.coordinates) {
@@ -435,6 +436,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       id: Date.now().toString(),
       syncStatus: 'pending',
       lastModified: new Date(),
+      createdAt: new Date(),
       ...(milestone !== null ? { milestoneCrossed: milestone } : {}),
     };
     setSightings(prev => [newSighting, ...prev]);

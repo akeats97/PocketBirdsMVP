@@ -7,9 +7,16 @@ export interface DaySection<T extends Sighting = Sighting> {
   key: string; // YYYY-MM-DD in the device's local time
   title: string; // e.g. "Saturday, May 23"
   date: Date; // local start-of-day for the bucket, used for sorting
-  data: T[]; // that day's sightings, reverse-chronological
+  data: T[]; // that day's sightings, most recently posted first
   sightingCount: number;
   speciesCount: number;
+}
+
+// Post time (when the log was input), falling back to the observation date for
+// older sightings that predate the createdAt field. Used to order within a day,
+// newest post first.
+function postedAt(s: Sighting): number {
+  return (s.createdAt ?? s.date).getTime();
 }
 
 // Bucket key from the LOCAL calendar day, so a sighting at 11:55 PM and one
@@ -32,7 +39,7 @@ export function groupSightingsByDay<T extends Sighting>(sightings: T[]): DaySect
 
   const sections: DaySection<T>[] = [];
   for (const [key, items] of buckets) {
-    const data = [...items].sort((a, b) => b.date.getTime() - a.date.getTime());
+    const data = [...items].sort((a, b) => postedAt(b) - postedAt(a));
     const first = data[0].date;
     const date = new Date(first.getFullYear(), first.getMonth(), first.getDate());
     const title = date.toLocaleDateString(undefined, {
