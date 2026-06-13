@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ClearableInput from '../../components/ClearableInput';
 import { HardShadow } from '../../components/SightingCard';
+import { HoloFill, HoloRing } from '../../components/Holo';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
 import { latinFor } from '../../constants/birdLatin';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
@@ -521,8 +522,8 @@ const ACCard = React.memo(function ACCard({
   onToggleWishlist: (name: string) => void;
   onPressSpecies: (name: string) => void;
 }) {
-  const { name, seen, times, hasPhoto, photoUrl, globalFirst: first, wished, mystery, navigable, latin } = bird;
-  const artHeight = first ? 70 : 88;
+  const { name, seen, times, photoUrl, globalFirst: first, wished, mystery, navigable, latin } = bird;
+  const artHeight = 88; // full-height art for first too (no banner anymore)
 
   const art = !seen ? (
     <View style={[styles.art, styles.artUnseen, { height: artHeight }]}>
@@ -531,33 +532,32 @@ const ACCard = React.memo(function ACCard({
   ) : photoUrl ? (
     <Image
       source={{ uri: photoUrl }}
-      style={[styles.art, styles.artPhoto, { height: artHeight, marginTop: first ? 18 : 0 }]}
+      style={[styles.art, styles.artPhoto, { height: artHeight }]}
       resizeMode="cover"
     />
   ) : (
-    <View style={[
-      styles.art,
-      { height: artHeight, marginTop: first ? 18 : 0, backgroundColor: first ? palette.sun : palette.leafSoft },
-    ]}>
-      <Text style={[styles.artInitial, first && styles.artInitialFirst]}>{name.charAt(0)}</Text>
+    <View style={[styles.art, { height: artHeight, backgroundColor: palette.leafSoft }]}>
+      <Text style={styles.artInitial}>{name.charAt(0)}</Text>
     </View>
   );
 
   const body = (
     <>
-      {first && (
-        <View style={styles.firstBanner}>
-          <Ionicons name="trophy" size={9} color={palette.ink} />
-          <Text style={styles.firstBannerText}>1ST EDITION</Text>
-        </View>
-      )}
-
-      {art}
+      <View>
+        {art}
+        {first && (
+          <View style={styles.globePill}>
+            <HoloFill />
+            <Ionicons name="globe-outline" size={9} color={palette.ink} />
+            <Text style={styles.globePillText}>1ST</Text>
+          </View>
+        )}
+      </View>
 
       {!mystery && (
         <Pressable
           onPress={() => onToggleWishlist(name)}
-          style={[styles.starDisc, { top: first ? 24 : 4 }]}
+          style={[styles.starDisc, { top: 4 }]}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityLabel={wished ? `Remove ${name} from wishlist` : `Add ${name} to wishlist`}
         >
@@ -589,7 +589,6 @@ const ACCard = React.memo(function ACCard({
         ) : (
           <Text style={styles.notYet}>NOT YET</Text>
         )}
-        {seen && hasPhoto && <Ionicons name="camera" size={14} color={palette.sun} />}
       </View>
     </>
   );
@@ -606,19 +605,20 @@ const ACCard = React.memo(function ACCard({
     );
   }
 
-  // First edition: gold ring just outside the ink border, then a deeper hard shadow.
+  // Global first: a normal white seen card wearing a holographic ring (just
+  // outside the ink border) plus the globe "1ST" pill on the art. No gold.
   if (first) {
     return (
       <View style={styles.cardSlot}>
-        <HardShadow offset={5} borderRadius={16} style={styles.cardFill}>
-          <View style={styles.firstRing}>
+        <HardShadow offset={3} borderRadius={16} style={styles.cardFill}>
+          <HoloRing radius={16}>
             <Pressable
-              style={[styles.card, styles.cardFirst]}
+              style={[styles.card, styles.cardSeen]}
               onPress={navigable ? () => onPressSpecies(name) : undefined}
             >
               {body}
             </Pressable>
-          </View>
+          </HoloRing>
         </HardShadow>
       </View>
     );
@@ -945,37 +945,27 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(26, 36, 23, 0.3)',
     borderStyle: 'dashed',
   },
-  cardFirst: {
-    backgroundColor: palette.sunSoft,
-    borderWidth: 2,
-    borderColor: palette.ink,
-  },
-  firstRing: {
-    borderRadius: 16,
-    padding: 2.5,
-    backgroundColor: palette.sun,
-  },
-  firstBanner: {
+  // Global-first globe "1ST" pill — holo fill, pinned to the art's top-left.
+  globePill: {
     position: 'absolute',
-    top: -2,
-    left: -2,
-    right: -2,
-    zIndex: 2,
-    paddingVertical: 4,
-    backgroundColor: palette.sun,
-    borderBottomWidth: 2,
-    borderBottomColor: palette.ink,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    top: 6,
+    left: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
+    gap: 3,
+    paddingTop: 3,
+    paddingBottom: 3,
+    paddingLeft: 6,
+    paddingRight: 7,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: palette.ink,
+    overflow: 'hidden',
   },
-  firstBannerText: {
-    fontFamily: font.mono,
-    fontSize: 8,
-    letterSpacing: 1.4,
+  globePillText: {
+    fontFamily: font.bodyBold,
+    fontSize: 9,
+    letterSpacing: 0.5,
     color: palette.ink,
   },
 
@@ -1006,9 +996,6 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     color: palette.ink,
     opacity: 0.85,
-  },
-  artInitialFirst: {
-    fontSize: 32,
   },
 
   // Star disc

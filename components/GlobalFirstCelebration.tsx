@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 import { HardShadow } from './SightingCard';
+import { HoloFill, HoloRing } from './Holo';
 import { font, palette, radius, space } from '../constants/Colors';
 import { ConfettiPiece, PIECE_COUNT } from './MilestoneCelebration';
 
@@ -19,8 +20,8 @@ type Props = {
 const GLOBAL_FIRST_CELEBRATION_ENABLED = false;
 
 // The rarest celebration: the user was the FIRST birder on all of PocketBirds
-// to log this species. A bold gold takeover (distinct from the dark milestone
-// modal) with confetti + a celebratory haptic.
+// to log this species. A clean white card with a holographic outline (the
+// finish reserved for Global First) plus confetti + a celebratory haptic.
 export default function GlobalFirstCelebration({ visible, birdName, onDismiss }: Props) {
   const scaleAnim = useRef(new Animated.Value(0.6)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -47,18 +48,19 @@ export default function GlobalFirstCelebration({ visible, birdName, onDismiss }:
           <ConfettiPiece key={i} index={i} />
         ))}
         <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
-          <HardShadow offset={5} borderRadius={radius.card}>
-            <View style={styles.card}>
-              <View style={styles.eyebrowRow}>
-                <Ionicons name="trophy" size={16} color={palette.ink} />
-                <Text style={styles.eyebrow}>GLOBAL FIRST</Text>
-                <Ionicons name="trophy" size={16} color={palette.ink} />
+          <HardShadow offset={5} borderRadius={20}>
+            <HoloRing radius={20}>
+              <View style={styles.card}>
+                <View style={styles.eyebrowPill}>
+                  <HoloFill />
+                  <Ionicons name="globe-outline" size={11} color={palette.ink} />
+                  <Text style={styles.eyebrow}>GLOBAL FIRST</Text>
+                </View>
+                <Text style={styles.bird}>{birdName}</Text>
+                <Text style={styles.tagline}>You&apos;re the first on Pocket Birds to log it.</Text>
+                <Text style={styles.dismiss}>tap anywhere to keep birding</Text>
               </View>
-              <Text style={styles.bird}>{birdName}</Text>
-              <View style={styles.divider} />
-              <Text style={styles.tagline}>First birder on Pocket Birds to log this species!</Text>
-              <Text style={styles.dismiss}>tap anywhere to keep birding</Text>
-            </View>
+            </HoloRing>
           </HardShadow>
         </Animated.View>
       </Pressable>
@@ -74,62 +76,59 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: space.xl,
   },
-  // Bold GOLD card (vs the milestone modal's dark card) — gold = the trophy /
-  // achievement language, matching the gold trophy on the Dex tiles.
+  // Clean white card with a holographic outline (the HoloRing) — understated to
+  // match the Dex tile; the holo finish carries the rarity, not a loud colour.
   card: {
-    backgroundColor: palette.sun,
-    borderRadius: radius.card,
-    borderWidth: 2,
-    borderColor: palette.ink,
-    paddingVertical: 32,
+    backgroundColor: palette.card,
+    borderRadius: 18,
+    paddingVertical: 30,
     paddingHorizontal: 28,
     alignItems: 'center',
     minWidth: 280,
   },
-  eyebrowRow: {
+  eyebrowPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
+    alignSelf: 'center',
+    gap: 5,
+    paddingTop: 3,
+    paddingBottom: 3,
+    paddingLeft: 8,
+    paddingRight: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: palette.ink,
+    overflow: 'hidden',
+    marginBottom: 14,
   },
   eyebrow: {
     fontFamily: font.bodyBold,
     color: palette.ink,
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 3,
+    fontSize: 10,
+    letterSpacing: 1.5,
   },
   bird: {
     fontFamily: font.displayBlack,
     color: palette.ink,
-    fontSize: 34,
-    fontWeight: '900',
+    fontSize: 30,
     letterSpacing: -1,
     textAlign: 'center',
-    lineHeight: 38,
-  },
-  divider: {
-    width: 60,
-    height: 2,
-    backgroundColor: palette.ink,
-    marginVertical: 18,
-    opacity: 0.5,
+    lineHeight: 34,
   },
   tagline: {
-    fontFamily: font.display,
-    color: palette.ink,
-    fontSize: 17,
-    fontWeight: '700',
+    fontFamily: font.body,
+    color: palette.inkSoft,
+    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 23,
-    maxWidth: 280,
-    letterSpacing: -0.3,
+    lineHeight: 20,
+    maxWidth: 230,
+    marginTop: 12,
   },
   dismiss: {
     fontFamily: font.mono,
-    color: 'rgba(26, 36, 23, 0.55)',
+    color: 'rgba(26, 36, 23, 0.4)',
     fontSize: 10,
-    marginTop: 28,
+    marginTop: 22,
     letterSpacing: 1.5,
   },
 });

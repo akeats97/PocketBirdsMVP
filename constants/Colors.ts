@@ -49,6 +49,17 @@ export const palette = {
   rule:      'rgba(26, 36, 23, 0.08)',
 };
 
+// Holographic finish — RESERVED for Global First (the rarest thing in the app).
+// Used nowhere else, so it carries rarity on its own without colliding with the
+// busy gold accent. Drives the Global First Dex-tile ring + globe pill and the
+// celebration card. Diagonal ~115deg.
+export const holo = {
+  colors: ['#9fe3cf', '#f6c4e2', '#c3d2f6', '#f8ecb0', '#bff0df', '#e2c2f6', '#9fe3cf'] as const,
+  locations: [0, 0.17, 0.34, 0.51, 0.68, 0.85, 1] as const,
+  start: { x: 0, y: 0.15 },
+  end: { x: 1, y: 0.85 },
+};
+
 // Typography
 // Three families. Use the role names below; never reach for a Family Name in
 // a component.
