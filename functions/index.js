@@ -756,3 +756,31 @@ exports.onFollowCreated = onDocumentCreated('following/{followerUid}/following/{
     console.error('Error in onFollowCreated:', error);
   }
 });
+
+// Cold-start helper: when a brand-new account is created, Alex's account
+// auto-follows them. The follow edge below trips onFollowCreated above, which
+// writes the "Alex followed you" activity item (and pushes if they have a token
+// yet — on a fresh signup they usually don't, but the durable activity is the
+// point). Gives a new user a non-empty inbox and a reason to follow back, which
+// is the lightest possible dent in the empty-feed cold start (WORK_QUEUE Q-7).
+// Flip ENABLE_AUTO_FOLLOW to false to turn it off once real cold-start fixes
+// (suggested friends / public posts) land.
+const ENABLE_AUTO_FOLLOW = true;
+const ALEX_UID = 'ZerkNpeAERSwmptlrPeboR5TASs2'; // akeats97@gmail.com — see constants/admin.ts
+
+exports.onUserCreatedAutoFollow = onDocumentCreated('users/{uid}', async (event) => {
+  if (!ENABLE_AUTO_FOLLOW) return;
+  const { uid } = event.params;
+  if (uid === ALEX_UID) return; // never self-follow
+
+  try {
+    // Write the same edge shape the client writes (following/{follower}/following/{followed}).
+    // This is a CREATE under following/{ALEX_UID}, so it triggers onFollowCreated,
+    // not this function — no loop.
+    await admin.firestore()
+      .doc(`following/${ALEX_UID}/following/${uid}`)
+      .set({ timestamp: FieldValue.serverTimestamp() });
+  } catch (error) {
+    console.error('Error in onUserCreatedAutoFollow:', error);
+  }
+});

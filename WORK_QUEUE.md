@@ -172,6 +172,86 @@ Scope it as a deliberate change with dev-client testing on both platforms, not a
 
 ---
 
+## Queued (June 12 2026 — stream-of-consciousness triage)
+
+A batch Alex brain-dumped Jun 12 2026. Themes: the Community ID loop (comment on proposals, credit the identifier, an ID queue), notification reliability, a cold-start auto-follow, two Add/Dex UX tweaks, and a bird-reference-data research task. Cross-refs to existing items noted inline.
+
+**Priority order within this batch:**
+1. **Q-6 (notifications not delivering)** — P0. Trust bug; also the likely reason Mystery Bird proposals "sit there" unaccepted (the owner-push code already exists). Diagnose before anything else.
+2. **Q-7 (auto-follow new accounts)** — P0-cheap. Tiny change, directly attacks the cold-start empty-feed problem.
+3. **Q-8 (comments on proposals)** + **Q-9 (credit the identifier)** — P1. Complete the Community ID social loop.
+4. **Q-10 (helped-ID stat)**, **Q-11 (needs-ID queue)**, **Q-12 (Add photo-first)**, **Q-13 (Community = all photos)** — P2.
+5. **Q-14 (bird reference data)** — P3, blocked on sourcing.
+
+### Q-6 — Some sightings don't fire a push notification (BUG, P0)
+
+**Symptom (Alex, Jun 12 2026):** Vic logged a Chimney Swift and a Red-bellied Woodpecker and Alex got **no push** for either. Not the per-friend-pref filter (Feature 4 isn't shipped; default path pushes everyone). Alex also worried Mystery Bird **proposals** aren't notifying owners — but `onProposalAdded` (`functions/index.js:640`) **already calls `pushSocial(sighting.userId, …)`**, so a missing proposal notification is almost certainly the *same* delivery failure, not a missing feature. So this is one bug: **pushes are silently dropping for some events.**
+
+**Investigate (don't guess):**
+- Are the misses **token-side** (recipient's `expoPushToken` stale/missing/not refreshed) or **send-side** (function errored, or Expo returned a `DeviceNotRegistered` / `MessageRateExceeded` receipt)? The 4-layer pipeline + receipt-checking playbook is in `docs/push-debugging.md` — follow it.
+- Check Cloud Function logs for `onSightingAdded` around the two specific sightings (were they invoked? did the Expo send throw?).
+- **Do we ever read push receipts?** Expo's send returns ticket IDs; delivery failures (incl. `DeviceNotRegistered`) only show up when you poll receipts. If we fire-and-forget, a dead token fails invisibly — strong candidate. Consider adding receipt logging + clearing dead tokens.
+- Confirm token freshness: when does `savePushToken` run, and could Alex's token have rotated without a re-save? (See the avatar-race note in CLAUDE.md for how launch-time `setDoc(merge)` can seed partial docs.)
+
+**Deliverable:** report the actual failure layer first, then the minimal fix. No blind retries.
+
+### Q-7 — Auto-follow every new account from Alex's account (cold-start, P0-cheap) — IMPLEMENTED Jun 12 2026 (pending `firebase deploy`)
+
+**Shipped as `onUserCreatedAutoFollow` in `functions/index.js`:** fires on `users/{uid}` creation, writes the follow edge `following/{ALEX_UID}/following/{uid}` (same shape the client writes). That CREATE trips the existing `onFollowCreated`, which writes the "Alex followed you" activity item + pushes the new user — so no new notification code. Guarded by a top-of-block `ENABLE_AUTO_FOLLOW` flag and skips Alex himself. **Only affects accounts created from now on** (existing users like Victoria/evaloon are NOT retroactively followed — needs a separate one-time backfill if wanted). On a fresh signup the new user usually has no push token yet, so the *push* is skipped but the durable *activity* is still written (the inbox nudge is the real point). **Not yet deployed** — needs `firebase deploy --only functions:onUserCreatedAutoFollow`. Original spec below.
+
+
+
+**Why:** new users land in an empty feed (the PRD cold-start problem; partly mitigated by the Journal's Find Friends CTA per CLAUDE.md). Quick win: on account creation, have **Alex's account auto-follow the new user.** They immediately get an "Alex started following you" activity (Feature 3 push if shipped), which nudges a follow-back → they see Alex's + friends' posts. Not the full fix (suggested-friends / public posts come later) but high-leverage and tiny.
+
+**Design calls to make before building:**
+- **Where:** a Cloud Function on new-user-doc creation is cleanest (server-side, can't be bypassed, works even if signup client dies mid-flow). Alex's UID is a constant the function can hardcode/config.
+- **Direction:** Alex follows *them* (so they get the follow notification + a reason to reciprocate). Confirm we don't also want the reverse (them auto-following Alex) — Alex's wording is one-directional, leave it that way.
+- **Guardrails:** don't auto-follow Alex's own new accounts/test accounts in a loop; skip if the new user *is* Alex. Make it a flag/config so it's easy to turn off once real cold-start fixes land.
+
+**Standalone prompt:**
+> Read `CLAUDE.md` first. Add a Cloud Function (`functions/index.js`) that fires when a new user doc is created and makes **Alex's account auto-follow** the new user (one-directional: Alex → newUser), so the new user gets a "started following you" activity/push and a reason to follow back. Hardcode Alex's UID as a config constant. Skip if the new user is Alex himself. Reuse the existing follow data shape that `userService.ts` writes (investigate it first — write the same doc(s) the app writes when a real follow happens, so counts/listeners stay consistent) and reuse the existing follow-notification path if Feature 3 has shipped. Make it gateable (a top-of-file `const ENABLE_AUTO_FOLLOW`). Don't touch the signup client flow. Report what follow doc shape you wrote.
+
+### Q-8 — Comments on Mystery Bird ID proposals (P1)
+
+Today you can **hoot** a proposal (agree) but not say *why*. Add a lightweight comment thread on each proposal so a friend can add reasoning ("bill's too long for a Downy"). Extends the Community ID feature (UR-4b): proposals live at `sightings/{id}/proposals/{pid}` with a `/hoots/{uid}` subcollection; this adds a parallel `/comments/{cid}` subcollection. UI hangs off the existing proposal cards in `components/community/*` + `app/sighting/[id].tsx`. Mirror the existing sighting-level comment composer/markup if one exists. Notify the proposer when their proposal gets a comment (same `pushSocial` pattern as `onProposalAdded`). Keep it scoped to Mystery Bird proposals (gated on `isMysteryBird`, like the rest of Community ID).
+
+### Q-9 — Credit the identifier on the sighting card ("identified by @user") (P1)
+
+When an owner **accepts** a proposal, surface who called it. On the sighting card / detail: a small "ID'd by @username" (or "verified by @username") line crediting the proposer. The accept flow already sets the species + runs the Dex/milestone/global-first pipeline (UR-4b), so the data needed is just *which proposal won* — denormalize the accepted proposal's `uid`/`username` onto the sighting doc at accept time (e.g. `identifiedBy: { uid, username }`). **Ties into Q-4 (verified sightings):** an accepted-ID is exactly the "species confirmed by another user" half of Alex's verified criteria — consider building the `identifiedBy` stamp and the `verified` badge together. Decide copy/treatment so it reads as warm credit, not a correction of the owner.
+
+### Q-10 — "Helped ID" stat on the profile (P1/P2, depends on Q-9)
+
+Next to the profile's species / sightings / photos counts, add **"Helped ID · N"** — how many sightings this user has identified for others (accepted proposals where `identifiedBy.uid == them`). Needs a durable counter: increment a `helpedIdCount` on the proposer's user doc in the same Cloud Function that handles proposal-accept (where Q-9's `identifiedBy` gets stamped). Surface it in `components/profile/ProfileView.tsx` alongside the existing stat strip. Build after Q-9 (shares the accept-time write).
+
+### Q-11 — Browse sightings that need an ID (the "ID queue", P2)
+
+A surface listing **open Mystery Birds across the app that still need identifying**, so a user can sit down and work through them (Alex thinks this is the fun part). Query: sightings where `isMysteryBird` and not yet resolved (no accepted ID). Sort by newest, or by fewest proposals (so neglected ones surface). **Open question Alex flagged: where does it live?** Candidates: a filter/segment on the Journal, a section on Friends, or its own entry point. Don't build until that's decided — it's a navigation/IA call. Respect friends-only visibility (PRD non-negotiable): scope the queue to your own + friends' Mystery Birds unless we deliberately decide to open it app-wide. **Pairs with Q-9/Q-10** (working the queue is how you earn "helped ID" credit).
+
+### Q-12 — Add Sighting: photo-first ordering + Mystery Bird reassurance copy (P2)
+
+Users still read the bird-name field as **required** ("if I don't know the name I can't log"). Two changes to break that:
+1. **Make the photo the first input field** on the Add screen (`components/SightingForm.tsx`), above the name. Subconscious message: a picture is all you need; the name is optional. (The Mystery Bird `?` entry stays the only way to log nameless — per UR-4a we are NOT adding a visible "couldn't ID it?" affordance — but reordering is a different, allowed nudge.)
+2. **When Mystery Bird is selected, reassure them.** Swap the Save/Log button label or show a one-line note: "Your friends will help ID this" / "The community will help you identify it." Make the Mystery state feel like a feature, not a fallback. Keep it consistent with the existing gold/milestone banner logic so it doesn't fight the global-first/wishlist takeovers.
+
+Scope note: ordering + copy only; don't touch the photo upload pipeline or the Mystery detection logic.
+
+### Q-13 — Species Dex "Community" tab = all photos from everyone (P2)
+
+On the per-species screen (`app/species/[name].tsx`) there's a **Community** tab and a **You** tab. Alex wants the Community tab to show **every photo submitted for that species by anybody** (your own included), i.e. a full gallery, not a friends-only or others-only split. Confirm the visibility model first: PRD says friends-only is non-negotiable, so "everybody" likely means **you + your friends** (not literally all app users) unless Alex explicitly wants public photos here — flag this before widening. Implementation: query sightings for the species with a photo across the visible set, render as a grid; the You tab stays your own subset.
+
+### Q-14 — Dex bird reference data: range/migration maps, wingspan, ID info (P3, blocked on sourcing)
+
+When you tap a species in the Dex, Alex wants real reference content: **seasonal range maps (migration / summer / winter / breeding), regions, wingspan, and ID-helping facts.** Value is high but it's **blocked on data sourcing** — Alex's hard constraint: the data must be **free, online, and commercially licensable** (this app may monetize). This is a research task before any UI.
+
+**Sourcing leads to evaluate (license is the gate, verify each before relying on it):**
+- **Range/distribution maps:** eBird/Macaulay (Cornell) status-and-trends are rich but **not freely commercial** — likely out. **Map of Life (MOL)**, **IUCN Red List range polygons** (already on our roadmap for the conservation strip — see CLAUDE.md IUCN item; check its commercial terms), **GBIF occurrence data** (CC0/CC-BY, commercial-OK, but it's points not curated range maps).
+- **Traits (wingspan, size):** **Wikidata/Wikipedia** (CC0/CC-BY-SA — we already plan a Wikidata dump for IUCN status + Latin names; wingspan/size can ride along), **AVONET** (open trait dataset — check redistribution terms), **Birds of the World** is paywalled/non-commercial — avoid.
+- **Migration/seasonality:** hardest to get cleanly-licensed. May have to derive coarse season bands from GBIF occurrence-by-month rather than ship a polished migration animation v1.
+
+**Recommendation:** don't scope UI yet. First spike: can we assemble (a) wingspan/size + (b) a coarse range/region string + (c) a season hint for our ~North-American species set from **Wikidata + GBIF + IUCN** under licenses that survive commercial use? If yes, that's a static bundled dataset (like `constants/birdNames.ts`), not a runtime API. Report the licensing findings before building. **Bundle the Wikidata fetch with the already-planned IUCN/Latin-name dump** so it's one pass over Wikidata, not three.
+
+---
+
 ## SECURITY — Firestore rules hardened ✅ (DONE Jun 4 2026, commit 5ed3a6e)
 
 **Was:** production Firestore used the default test-mode catch-all `allow read, write: if true` — entire DB publicly readable/writable. Discovered Jun 3 2026 during the Hoot & Comments build; rules were not in the repo.
