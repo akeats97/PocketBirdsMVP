@@ -195,9 +195,9 @@ A batch Alex brain-dumped Jun 12 2026. Themes: the Community ID loop (comment on
 
 **Deliverable:** report the actual failure layer first, then the minimal fix. No blind retries.
 
-### Q-7 — Auto-follow every new account from Alex's account (cold-start, P0-cheap) — IMPLEMENTED Jun 12 2026 (pending `firebase deploy`)
+### Q-7 — Auto-follow every new account from Alex's account (cold-start, P0-cheap) — ✅ DONE Jun 13 2026 (deployed)
 
-**Shipped as `onUserCreatedAutoFollow` in `functions/index.js`:** fires on `users/{uid}` creation, writes the follow edge `following/{ALEX_UID}/following/{uid}` (same shape the client writes). That CREATE trips the existing `onFollowCreated`, which writes the "Alex followed you" activity item + pushes the new user — so no new notification code. Guarded by a top-of-block `ENABLE_AUTO_FOLLOW` flag and skips Alex himself. **Only affects accounts created from now on** (existing users like Victoria/evaloon are NOT retroactively followed — needs a separate one-time backfill if wanted). On a fresh signup the new user usually has no push token yet, so the *push* is skipped but the durable *activity* is still written (the inbox nudge is the real point). **Not yet deployed** — needs `firebase deploy --only functions:onUserCreatedAutoFollow`. Original spec below.
+**Shipped as `onUserCreatedAutoFollow` in `functions/index.js`:** fires on `users/{uid}` creation, writes the follow edge `following/{ALEX_UID}/following/{uid}` (same shape the client writes). That CREATE trips the existing `onFollowCreated`, which writes the "Alex followed you" activity item + pushes the new user — so no new notification code. Guarded by a top-of-block `ENABLE_AUTO_FOLLOW` flag and skips Alex himself. **Only affects accounts created from now on** (existing users like Victoria/evaloon are NOT retroactively followed — needs a separate one-time backfill if wanted). On a fresh signup the new user usually has no push token yet, so the *push* is skipped but the durable *activity* is still written (the inbox nudge is the real point). **Deployed Jun 13 2026** (`firebase deploy --only functions:onUserCreatedAutoFollow`, us-central1). Original spec below.
 
 
 
