@@ -47,12 +47,14 @@ export function buildUserDex(sightings: Sighting[]): DexFamily[] {
     if (!isCountableSpecies(s.birdName)) continue;
     const key = s.birdName.toLowerCase();
     const family = nameToFamily.get(key) ?? 'Other';
+    // Gold global-first only counts once an admin has verified the claim.
+    const verifiedFirst = s.globalFirst === true && s.verified === true;
     const existing = species.get(key);
     if (existing) {
       existing.count += 1;
-      if (s.globalFirst) existing.globalFirst = true;
+      if (verifiedFirst) existing.globalFirst = true;
     } else {
-      species.set(key, { display: s.birdName, count: 1, family, globalFirst: s.globalFirst === true });
+      species.set(key, { display: s.birdName, count: 1, family, globalFirst: verifiedFirst });
     }
   }
 

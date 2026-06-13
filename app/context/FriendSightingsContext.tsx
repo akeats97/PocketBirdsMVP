@@ -109,6 +109,8 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
                 commentCount: data.commentCount ?? 0,
                 recentHooters: data.recentHooters ?? [],
                 topComment: data.topComment ?? undefined,
+                globalFirst: data.globalFirst ?? false,
+                verified: data.verified ?? false,
               };
               if (data.coordinates) {
                 friendSighting.coordinates = {

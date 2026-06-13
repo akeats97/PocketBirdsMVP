@@ -11,6 +11,13 @@ type Props = {
   onDismiss: () => void;
 };
 
+// Temporarily disabled (Jun 12 2026): the gold takeover fires at LOG time, but
+// global-first is moving to a photo + admin-verification model, so celebrating
+// an unverified claim (e.g. a joke "boba" log) is premature. Flip back to true
+// once verification ships and the celebration is wired to fire on verify.
+// See WORK_QUEUE Q-4 / CLAUDE.md global-first notes.
+const GLOBAL_FIRST_CELEBRATION_ENABLED = false;
+
 // The rarest celebration: the user was the FIRST birder on all of PocketBirds
 // to log this species. A bold gold takeover (distinct from the dark milestone
 // modal) with confetti + a celebratory haptic.
@@ -19,7 +26,7 @@ export default function GlobalFirstCelebration({ visible, birdName, onDismiss }:
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!visible || !birdName) {
+    if (!visible || !birdName || !GLOBAL_FIRST_CELEBRATION_ENABLED) {
       scaleAnim.setValue(0.6);
       fadeAnim.setValue(0);
       return;
@@ -31,7 +38,7 @@ export default function GlobalFirstCelebration({ visible, birdName, onDismiss }:
     ]).start();
   }, [visible, birdName]);
 
-  if (!birdName) return null;
+  if (!birdName || !GLOBAL_FIRST_CELEBRATION_ENABLED) return null;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss} statusBarTranslucent>

@@ -2,10 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ClearableInput from '../../components/ClearableInput';
 import { HardShadow } from '../../components/SightingCard';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
+import { latinFor } from '../../constants/birdLatin';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
 import { isUnknownEntry } from '../../constants/unknownBird';
@@ -15,12 +16,23 @@ import { useWishlist } from '../context/WishlistContext';
 
 type FilterMode = 'all' | 'seen' | 'wishlist';
 
-type SeenInfo = { timesSeen: number; lastSeen: string; hasPhoto: boolean; isGlobalFirst: boolean };
-type RowItem = string[];
-type Section = { title: string; data: RowItem[]; familySeen: number; familyTotal: number };
+type SeenInfo = { timesSeen: number; lastSeen: string; hasPhoto: boolean; photoUrl?: string; isGlobalFirst: boolean };
 
-const COLUMNS = 3;
-const TOTAL_SPECIES = 11227; // IOC v15.2
+// One species' card data, pre-resolved for render.
+type VisBird = {
+  name: string;
+  seen: boolean;
+  times: number;
+  hasPhoto: boolean;
+  photoUrl?: string;
+  globalFirst: boolean;
+  wished: boolean;
+  mystery: boolean;
+  navigable: boolean;
+  latin: string;
+};
+type FamView = { family: string; seen: number; total: number; birds: VisBird[] };
+
 const REGIONS_STORAGE_KEY = 'dex.selectedRegions.v1';
 const ALL_REGIONS: RegionCode[] = [...REGION_CODES];
 
@@ -32,11 +44,23 @@ function nextMilestone(count: number): number {
   return Math.ceil((count + 1) / 50) * 50;
 }
 
+function prevMilestone(count: number): number {
+  if (count < 1) return 0;
+  if (count < 5) return 1;
+  if (count < 10) return 5;
+  if (count < 25) return 10;
+  if (count < 50) return 25;
+  return Math.floor(count / 50) * 50;
+}
+
 export default function DexScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<FilterMode>('seen');
   const [selectedRegions, setSelectedRegions] = useState<RegionCode[]>(ALL_REGIONS);
   const [regionsModalOpen, setRegionsModalOpen] = useState(false);
+  // Collapsed families, keyed by family name. Lifted out of the card so the
+  // FlatList can recycle region cards without losing/confusing collapse state.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const { sightings } = useSightings();
   const { wishlist, toggle: toggleWishlist } = useWishlist();
   const router = useRouter();
@@ -70,6 +94,15 @@ export default function DexScreen() {
     );
   };
 
+  const toggleFamily = useCallback((family: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(family)) next.delete(family);
+      else next.add(family);
+      return next;
+    });
+  }, []);
+
   // Exclude Bug Report / Feature Request entries — they aren't real species
   // and shouldn't appear in the Dex or its stats.
   const realSightings = useMemo(
@@ -80,21 +113,26 @@ export default function DexScreen() {
   const seenMap = useMemo(() => {
     const map: { [name: string]: SeenInfo } = {};
     realSightings.forEach(s => {
-      // "Mystery Bird" entries DO get a tile (under "Other") showing how many
+      // "Mystery Bird" entries DO get a card (under "Other") showing how many
       // you've logged, but they're kept out of the species headline count (see
       // `stats` below) since they have no identified species.
       const entry = map[s.birdName] || { timesSeen: 0, lastSeen: '', hasPhoto: false, isGlobalFirst: false };
       entry.timesSeen += 1;
       const d = s.date.toISOString().split('T')[0];
       if (!entry.lastSeen || d > entry.lastSeen) entry.lastSeen = d;
-      if (s.photoUrl) entry.hasPhoto = true;
-      if (s.globalFirst) entry.isGlobalFirst = true;
+      if (s.photoUrl) {
+        entry.hasPhoto = true;
+        if (!entry.photoUrl) entry.photoUrl = s.photoUrl;
+      }
+      // Gold "first on Pocket Birds" only shows once an admin has verified the
+      // claim (a photographed, real sighting) — guards against joke logs.
+      if (s.globalFirst && s.verified) entry.isGlobalFirst = true;
       map[s.birdName] = entry;
     });
     return map;
   }, [realSightings]);
 
-  // Custom easter-egg species (e.g. Kelsey) get a Dex tile (via the orphan
+  // Custom easter-egg species (e.g. Kelsey) get a Dex card (via the orphan
   // "Other" path below) but are kept out of the headline species counts.
   const stats = useMemo(() => {
     const realSpeciesNames = Object.keys(seenMap).filter(n => !isCustomSpecies(n) && !isUnknownEntry(n));
@@ -129,23 +167,37 @@ export default function DexScreen() {
     return count;
   }, [realSightings]);
 
-  const sections = useMemo<Section[]>(() => {
+  const families = useMemo<FamView[]>(() => {
     const q = searchQuery.trim().toLowerCase();
     const selSet = new Set(selectedRegions);
-    const out: Section[] = [];
+    const out: FamView[] = [];
     const canonical = new Set<string>();
 
-    // A bird's intrinsic regional fit (independent of whether the user has
-    // seen it). Used for the section header count so the denominator tracks
-    // the selected regions instead of the global species total.
     const inRegion = (regions: RegionCode[]) =>
       regions.length === 0 || regions.some(r => selSet.has(r));
+    const passesRegion = (regions: RegionCode[], visible: boolean) =>
+      visible || inRegion(regions);
 
-    const passesRegion = (regions: RegionCode[], seen: boolean) =>
-      seen || inRegion(regions);
+    const toVisBird = (name: string): VisBird => {
+      const info = seenMap[name];
+      const seen = !!info;
+      const mystery = isUnknownEntry(name);
+      return {
+        name,
+        seen,
+        times: info?.timesSeen ?? 0,
+        hasPhoto: info?.hasPhoto ?? false,
+        photoUrl: info?.photoUrl,
+        globalFirst: info?.isGlobalFirst ?? false,
+        wished: wishlist.has(name),
+        mystery,
+        navigable: !mystery && !isCustomSpecies(name),
+        latin: latinFor(name),
+      };
+    };
 
     for (const fam of birdFamilies) {
-      const filtered: string[] = [];
+      const filtered: VisBird[] = [];
       let familySeen = 0;
       let familyTotal = 0;
       for (const b of fam.birds) {
@@ -158,24 +210,16 @@ export default function DexScreen() {
         }
         if (filter === 'seen' && !seen) continue;
         if (filter === 'wishlist' && !wished) continue;
-        // 'all' shows the region-scoped set; 'seen'/'wishlist' don't need the
-        // region-pass check because seen and wishlisted birds are always
-        // visible regardless of region selection.
         if (filter === 'all' && !passesRegion(b.regions, seen || wished)) continue;
         if (q && !b.name.toLowerCase().includes(q)) continue;
-        filtered.push(b.name);
+        filtered.push(toVisBird(b.name));
       }
       if (filtered.length === 0) continue;
-      const rows: RowItem[] = [];
-      for (let i = 0; i < filtered.length; i += COLUMNS) {
-        rows.push(filtered.slice(i, i + COLUMNS));
-      }
-      out.push({ title: fam.family, data: rows, familySeen, familyTotal });
+      out.push({ family: fam.family, seen: familySeen, total: familyTotal, birds: filtered });
     }
 
     // Orphan names: anything in the user's seen map OR wishlist that isn't in
-    // the canonical IOC list. Show them under "Other" if they pass the active
-    // filter.
+    // the canonical IOC list. Show them under "Other" if they pass the filter.
     const orphanCandidates = new Set<string>();
     for (const name of Object.keys(seenMap)) if (!canonical.has(name)) orphanCandidates.add(name);
     for (const name of wishlist) if (!canonical.has(name)) orphanCandidates.add(name);
@@ -189,14 +233,11 @@ export default function DexScreen() {
         return true;
       })
       .filter((name) => !q || name.toLowerCase().includes(q))
-      .sort();
+      .sort()
+      .map(toVisBird);
 
     if (orphans.length) {
-      const rows: RowItem[] = [];
-      for (let i = 0; i < orphans.length; i += COLUMNS) {
-        rows.push(orphans.slice(i, i + COLUMNS));
-      }
-      out.push({ title: 'Other', data: rows, familySeen: orphans.length, familyTotal: orphans.length });
+      out.push({ family: 'Other', seen: orphans.length, total: orphans.length, birds: orphans });
     }
 
     return out;
@@ -209,169 +250,123 @@ export default function DexScreen() {
         ? 'No regions'
         : `${selectedRegions.length} region${selectedRegions.length === 1 ? '' : 's'}`;
 
-  const renderRow = useCallback(({ item }: { item: RowItem }) => (
-    <View style={styles.row}>
-      {item.map((name) => {
-        const info = seenMap[name];
-        const seen = !!info;
-        const times = info?.timesSeen ?? 0;
-        const hasPhoto = info?.hasPhoto ?? false;
-        const globalFirst = info?.isGlobalFirst ?? false;
-        const wished = wishlist.has(name);
-        // Mystery Bird gets a tile (count of how many you've logged) but can't be
-        // wishlisted — there's no species to wish for.
-        const isMystery = isUnknownEntry(name);
-        // Every real species tile opens its Species Detail screen. Mystery Bird
-        // and custom easter-egg species (e.g. Kelsey) have no species page.
-        const navigable = !isMystery && !isCustomSpecies(name);
-        return (
-          <Pressable
-            key={name}
-            onPress={navigable ? () => router.push({ pathname: '/species/[name]', params: { name } }) : undefined}
-            style={[styles.tile, seen ? styles.tileSeen : styles.tileUnseen]}
-          >
-            {globalFirst ? (
-              // Global first: green "seen" tile + a gold trophy marking that
-              // this user was the first on PocketBirds to log the species.
-              <View style={styles.tileNameRow}>
-                <Ionicons name="trophy" size={11} color={palette.sun} style={styles.tileTrophy} />
-                <Text style={[styles.tileName, styles.tileNameSeen, styles.tileNameFlex]} numberOfLines={3}>
-                  {name}
-                </Text>
+  const onPressSpecies = useCallback(
+    (name: string) => router.push({ pathname: '/species/[name]', params: { name } }),
+    [router]
+  );
+
+  const renderFamily = useCallback(({ item }: { item: FamView }) => (
+    <FamilyRegionCard
+      fam={item}
+      open={!collapsed.has(item.family)}
+      // Under the Seen filter the hidden cards are exactly the unseen species,
+      // so "N still out there" reads literally. Other filters show everything
+      // that qualifies, so there's nothing meaningful left to count.
+      stillOut={filter === 'seen' ? Math.max(0, item.total - item.seen) : 0}
+      onToggle={toggleFamily}
+      onToggleWishlist={toggleWishlist}
+      onPressSpecies={onPressSpecies}
+    />
+  ), [collapsed, filter, toggleFamily, toggleWishlist, onPressSpecies]);
+
+  const keyExtractor = useCallback((item: FamView) => item.family, []);
+
+  const milestoneNext = nextMilestone(stats.uniqueSpecies);
+  const milestonePrev = prevMilestone(stats.uniqueSpecies);
+  const litSegments = Math.max(0, Math.min(10, Math.floor(
+    ((stats.uniqueSpecies - milestonePrev) / Math.max(1, milestoneNext - milestonePrev)) * 10
+  )));
+
+  const header = (
+    <View style={styles.headerSection}>
+      <Text style={styles.title}>Bird Dex</Text>
+
+      <View style={styles.heroWrap}>
+        <HardShadow borderRadius={radius.card}>
+          <View style={styles.hero}>
+            <View style={styles.heroRow}>
+              {/* Lifetime species is THE headline metric */}
+              <View style={styles.lifeCol}>
+                <Text style={styles.lifeNumber}>{stats.uniqueSpecies}</Text>
+                <Text style={styles.lifeLabel}>LIFETIME SPECIES</Text>
               </View>
-            ) : (
-              <Text
-                style={[styles.tileName, seen ? styles.tileNameSeen : styles.tileNameUnseen]}
-                numberOfLines={3}
-              >
-                {name}
-              </Text>
-            )}
-            {!isMystery && (
-              <Pressable
-                onPress={() => toggleWishlist(name)}
-                style={styles.starButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityLabel={wished ? `Remove ${name} from wishlist` : `Add ${name} to wishlist`}
-              >
-                <Ionicons
-                  name={wished ? 'star' : 'star-outline'}
-                  size={18}
-                  color={wished ? palette.sun : palette.muted}
-                />
-              </Pressable>
-            )}
-            {hasPhoto && (
-              <View style={styles.cameraIndicator}>
-                <Ionicons name="camera" size={14} color={palette.sun} />
-              </View>
-            )}
-            {seen && times > 1 && (
-              <View style={styles.countBadge}>
-                <Text style={styles.countBadgeText}>×{times}</Text>
-              </View>
-            )}
-          </Pressable>
-        );
-      })}
-      {item.length < COLUMNS &&
-        Array.from({ length: COLUMNS - item.length }).map((_, i) => (
-          <View key={`spacer-${i}`} style={styles.tileSpacer} />
-        ))}
-    </View>
-  ), [seenMap, wishlist, toggleWishlist, router]);
 
-  const renderSectionHeader = useCallback(({ section }: { section: Section }) => (
-    <View style={styles.sectionHeader}>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionHeaderTitle}>{section.title}</Text>
-        <Text style={styles.sectionHeaderCount}>
-          {section.familySeen}/{section.familyTotal}
-        </Text>
-      </View>
-      <View style={styles.dexBarTrack}>
-        <View
-          style={[
-            styles.dexBarFill,
-            { width: `${Math.min(100, (section.familySeen / Math.max(1, section.familyTotal)) * 100)}%` },
-          ]}
-        />
-      </View>
-    </View>
-  ), []);
-
-  const keyExtractor = useCallback((item: RowItem) => item[0], []);
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.headerSection}>
-        <Text style={styles.title}>Bird Dex</Text>
-
-        <View style={styles.heroWrap}>
-          <HardShadow borderRadius={radius.card}>
-            <View style={styles.hero}>
-              <View style={styles.heroRow}>
-                {/* The life list: lifetime species is THE headline metric */}
-                <View style={styles.lifeCol}>
-                  <Text style={styles.lifeNumber}>{stats.uniqueSpecies}</Text>
-                  <Text style={styles.lifeLabel}>LIFE LIST</Text>
-                  <Text style={styles.lifeSub}>species all time</Text>
+              {/* Supporting stats */}
+              <View style={styles.heroStats}>
+                <View style={styles.heroStatRow}>
+                  <Text style={styles.heroStatLabel}>THIS YEAR</Text>
+                  <Text style={styles.heroStatSmall}>+{newSpeciesThisYear}</Text>
                 </View>
-
-                {/* Supporting stats */}
-                <View style={styles.heroStats}>
-                  <View style={styles.heroStatRow}>
-                    <Text style={styles.heroStatLabel}>THIS YEAR</Text>
-                    <Text style={styles.heroStatSmall}>+{newSpeciesThisYear}</Text>
+                <View style={styles.heroStatDivider} />
+                <View style={styles.heroStatRow}>
+                  <Text style={styles.heroStatLabel}>SIGHTINGS</Text>
+                  <Text style={styles.heroStatSmall}>{stats.totalSightings}</Text>
+                </View>
+                <View style={styles.heroStatDivider} />
+                <View style={styles.heroStatRow}>
+                  <View style={styles.heroStatLabelRow}>
+                    <Ionicons name="camera" size={10} color={palette.sun} style={{ marginRight: 4 }} />
+                    <Text style={styles.heroStatLabel}>PHOTOGRAPHED</Text>
                   </View>
-                  <View style={styles.heroStatDivider} />
-                  <View style={styles.heroStatRow}>
-                    <Text style={styles.heroStatLabel}>SIGHTINGS</Text>
-                    <Text style={styles.heroStatSmall}>{stats.totalSightings}</Text>
-                  </View>
-                  <View style={styles.heroStatRow}>
-                    <View style={styles.heroStatLabelRow}>
-                      <Ionicons name="camera" size={10} color={palette.sun} style={{ marginRight: 4 }} />
-                      <Text style={styles.heroStatLabel}>PHOTOGRAPHED</Text>
-                    </View>
-                    <Text style={styles.heroStatSmall}>{stats.photographedSpecies}</Text>
-                  </View>
+                  <Text style={styles.heroStatSmall}>{stats.photographedSpecies}</Text>
                 </View>
               </View>
             </View>
-          </HardShadow>
-        </View>
 
-        <ClearableInput
-          containerStyle={styles.searchBarWrap}
-          style={styles.searchBar}
-          placeholder="Search birds..."
-          placeholderTextColor={palette.muted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-        >
-          <Chip label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
-          <Chip label="Seen" active={filter === 'seen'} onPress={() => setFilter('seen')} />
-          <Chip label="Wishlist" active={filter === 'wishlist'} onPress={() => setFilter('wishlist')} />
-          <Chip label={`Region · ${regionsLabel}`} active={false} onPress={() => setRegionsModalOpen(true)} />
-        </ScrollView>
+            {/* Milestone track — the shipped 1/5/10/25/every-50 mechanic, not a goal */}
+            <View style={styles.milestoneBlock}>
+              <View style={styles.milestoneHead}>
+                <Text style={styles.milestoneLabel}>NEXT MILESTONE</Text>
+                <Text style={styles.milestoneTarget}>
+                  {milestoneNext} · {Math.max(0, milestoneNext - stats.uniqueSpecies)} TO GO
+                </Text>
+              </View>
+              <View style={styles.milestoneTrack}>
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={[styles.milestoneSeg, i < litSegments && styles.milestoneSegLit]}
+                  />
+                ))}
+                <Ionicons name="trophy" size={13} color={palette.sun} style={{ marginLeft: 4 }} />
+              </View>
+            </View>
+          </View>
+        </HardShadow>
       </View>
 
-      <SectionList
-        sections={sections}
+      <ClearableInput
+        containerStyle={styles.searchBarWrap}
+        style={styles.searchBar}
+        placeholder="Search birds..."
+        placeholderTextColor={palette.muted}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipsRow}
+      >
+        <Chip label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
+        <Chip label={`Seen · ${stats.uniqueSpecies}`} active={filter === 'seen'} onPress={() => setFilter('seen')} />
+        <Chip label={`Wishlist · ${wishlist.size}`} active={filter === 'wishlist'} onPress={() => setFilter('wishlist')} />
+        <Chip label={`Region · ${regionsLabel}`} active={false} onPress={() => setRegionsModalOpen(true)} />
+      </ScrollView>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={families}
         keyExtractor={keyExtractor}
-        renderItem={renderRow}
-        renderSectionHeader={renderSectionHeader}
-        stickySectionHeadersEnabled={false}
+        renderItem={renderFamily}
+        ListHeaderComponent={header}
         windowSize={5}
-        initialNumToRender={12}
-        maxToRenderPerBatch={8}
+        initialNumToRender={6}
+        maxToRenderPerBatch={5}
         updateCellsBatchingPeriod={50}
         contentContainerStyle={styles.listContent}
         ListFooterComponent={
@@ -446,6 +441,204 @@ export default function DexScreen() {
   );
 }
 
+// ── Family region card ──────────────────────────────────────────────────────
+const FamilyRegionCard = React.memo(function FamilyRegionCard({
+  fam, open, stillOut, onToggle, onToggleWishlist, onPressSpecies,
+}: {
+  fam: FamView;
+  open: boolean;
+  stillOut: number;
+  onToggle: (family: string) => void;
+  onToggleWishlist: (name: string) => void;
+  onPressSpecies: (name: string) => void;
+}) {
+  const pct = Math.round((fam.seen / Math.max(1, fam.total)) * 100);
+  const rows: VisBird[][] = [];
+  for (let i = 0; i < fam.birds.length; i += 2) rows.push(fam.birds.slice(i, i + 2));
+
+  return (
+    <View style={styles.familyWrap}>
+      <HardShadow borderRadius={radius.card}>
+        <View style={styles.familyCard}>
+          <Pressable
+            onPress={() => onToggle(fam.family)}
+            style={styles.familyHeader}
+            accessibilityRole="button"
+          >
+            <View style={styles.familyHeaderLeft}>
+              <Ionicons
+                name={open ? 'chevron-down' : 'chevron-forward'}
+                size={15}
+                color={palette.ink}
+              />
+              <Text style={styles.familyName} numberOfLines={1}>{fam.family}</Text>
+            </View>
+            <View style={styles.familyCountRow}>
+              <Text style={styles.familySeen}>{fam.seen}</Text>
+              <Text style={styles.familyTotal}>/{fam.total}</Text>
+            </View>
+          </Pressable>
+
+          <View style={[styles.progressRow, open ? styles.progressRowOpen : styles.progressRowClosed]}>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${Math.min(100, pct)}%` }]} />
+            </View>
+            <Text style={styles.progressPct}>{pct}%</Text>
+          </View>
+
+          {open && (
+            <View style={styles.cardGrid}>
+              {rows.map((row, ri) => (
+                <View key={ri} style={styles.cardRow}>
+                  {row.map((b) => (
+                    <ACCard
+                      key={b.name}
+                      bird={b}
+                      onToggleWishlist={onToggleWishlist}
+                      onPressSpecies={onPressSpecies}
+                    />
+                  ))}
+                  {row.length < 2 && <View style={styles.cardSlotSpacer} />}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {open && stillOut > 0 && (
+            <Text style={styles.stillOut}>{stillOut} still out there</Text>
+          )}
+        </View>
+      </HardShadow>
+    </View>
+  );
+});
+
+// ── Trading card ────────────────────────────────────────────────────────────
+const ACCard = React.memo(function ACCard({
+  bird, onToggleWishlist, onPressSpecies,
+}: {
+  bird: VisBird;
+  onToggleWishlist: (name: string) => void;
+  onPressSpecies: (name: string) => void;
+}) {
+  const { name, seen, times, hasPhoto, photoUrl, globalFirst: first, wished, mystery, navigable, latin } = bird;
+  const artHeight = first ? 70 : 88;
+
+  const art = !seen ? (
+    <View style={[styles.art, styles.artUnseen, { height: artHeight }]}>
+      <Text style={styles.artQ}>?</Text>
+    </View>
+  ) : photoUrl ? (
+    <Image
+      source={{ uri: photoUrl }}
+      style={[styles.art, styles.artPhoto, { height: artHeight, marginTop: first ? 18 : 0 }]}
+      resizeMode="cover"
+    />
+  ) : (
+    <View style={[
+      styles.art,
+      { height: artHeight, marginTop: first ? 18 : 0, backgroundColor: first ? palette.sun : palette.leafSoft },
+    ]}>
+      <Text style={[styles.artInitial, first && styles.artInitialFirst]}>{name.charAt(0)}</Text>
+    </View>
+  );
+
+  const body = (
+    <>
+      {first && (
+        <View style={styles.firstBanner}>
+          <Ionicons name="trophy" size={9} color={palette.ink} />
+          <Text style={styles.firstBannerText}>1ST EDITION</Text>
+        </View>
+      )}
+
+      {art}
+
+      {!mystery && (
+        <Pressable
+          onPress={() => onToggleWishlist(name)}
+          style={[styles.starDisc, { top: first ? 24 : 4 }]}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel={wished ? `Remove ${name} from wishlist` : `Add ${name} to wishlist`}
+        >
+          <Ionicons
+            name={wished ? 'star' : 'star-outline'}
+            size={13}
+            color={wished ? palette.sun : palette.muted}
+          />
+        </Pressable>
+      )}
+
+      <Text
+        style={[styles.cardName, seen ? styles.cardNameSeen : styles.cardNameUnseen]}
+        numberOfLines={2}
+      >
+        {name}
+      </Text>
+      {latin ? (
+        <Text style={styles.cardLatin} numberOfLines={1}>{latin}</Text>
+      ) : (
+        <View style={styles.cardLatinSpacer} />
+      )}
+
+      <View style={styles.cardFooter}>
+        {seen ? (
+          <View style={styles.loggedPill}>
+            <Text style={styles.loggedPillText}>LOGGED ×{times}</Text>
+          </View>
+        ) : (
+          <Text style={styles.notYet}>NOT YET</Text>
+        )}
+        {seen && hasPhoto && <Ionicons name="camera" size={14} color={palette.sun} />}
+      </View>
+    </>
+  );
+
+  // Unseen ghost slots are flat (dashed border, cream stock — no shadow).
+  if (!seen) {
+    return (
+      <Pressable
+        style={[styles.card, styles.cardGhost]}
+        onPress={navigable ? () => onPressSpecies(name) : undefined}
+      >
+        {body}
+      </Pressable>
+    );
+  }
+
+  // First edition: gold ring just outside the ink border, then a deeper hard shadow.
+  if (first) {
+    return (
+      <View style={styles.cardSlot}>
+        <HardShadow offset={5} borderRadius={16} style={styles.cardFill}>
+          <View style={styles.firstRing}>
+            <Pressable
+              style={[styles.card, styles.cardFirst]}
+              onPress={navigable ? () => onPressSpecies(name) : undefined}
+            >
+              {body}
+            </Pressable>
+          </View>
+        </HardShadow>
+      </View>
+    );
+  }
+
+  // Plain seen card: raised, hard offset shadow.
+  return (
+    <View style={styles.cardSlot}>
+      <HardShadow offset={3} borderRadius={14} style={styles.cardFill}>
+        <Pressable
+          style={[styles.card, styles.cardSeen]}
+          onPress={navigable ? () => onPressSpecies(name) : undefined}
+        >
+          {body}
+        </Pressable>
+      </HardShadow>
+    </View>
+  );
+});
+
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <Pressable
@@ -508,13 +701,8 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     letterSpacing: 1,
     marginTop: 2,
-  },
-  lifeSub: {
-    ...type.bodyS,
-    color: palette.cream,
-    opacity: 0.7,
-    marginTop: 1,
     textAlign: 'center',
+    maxWidth: 78,
   },
   heroStats: {
     flex: 1,
@@ -546,7 +734,47 @@ const styles = StyleSheet.create({
   heroStatDivider: {
     height: 1,
     backgroundColor: 'rgba(250, 246, 234, 0.18)',
-    marginVertical: 2,
+  },
+
+  // Milestone track
+  milestoneBlock: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(250, 246, 234, 0.18)',
+  },
+  milestoneHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 7,
+  },
+  milestoneLabel: {
+    fontFamily: font.mono,
+    fontSize: 9,
+    color: palette.cream,
+    opacity: 0.6,
+    letterSpacing: 1.2,
+  },
+  milestoneTarget: {
+    fontFamily: font.monoBold,
+    fontSize: 10,
+    color: palette.sun,
+    letterSpacing: 0.8,
+  },
+  milestoneTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  milestoneSeg: {
+    flex: 1,
+    height: 10,
+    borderRadius: 3,
+    backgroundColor: 'rgba(250, 246, 234, 0.16)',
+  },
+  milestoneSegLit: {
+    backgroundColor: palette.sun,
   },
 
   // Search
@@ -591,135 +819,265 @@ const styles = StyleSheet.create({
     color: palette.cream,
   },
 
-  // List + section
+  // List
   listContent: {
     paddingBottom: space.xl,
   },
-  sectionHeader: {
-    backgroundColor: palette.cream,
-    borderTopWidth: 1.5,
-    borderBottomWidth: 1.5,
-    borderColor: palette.ink,
-    paddingTop: 20,
-    paddingBottom: 8,
-    paddingHorizontal: space.lg + 2,
+
+  // Family region card
+  familyWrap: {
+    paddingHorizontal: space.xl,
+    marginTop: space.md,
   },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  dexBarTrack: {
-    height: 8,
+  familyCard: {
     backgroundColor: palette.card,
+    borderRadius: radius.card,
+    padding: 14,
+    ...border.thick,
+  },
+  familyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  familyHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  familyName: {
+    fontFamily: font.display,
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    color: palette.ink,
+    flexShrink: 1,
+  },
+  familyCountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  familySeen: {
+    fontFamily: font.displayBlack,
+    fontSize: 22,
+    color: palette.ink,
+    letterSpacing: -0.5,
+  },
+  familyTotal: {
+    fontFamily: font.mono,
+    fontSize: 12,
+    color: palette.inkSoft,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  progressRowOpen: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  progressRowClosed: {
+    marginTop: 10,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 10,
+    backgroundColor: palette.cream,
     borderWidth: 1.5,
     borderColor: palette.ink,
     borderRadius: radius.pill,
     overflow: 'hidden',
   },
-  dexBarFill: {
+  progressFill: {
     height: '100%',
     backgroundColor: palette.leaf,
   },
-  sectionHeaderTitle: {
-    fontFamily: font.display,
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-    color: palette.ink,
-  },
-  sectionHeaderCount: {
-    fontFamily: font.mono,
+  progressPct: {
+    fontFamily: font.monoBold,
     fontSize: 10,
     color: palette.inkSoft,
   },
-
-  // Tile grid
-  row: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 6,
-    paddingHorizontal: 14,
-    marginTop: 6,
+  stillOut: {
+    fontFamily: font.mono,
+    fontSize: 10,
+    letterSpacing: 0.5,
+    color: palette.inkSoft,
+    textAlign: 'center',
+    paddingTop: 12,
   },
-  tile: {
+
+  // Card grid
+  cardGrid: {
+    gap: 12,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  cardSlot: {
     flex: 1,
-    borderRadius: 10,
-    paddingTop: 8,
-    paddingHorizontal: 8,
-    paddingBottom: 7,
+  },
+  cardSlotSpacer: {
+    flex: 1,
+  },
+  cardFill: {
+    flex: 1,
+  },
+
+  // Trading card
+  card: {
+    borderRadius: 14,
+    padding: 8,
+  },
+  cardSeen: {
+    backgroundColor: palette.card,
     borderWidth: 2,
     borderColor: palette.ink,
-    minHeight: 82,
-    justifyContent: 'space-between',
   },
-  tileSeen: {
-    backgroundColor: palette.leafSoft,
-  },
-  tileUnseen: {
-    backgroundColor: palette.card,
-    opacity: 0.78,
-  },
-  tileSpacer: {
+  cardGhost: {
     flex: 1,
+    backgroundColor: palette.cream,
+    borderWidth: 2,
+    borderColor: 'rgba(26, 36, 23, 0.3)',
+    borderStyle: 'dashed',
   },
-  tileName: {
-    fontFamily: font.display,
-    fontSize: 12,
-    lineHeight: 13.2,
-    letterSpacing: -0.3,
-    paddingRight: 22,
+  cardFirst: {
+    backgroundColor: palette.sunSoft,
+    borderWidth: 2,
+    borderColor: palette.ink,
   },
-  // Global-first tiles render the name in a row beside a small gold trophy.
-  tileNameRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingRight: 22,
+  firstRing: {
+    borderRadius: 16,
+    padding: 2.5,
+    backgroundColor: palette.sun,
   },
-  tileTrophy: {
-    marginRight: 3,
-    marginTop: 1,
-  },
-  tileNameFlex: {
-    flex: 1,
-    paddingRight: 0,
-  },
-  starButton: {
+  firstBanner: {
     position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 28,
-    height: 28,
+    top: -2,
+    left: -2,
+    right: -2,
+    zIndex: 2,
+    paddingVertical: 4,
+    backgroundColor: palette.sun,
+    borderBottomWidth: 2,
+    borderBottomColor: palette.ink,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  firstBannerText: {
+    fontFamily: font.mono,
+    fontSize: 8,
+    letterSpacing: 1.4,
+    color: palette.ink,
+  },
+
+  // Art area
+  art: {
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: palette.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  artUnseen: {
+    borderColor: 'rgba(26, 36, 23, 0.25)',
+    borderStyle: 'dashed',
+  },
+  artPhoto: {
+    borderColor: palette.ink,
+  },
+  artQ: {
+    fontFamily: font.mono,
+    fontSize: 26,
+    color: palette.muted,
+  },
+  artInitial: {
+    fontFamily: font.displayBlack,
+    fontSize: 44,
+    letterSpacing: -1,
+    color: palette.ink,
+    opacity: 0.85,
+  },
+  artInitialFirst: {
+    fontSize: 32,
+  },
+
+  // Star disc
+  starDisc: {
+    position: 'absolute',
+    right: 4,
+    zIndex: 3,
+    width: 26,
+    height: 26,
+    borderRadius: radius.pill,
+    backgroundColor: palette.card,
+    borderWidth: 1.5,
+    borderColor: palette.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tileNameSeen: {
+
+  // Card text
+  cardName: {
+    fontFamily: font.display,
+    fontSize: 13,
+    lineHeight: 15,
+    letterSpacing: -0.3,
+    marginTop: 8,
+    minHeight: 30,
+  },
+  cardNameSeen: {
     fontWeight: '700',
     color: palette.ink,
   },
-  tileNameUnseen: {
+  cardNameUnseen: {
     fontWeight: '600',
     color: palette.inkSoft,
   },
-  countBadge: {
-    alignSelf: 'flex-end',
+  cardLatin: {
+    fontFamily: font.mono,
+    fontStyle: 'italic',
+    fontSize: 9,
+    color: palette.muted,
+    marginTop: 2,
+  },
+  cardLatinSpacer: {
+    height: 11,
+    marginTop: 2,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 7,
+    minHeight: 16,
+  },
+  loggedPill: {
     backgroundColor: palette.ink,
     borderRadius: radius.pill,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    marginTop: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
-  countBadgeText: {
+  loggedPillText: {
     fontFamily: font.monoBold,
     fontSize: 9,
+    letterSpacing: 0.5,
     color: palette.cream,
-    letterSpacing: 0.3,
   },
-  cameraIndicator: {
-    position: 'absolute',
-    bottom: 5,
-    left: 6,
+  notYet: {
+    fontFamily: font.mono,
+    fontSize: 9,
+    letterSpacing: 0.8,
+    color: palette.muted,
   },
 
   // Attribution

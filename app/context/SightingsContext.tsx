@@ -3,7 +3,7 @@ import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { auth } from '../../config/firebaseConfig';
-import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase, updateSightingInFirebase } from '../services/sightingService';
+import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase, setSightingGlobalFirstVerified, updateSightingInFirebase } from '../services/sightingService';
 import { uploadPhoto } from '../services/photoService';
 import { isMilestone } from '../constants/milestones';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -45,6 +45,10 @@ interface SightingsContextType {
   // one on PocketBirds had it before). The flag rides the normal sync up to
   // Firestore (the sighting is still 'pending' at this point).
   markGlobalFirst: (birdName: string) => void;
+  // Admin-only: confirm/revoke verification on one of your own sightings (then
+  // the species' global-first holder is recomputed). Writes through to
+  // Firestore; rule-enforced.
+  setGlobalFirstVerified: (sightingId: string, birdName: string, verified: boolean) => Promise<void>;
   // Would logging this species right now be a new species for the user, and
   // would it cross a milestone? Pure detection (no write). Shared by the Add
   // flow and the Community ID accept flow so they can't drift.
@@ -650,6 +654,22 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  // Admin-only: confirm/revoke verification on one of YOUR OWN sightings, then
+  // reflect the species' recomputed global-first holder locally (Option B). The
+  // service returns who now holds the gold for that species; we flip `verified`
+  // on the target and set `globalFirst` on your own sightings of that species to
+  // match (true only on the holder). Friends' docs update via their live feed
+  // snapshot; their profile Dex refreshes on next visit.
+  const setGlobalFirstVerified = async (sightingId: string, birdName: string, verified: boolean) => {
+    const { holderId } = await setSightingGlobalFirstVerified(sightingId, birdName, verified);
+    setSightings(prev => prev.map(s => {
+      let next = s;
+      if (s.id === sightingId) next = { ...next, verified };
+      if (s.birdName === birdName) next = { ...next, globalFirst: next.id === holderId };
+      return next;
+    }));
+  };
+
   const applyCommunityId = (sightingId: string, species: string, milestone: number | null) => {
     setSightings(prev =>
       prev.map(s =>
@@ -690,7 +710,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, updateSighting, deleteSighting, syncSightings, clearLocalData, isNewSpeciesForUser, markGlobalFirst, evaluateNewSpecies, applyCommunityId }}>
+    <SightingsContext.Provider value={{ sightings, lastLocation, addSighting, updateSighting, deleteSighting, syncSightings, clearLocalData, isNewSpeciesForUser, markGlobalFirst, setGlobalFirstVerified, evaluateNewSpecies, applyCommunityId }}>
       {children}
     </SightingsContext.Provider>
   );

@@ -24,9 +24,18 @@ export interface Sighting {
   // True if, at log time, NO other PocketBirds user had ever logged this
   // species — i.e. the logger was the first birder on the whole app to record
   // it. Determined by a one-shot query when the sighting is created (best
-  // effort; a tie between two simultaneous loggers can flag both). Drives the
-  // special Dex tile color + the "first on Pocket Birds" celebration.
+  // effort; a tie between two simultaneous loggers can flag both). This is the
+  // raw CLAIM — the gold "first on Pocket Birds" decoration only renders once
+  // it's also `verified` (see below).
   globalFirst?: boolean;
+
+  // A global-first claim only earns its gold decoration when an admin confirms
+  // it's a real, photographed sighting (guards against joke logs claiming a
+  // species). `verified` gates every global-first render; verifiedBy/At are the
+  // audit trail. Set via the admin-only verify action; rule-enforced.
+  verified?: boolean;
+  verifiedBy?: string;
+  verifiedAt?: Date;
 
   // Social engagement, denormalized onto the sighting doc and maintained
   // server-side by Cloud Functions (see Hoot & Comments data model). Missing

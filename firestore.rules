@@ -13,6 +13,17 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function myUid() { return request.auth.uid; }
 
+    // Admin allowlist (keep in sync with constants/admin.ts). Used to gate the
+    // global-first verification write on the `sightings` collection. Hardcoded
+    // by uid so there's no self-settable flag to escalate against.
+    // [0] Alex (akeats97@gmail.com), [1] Victoria (vmvickymin@gmail.com).
+    function isAdmin() {
+      return isSignedIn() && request.auth.uid in [
+        'ZerkNpeAERSwmptlrPeboR5TASs2',
+        'bvorXp0fC1QmhiUQM4ssoQcsodr1'
+      ];
+    }
+
     // Collection-group read for hoots. HootsContext runs a
     // collectionGroup('hoots') query, and collection-group queries are only
     // authorized by a recursive-wildcard rule — the path-scoped rule nested
@@ -76,7 +87,22 @@ service cloud.firestore {
     match /sightings/{sightingId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.userId == myUid();
-      allow update, delete: if isSignedIn() && resource.data.userId == myUid();
+      // Owner may edit their own sighting, but NOT the verification fields —
+      // those are admin-only, so a user can't self-confirm a sighting (e.g.
+      // verify their own joke log). An admin may touch ANY sighting, but ONLY
+      // the verification + globalFirst fields — never the species, photo, or
+      // anything else. (globalFirst is admin-writable because verifying a
+      // sighting recomputes the species' global-first holder, which can reassign
+      // the gold across users.)
+      allow update: if isSignedIn() && (
+        (resource.data.userId == myUid()
+          && !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['verified', 'verifiedBy', 'verifiedAt']))
+        || (isAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['verified', 'verifiedBy', 'verifiedAt', 'globalFirst']))
+      );
+      allow delete: if isSignedIn() && resource.data.userId == myUid();
 
       function sightingOwner() {
         return get(/databases/$(database)/documents/sightings/$(sightingId)).data.userId;

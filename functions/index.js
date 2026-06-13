@@ -10,7 +10,7 @@
 const {setGlobalOptions} = require("firebase-functions");
 const admin = require('firebase-admin');
 const { Expo } = require('expo-server-sdk');
-const {onDocumentCreated, onDocumentDeleted, onDocumentUpdated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentDeleted, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
 const { FieldValue } = require('firebase-admin/firestore');
 
 // For cost control, you can set the maximum number of containers that can be
@@ -270,6 +270,71 @@ exports.onSightingUpdated = onDocumentUpdated('sightings/{sightingId}', async (e
     }
   } catch (error) {
     console.error('Error in onSightingUpdated function:', error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Global-first attribution (server-side authority)
+// ─────────────────────────────────────────────────────────────────────────
+
+// Recompute which sighting holds the "first on Pocket Birds" gold for a species:
+// the EARLIEST-LOGGED sighting (createdAt, fallback observation date) among the
+// VERIFIED ones. Sets globalFirst=true on that holder and false on every other
+// sighting of the species, so the gold reassigns quietly when an earlier poster
+// is verified later, and clears/reassigns when the holder is unverified or
+// deleted. Idempotent: only the docs whose flag actually flips get written.
+async function recomputeSpeciesGlobalFirst(birdName) {
+  if (!birdName) return;
+  const snap = await admin.firestore()
+    .collection('sightings')
+    .where('birdName', '==', birdName)
+    .get();
+  const docs = snap.docs.map((d) => {
+    const data = d.data();
+    const rank = data.createdAt && data.createdAt.toMillis
+      ? data.createdAt.toMillis()
+      : (data.date && data.date.toMillis ? data.date.toMillis() : Number.MAX_SAFE_INTEGER);
+    return { ref: d.ref, id: d.id, verified: data.verified === true, globalFirst: data.globalFirst === true, rank };
+  });
+  const verified = docs.filter((d) => d.verified).sort((a, b) => a.rank - b.rank);
+  const holderId = verified.length ? verified[0].id : null;
+  await Promise.all(
+    docs
+      .filter((d) => (d.id === holderId) !== d.globalFirst)
+      .map((d) => d.ref.update({ globalFirst: d.id === holderId }))
+  );
+}
+
+// The server-side authority for global-first. Runs on every sighting write so
+// the holder stays correct no matter who triggered the change — including the
+// cases the client can't handle (a non-admin deleting the holder, or editing a
+// verified sighting's species), where reassignment must write to OTHER users'
+// docs. The client still recomputes optimistically on its own verify action for
+// instant feedback; this reconciles everything else.
+exports.onSightingWriteGlobalFirst = onDocumentWritten('sightings/{sightingId}', async (event) => {
+  const before = event.data.before.exists ? event.data.before.data() : null;
+  const after = event.data.after.exists ? event.data.after.data() : null;
+
+  // Loop guard: on a plain update, only react when `verified` or the species
+  // changed. Our own recompute writes touch ONLY globalFirst, so the resulting
+  // update re-enters here, hits this guard, and stops — no recursion.
+  if (before && after) {
+    const verifiedChanged = (before.verified === true) !== (after.verified === true);
+    const speciesChanged = before.birdName !== after.birdName;
+    if (!verifiedChanged && !speciesChanged) return;
+  }
+
+  // Recompute every species this write could have affected: the new species and
+  // (on a species edit or delete) the old one too.
+  const species = new Set();
+  if (before && before.birdName) species.add(before.birdName);
+  if (after && after.birdName) species.add(after.birdName);
+  for (const name of species) {
+    try {
+      await recomputeSpeciesGlobalFirst(name);
+    } catch (error) {
+      console.error('recomputeSpeciesGlobalFirst failed for', name, error);
+    }
   }
 });
 

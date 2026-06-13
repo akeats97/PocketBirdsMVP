@@ -2,12 +2,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHoots } from '../app/context/HootsContext';
 import { setPhotoUri } from '../app/utils/photoViewer';
 import { formatRelativeDate } from '../app/utils/formatSightingDate';
 import { FriendSighting } from '../app/types';
+import { auth } from '../config/firebaseConfig';
+import { isAdminUid } from '../constants/admin';
+import { setSightingGlobalFirstVerified } from '../app/services/sightingService';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { isMysteryBird } from '../constants/unknownBird';
+import { BottomSheet } from './BottomSheet';
 import { HardShadow } from './SightingCard';
 import { NeedsIdPill } from './community/NeedsIdPill';
 import { Avatar } from './social/Avatar';
@@ -43,8 +48,20 @@ function HootSummaryText({
 
 function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSightingCardProps) {
   const [showHootList, setShowHootList] = useState(false);
+  const [verifySheet, setVerifySheet] = useState(false);
   const { hasHooted, hootCount, toggleHoot } = useHoots();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  // Admin-only: long-press a friend's photographed sighting to confirm or revoke
+  // verification (no edit/delete on someone else's post). If it also holds a
+  // global-first claim, verifying lights the gold. The write rides the live
+  // friend-feed snapshot, so no local patch is needed.
+  const canVerify = isAdminUid(auth.currentUser?.uid) && !!sighting.photoUrl && !isMysteryBird(sighting);
+  const handleVerifyToggle = () => {
+    setVerifySheet(false);
+    setSightingGlobalFirstVerified(sighting.id, sighting.birdName, !sighting.verified).catch(() => {});
+  };
 
   const hooted = hasHooted(sighting.id);
   const count = hootCount(sighting);
@@ -67,7 +84,12 @@ function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSighti
           </Pressable>
         )}
 
-        <Pressable style={styles.body} onPress={openDetail}>
+        <Pressable
+          style={styles.body}
+          onPress={openDetail}
+          onLongPress={canVerify ? () => setVerifySheet(true) : undefined}
+          delayLongPress={500}
+        >
           {/* Friend tag — tappable, links to the poster's profile */}
           {!hideTag && (
             <View style={styles.friendTagRow}>
@@ -175,6 +197,50 @@ function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSighti
         visible={showHootList}
         onClose={() => setShowHootList(false)}
       />
+
+      {/* Admin verify sheet — single action, no edit/delete on a friend's post */}
+      <BottomSheet visible={verifySheet} onClose={() => setVerifySheet(false)}>
+        <View style={[styles.verifyWrap, { paddingBottom: insets.bottom + space.sm }]}>
+          <View style={styles.verifyChipRow}>
+            <Text style={styles.verifyChip}>
+              {sighting.birdName} · {sighting.friendName}
+            </Text>
+          </View>
+          <HardShadow offset={4} borderRadius={radius.card}>
+            <View style={styles.verifyCard}>
+              <Pressable
+                style={({ pressed }) => [styles.verifyRow, pressed && { backgroundColor: palette.sunSoft }]}
+                onPress={handleVerifyToggle}
+              >
+                <View style={styles.verifyIconTile}>
+                  <Ionicons
+                    name={sighting.verified ? 'close-circle' : sighting.globalFirst ? 'trophy' : 'checkmark-circle'}
+                    size={18}
+                    color={palette.ink}
+                  />
+                </View>
+                <View style={styles.verifyRowBody}>
+                  <Text style={styles.verifyRowTitle}>
+                    {sighting.verified ? 'Remove verification' : 'Verify sighting'}
+                  </Text>
+                  <Text style={styles.verifyRowSub}>
+                    {sighting.verified
+                      ? (sighting.globalFirst ? 'Removes the first-on-Pocket-Birds gold' : 'Take back the verification')
+                      : (sighting.globalFirst ? 'Confirms it, and lights the global-first gold' : 'Confirm this is a real sighting')}
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+          </HardShadow>
+          <View style={styles.verifyCancelWrap}>
+            <HardShadow offset={4} borderRadius={radius.card}>
+              <Pressable style={styles.verifyCancel} onPress={() => setVerifySheet(false)}>
+                <Text style={styles.verifyCancelText}>Cancel</Text>
+              </Pressable>
+            </HardShadow>
+          </View>
+        </View>
+      </BottomSheet>
     </HardShadow>
   );
 }
@@ -328,5 +394,73 @@ const styles = StyleSheet.create({
   previewName: {
     color: palette.ink,
     fontFamily: font.bodyBold,
+  },
+
+  // Admin verify sheet
+  verifyWrap: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    gap: space.md,
+  },
+  verifyChipRow: {
+    alignItems: 'center',
+  },
+  verifyChip: {
+    ...type.bodyS,
+    color: palette.cream,
+    backgroundColor: palette.ink,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  verifyCard: {
+    backgroundColor: palette.card,
+    borderRadius: radius.card,
+    ...border.thick,
+    overflow: 'hidden',
+  },
+  verifyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    padding: space.lg,
+  },
+  verifyIconTile: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.input,
+    backgroundColor: palette.sunSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...border.thick,
+  },
+  verifyRowBody: {
+    flex: 1,
+  },
+  verifyRowTitle: {
+    ...type.bodyL,
+    color: palette.ink,
+    fontWeight: '700',
+  },
+  verifyRowSub: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    marginTop: 1,
+  },
+  verifyCancelWrap: {
+    alignItems: 'stretch',
+  },
+  verifyCancel: {
+    backgroundColor: palette.card,
+    borderRadius: radius.card,
+    ...border.thick,
+    paddingVertical: space.md,
+    alignItems: 'center',
+  },
+  verifyCancelText: {
+    ...type.bodyL,
+    color: palette.ink,
+    fontWeight: '700',
   },
 });

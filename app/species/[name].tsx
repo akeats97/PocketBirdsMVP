@@ -47,7 +47,7 @@ export default function SpeciesScreen() {
   const rel: Relationship = useMemo(() => ({
     seen: mine.length > 0,
     count: mine.length,
-    first: mine.some(s => s.globalFirst),
+    first: mine.some(s => s.globalFirst && s.verified),
     wish: wishlist.has(name),
   }), [mine, wishlist, name]);
 

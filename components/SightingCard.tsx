@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { auth } from '../config/firebaseConfig';
+import { isAdminUid } from '../constants/admin';
 import { useSightings } from '../app/context/SightingsContext';
 import { confirmDeleteSighting } from '../app/utils/confirmDeleteSighting';
 import { formatRelativeDate } from '../app/utils/formatSightingDate';
@@ -23,9 +25,15 @@ interface SightingCardProps {
 
 function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardProps) {
   const [isSheetVisible, setIsSheetVisible] = useState(false);
-  const { deleteSighting } = useSightings();
+  const { deleteSighting, setGlobalFirstVerified } = useSightings();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  // Admin-only: any photographed sighting can be confirmed (or its confirmation
+  // revoked) right from the long-press sheet. The photo gate is deliberate
+  // (verification means "a real, pictured sighting"). If the sighting also holds
+  // a global-first claim, verifying it lights the gold.
+  const canVerify = isAdminUid(auth.currentUser?.uid) && !!sighting.photoUrl && !isMysteryBird(sighting);
 
   const photoSource = sighting.photoUrl || sighting.photoPath;
 
@@ -51,6 +59,11 @@ function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardP
   const handleDelete = () => {
     setIsSheetVisible(false);
     confirmDeleteSighting(sighting, deleteSighting);
+  };
+
+  const handleVerifyToggle = () => {
+    setIsSheetVisible(false);
+    setGlobalFirstVerified(sighting.id, sighting.birdName, !sighting.verified).catch(() => {});
   };
 
   return (
@@ -185,6 +198,34 @@ function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardP
 
           <HardShadow offset={4} borderRadius={radius.card}>
             <View style={styles.sheetCard}>
+              {canVerify && (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [styles.sheetRow, pressed && { backgroundColor: palette.sunSoft }]}
+                    onPress={handleVerifyToggle}
+                  >
+                    <View style={[styles.sheetIconTile, { backgroundColor: palette.sunSoft }]}>
+                      <Ionicons
+                        name={sighting.verified ? 'close-circle' : sighting.globalFirst ? 'trophy' : 'checkmark-circle'}
+                        size={18}
+                        color={palette.ink}
+                      />
+                    </View>
+                    <View style={styles.sheetRowBody}>
+                      <Text style={styles.sheetRowTitle}>
+                        {sighting.verified ? 'Remove verification' : 'Verify sighting'}
+                      </Text>
+                      <Text style={styles.sheetRowSub}>
+                        {sighting.verified
+                          ? (sighting.globalFirst ? 'Removes the first-on-Pocket-Birds gold' : 'Take back the verification')
+                          : (sighting.globalFirst ? 'Confirms it, and lights the global-first gold' : 'Confirm this is a real sighting')}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  <View style={styles.sheetDivider} />
+                </>
+              )}
+
               <Pressable
                 style={({ pressed }) => [styles.sheetRow, pressed && { backgroundColor: palette.leafSoft }]}
                 onPress={handleEdit}

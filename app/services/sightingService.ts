@@ -87,6 +87,7 @@ export async function getUserSightingsFromFirebase(): Promise<Sighting[]> {
         recentHooters: data.recentHooters ?? [],
         topComment: data.topComment ?? undefined,
         globalFirst: data.globalFirst ?? false,
+        verified: data.verified ?? false,
       };
       if (data.coordinates) {
         sighting.coordinates = {
@@ -139,6 +140,7 @@ export async function getSightingsByUid(uid: string): Promise<Sighting[]> {
         recentHooters: data.recentHooters ?? [],
         topComment: data.topComment ?? undefined,
         globalFirst: data.globalFirst ?? false,
+        verified: data.verified ?? false,
       };
       if (data.coordinates) {
         sighting.coordinates = {
@@ -251,9 +253,9 @@ export async function updateSightingInFirebase(sighting: Sighting): Promise<void
       photoUrl: sighting.photoUrl || null,
       lastModified: Timestamp.fromDate(sighting.lastModified)
     };
-    if (sighting.globalFirst) {
-      updatePayload.globalFirst = true;
-    }
+    // globalFirst is managed entirely by the verify-time recompute now (Option
+    // B). An owner edit must NOT re-assert it, or a stale local flag could
+    // resurrect a global-first that recompute moved to an earlier poster.
     if (sighting.coordinates) {
       updatePayload.coordinates = {
         latitude: sighting.coordinates.latitude,
@@ -269,6 +271,67 @@ export async function updateSightingInFirebase(sighting: Sighting): Promise<void
     console.error('Error updating sighting in Firebase:', error);
     throw error;
   }
+}
+
+// Log-input time used to rank global-first (createdAt, falling back to the
+// observation date for older docs that predate createdAt). Mirrors the
+// "first = when it was logged, not observed" rule.
+function globalFirstRank(data: any): number {
+  const c = data.createdAt;
+  if (c?.toMillis) return c.toMillis();
+  const d = data.date;
+  if (d?.toMillis) return d.toMillis();
+  return Number.MAX_SAFE_INTEGER;
+}
+
+// Recompute which sighting holds the global-first for a species: the
+// EARLIEST-LOGGED sighting among the VERIFIED ones. Sets globalFirst=true on
+// that holder and false on every other sighting of the species (so the gold
+// reassigns quietly when an earlier poster is verified later, and clears when
+// the holder is unverified). `override` lets the caller fold in a verify it just
+// wrote, dodging a read-after-write race. Returns the new holder id (or null).
+async function recomputeSpeciesGlobalFirst(
+  birdName: string,
+  override?: { id: string; verified: boolean }
+): Promise<{ holderId: string | null }> {
+  const snap = await getDocs(query(collection(db, 'sightings'), where('birdName', '==', birdName)));
+  const docs = snap.docs.map(d => {
+    const data = d.data();
+    const verified = override && d.id === override.id ? override.verified : data.verified === true;
+    return { id: d.id, verified, globalFirst: data.globalFirst === true, rank: globalFirstRank(data) };
+  });
+  const holderId =
+    docs.filter(d => d.verified).sort((a, b) => a.rank - b.rank)[0]?.id ?? null;
+  // Only write the docs whose flag actually flips.
+  await Promise.all(
+    docs
+      .filter(d => (d.id === holderId) !== d.globalFirst)
+      .map(d => updateDoc(doc(db, 'sightings', d.id), { globalFirst: d.id === holderId }))
+  );
+  return { holderId };
+}
+
+// Admin-only: confirm (or revoke) a sighting's verification, then recompute the
+// species' global-first holder (Option B: earliest-logged among verified). The
+// gold reassigns quietly — no notification to anyone who loses it. Unlike the
+// owner-scoped update above, this writes to ANY user's sighting doc; the
+// Firestore rule restricts it to admins and to the verification + globalFirst
+// fields. Returns the species' new global-first holder so callers can reflect
+// it in local state (friends' docs also propagate via the live feed snapshot).
+export async function setSightingGlobalFirstVerified(
+  sightingId: string,
+  birdName: string,
+  verified: boolean
+): Promise<{ holderId: string | null }> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('User must be logged in to verify a sighting');
+  }
+  const sightingRef = doc(db, 'sightings', sightingId);
+  await updateDoc(sightingRef, verified
+    ? { verified: true, verifiedBy: currentUser.uid, verifiedAt: Timestamp.now() }
+    : { verified: false, verifiedBy: null, verifiedAt: null });
+  return recomputeSpeciesGlobalFirst(birdName, { id: sightingId, verified });
 }
 
 // Delete a sighting from Firebase
