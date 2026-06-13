@@ -112,6 +112,9 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
                 topComment: data.topComment ?? undefined,
                 globalFirst: data.globalFirst ?? false,
                 verified: data.verified ?? false,
+                identifiedVia: data.identifiedVia ?? undefined,
+                identifiedBy: data.identifiedBy ?? undefined,
+                identifiedByUsername: data.identifiedByUsername ?? undefined,
               };
               if (data.coordinates) {
                 friendSighting.coordinates = {

@@ -62,7 +62,8 @@ export interface Sighting {
   };
   // Set when a Mystery Bird was resolved by accepting a community proposal.
   identifiedVia?: 'community';
-  identifiedBy?: string;   // uid of the proposer whose ID was accepted
+  identifiedBy?: string;          // uid of the proposer whose ID was accepted
+  identifiedByUsername?: string;  // denormalized at accept time, for the card credit (Q-9)
   identifiedAt?: Date;
 }
 

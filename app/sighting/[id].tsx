@@ -25,6 +25,7 @@ import { HootButton } from '../../components/social/HootButton';
 import { HootListSheet } from '../../components/social/HootListSheet';
 import { AcceptBar } from '../../components/community/AcceptBar';
 import { CommunityIdSection } from '../../components/community/CommunityIdSection';
+import { IdentifiedByLine } from '../../components/community/IdentifiedByLine';
 import { MysteryPhoto } from '../../components/community/MysteryPhoto';
 import { NeedsIdPill } from '../../components/community/NeedsIdPill';
 import { ProposalAcceptedCelebration } from '../../components/community/ProposalAcceptedCelebration';
@@ -395,6 +396,10 @@ export default function SightingDetailScreen() {
             ) : null}
             <Text style={styles.metaText}>{formatRelativeDate(sighting.date)}</Text>
           </View>
+
+          {sighting.identifiedVia === 'community' && (
+            <IdentifiedByLine uid={sighting.identifiedBy} username={sighting.identifiedByUsername} />
+          )}
 
           {sighting.notes ? (
             <Text style={styles.note}>“{sighting.notes}”</Text>

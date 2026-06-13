@@ -195,6 +195,7 @@ export async function acceptProposal(
     birdName: species,
     identifiedVia: 'community',
     identifiedBy: proposal.uid,
+    identifiedByUsername: proposal.username,
     identifiedAt: serverTimestamp(),
     ...(globalFirst ? { globalFirst: true } : {}),
   });

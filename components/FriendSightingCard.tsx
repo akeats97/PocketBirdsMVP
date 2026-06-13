@@ -15,6 +15,7 @@ import { isMysteryBird } from '../constants/unknownBird';
 import { BottomSheet } from './BottomSheet';
 import { HardShadow } from './SightingCard';
 import { GlobalFirstBadge } from './GlobalFirstBadge';
+import { IdentifiedByLine } from './community/IdentifiedByLine';
 import { NeedsIdPill } from './community/NeedsIdPill';
 import { Avatar } from './social/Avatar';
 import { FacePile } from './social/FacePile';
@@ -138,6 +139,10 @@ function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSighti
             ) : null}
             <Text style={styles.metaText}>{formatRelativeDate(sighting.date)}</Text>
           </View>
+
+          {sighting.identifiedVia === 'community' && (
+            <IdentifiedByLine uid={sighting.identifiedBy} username={sighting.identifiedByUsername} />
+          )}
 
           {isMysteryBird(sighting) && (
             <View style={styles.needsIdRow}>

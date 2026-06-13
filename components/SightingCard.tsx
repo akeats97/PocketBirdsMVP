@@ -13,6 +13,7 @@ import { BottomSheet } from './BottomSheet';
 import { Sighting } from '../app/types';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { isMysteryBird } from '../constants/unknownBird';
+import { IdentifiedByLine } from './community/IdentifiedByLine';
 import { NeedsIdPill } from './community/NeedsIdPill';
 import { GlobalFirstBadge } from './GlobalFirstBadge';
 import { Owl } from './Owl';
@@ -126,6 +127,10 @@ function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardP
             ) : null}
             <Text style={styles.metaText}>{formatRelativeDate(sighting.date)}</Text>
           </View>
+
+          {sighting.identifiedVia === 'community' && (
+            <IdentifiedByLine uid={sighting.identifiedBy} username={sighting.identifiedByUsername} />
+          )}
 
           {/* Needs-ID prompt only while there are no proposals yet — once they
               arrive the footer's proposals pill carries the live count. */}

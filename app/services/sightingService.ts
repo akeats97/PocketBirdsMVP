@@ -89,6 +89,9 @@ export async function getUserSightingsFromFirebase(): Promise<Sighting[]> {
         topComment: data.topComment ?? undefined,
         globalFirst: data.globalFirst ?? false,
         verified: data.verified ?? false,
+        identifiedVia: data.identifiedVia ?? undefined,
+        identifiedBy: data.identifiedBy ?? undefined,
+        identifiedByUsername: data.identifiedByUsername ?? undefined,
       };
       if (data.coordinates) {
         sighting.coordinates = {
@@ -143,6 +146,9 @@ export async function getSightingsByUid(uid: string): Promise<Sighting[]> {
         topComment: data.topComment ?? undefined,
         globalFirst: data.globalFirst ?? false,
         verified: data.verified ?? false,
+        identifiedVia: data.identifiedVia ?? undefined,
+        identifiedBy: data.identifiedBy ?? undefined,
+        identifiedByUsername: data.identifiedByUsername ?? undefined,
       };
       if (data.coordinates) {
         sighting.coordinates = {
