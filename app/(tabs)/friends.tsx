@@ -335,14 +335,6 @@ export default function FriendsScreen() {
               <Text style={styles.emptySubtitle}>
                 Search for a friend's username above to start following them.
               </Text>
-              <HardShadow offset={3} borderRadius={radius.input} style={{ marginTop: space.md }}>
-                <Pressable
-                  style={({ pressed }) => [styles.findFriendsButton, pressed && { backgroundColor: palette.ink }]}
-                  onPress={() => searchInputRef.current?.focus()}
-                >
-                  <Text style={styles.findFriendsButtonText}>Find Friends</Text>
-                </Pressable>
-              </HardShadow>
             </View>
           </HardShadow>
         </View>
@@ -755,20 +747,5 @@ const styles = StyleSheet.create({
     ...type.body,
     color: palette.inkSoft,
     textAlign: 'center',
-  },
-  findFriendsButton: {
-    backgroundColor: palette.leaf,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    borderRadius: radius.input,
-    ...border.thick,
-    alignItems: 'center',
-  },
-  findFriendsButtonText: {
-    fontFamily: font.display,
-    fontWeight: '700',
-    fontSize: 15,
-    color: '#fff',
-    letterSpacing: -0.3,
   },
 });

@@ -15,6 +15,7 @@ import { auth } from '../../config/firebaseConfig';
 import { font, palette, radius, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
 import { useSightings } from '../../app/context/SightingsContext';
+import { useFriendSightings } from '../../app/context/FriendSightingsContext';
 import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../../app/services/notificationPrefsService';
 import { followUser, getFollowCounts, getPublicProfile, isFollowing, PublicProfile, unfollowUser } from '../../app/services/userService';
 import { getSightingsByUid } from '../../app/services/sightingService';
@@ -58,6 +59,9 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
   const isSelf = !!uid && uid === myUid;
 
   const { sightings: mySightings, clearLocalData } = useSightings();
+  // Following someone here must rebuild the flock/feed so the Friends tab and
+  // Journal update without a manual pull-to-refresh.
+  const { refreshFriends } = useFriendSightings();
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [theirSightings, setTheirSightings] = useState<Sighting[]>([]);
@@ -213,6 +217,7 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
       if (next) await followUser(uid);
       else await unfollowUser(uid);
       loadFollowCounts(); // their follower count just changed
+      refreshFriends(); // rebuild my flock + feed so other tabs update live
     } catch (err) {
       console.error('Follow toggle failed:', err);
       setFollowing(!next); // revert
