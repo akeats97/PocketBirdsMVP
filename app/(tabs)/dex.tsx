@@ -6,6 +6,7 @@ import { FlatList, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View }
 import ClearableInput from '../../components/ClearableInput';
 import { HardShadow } from '../../components/SightingCard';
 import { HoloFill, HoloRing } from '../../components/Holo';
+import { DexCompactFamily } from '../../components/dex/DexCompactFamily';
 import { birdFamilies, REGION_CODES, REGION_LABELS, RegionCode } from '../../constants/birdNames';
 import { latinFor } from '../../constants/birdLatin';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
@@ -35,7 +36,10 @@ type VisBird = {
 type FamView = { family: string; seen: number; total: number; birds: VisBird[] };
 
 const REGIONS_STORAGE_KEY = 'dex.selectedRegions.v1';
+const VIEW_STORAGE_KEY = 'dex.viewMode.v1';
 const ALL_REGIONS: RegionCode[] = [...REGION_CODES];
+
+type ViewMode = 'grid' | 'compact';
 
 function nextMilestone(count: number): number {
   if (count < 5) return 5;
@@ -62,6 +66,7 @@ export default function DexScreen() {
   // Collapsed families, keyed by family name. Lifted out of the card so the
   // FlatList can recycle region cards without losing/confusing collapse state.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [view, setView] = useState<ViewMode>('grid');
   const { sightings } = useSightings();
   const { wishlist, toggle: toggleWishlist } = useWishlist();
   const router = useRouter();
@@ -82,9 +87,23 @@ export default function DexScreen() {
     })();
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(VIEW_STORAGE_KEY);
+        if (raw === 'compact' || raw === 'grid') setView(raw);
+      } catch {}
+    })();
+  }, []);
+
   const persistRegions = (next: RegionCode[]) => {
     setSelectedRegions(next);
     AsyncStorage.setItem(REGIONS_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+  };
+
+  const persistView = (next: ViewMode) => {
+    setView(next);
+    AsyncStorage.setItem(VIEW_STORAGE_KEY, next).catch(() => {});
   };
 
   const toggleRegion = (code: RegionCode) => {
@@ -270,6 +289,20 @@ export default function DexScreen() {
     />
   ), [collapsed, filter, toggleFamily, toggleWishlist, onPressSpecies]);
 
+  const renderCompactFamily = useCallback(({ item }: { item: FamView }) => (
+    <DexCompactFamily
+      family={item.family}
+      seen={item.seen}
+      total={item.total}
+      species={item.birds.map(b => ({
+        name: b.name,
+        seen: b.seen,
+        count: b.times,
+        globalFirst: b.globalFirst,
+      }))}
+    />
+  ), []);
+
   const keyExtractor = useCallback((item: FamView) => item.family, []);
 
   const milestoneNext = nextMilestone(stats.uniqueSpecies);
@@ -280,7 +313,27 @@ export default function DexScreen() {
 
   const header = (
     <View style={styles.headerSection}>
-      <Text style={styles.title}>Bird Dex</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>Bird Dex</Text>
+        <View style={styles.viewToggle}>
+          <Pressable
+            style={[styles.viewToggleCell, view === 'grid' && styles.viewToggleCellActive]}
+            onPress={() => persistView('grid')}
+            accessibilityRole="button"
+            accessibilityLabel="Grid view"
+          >
+            <Ionicons name="grid" size={16} color={view === 'grid' ? palette.cream : palette.inkSoft} />
+          </Pressable>
+          <Pressable
+            style={[styles.viewToggleCell, view === 'compact' && styles.viewToggleCellActive]}
+            onPress={() => persistView('compact')}
+            accessibilityRole="button"
+            accessibilityLabel="Compact view"
+          >
+            <Ionicons name="reorder-three-outline" size={16} color={view === 'compact' ? palette.cream : palette.inkSoft} />
+          </Pressable>
+        </View>
+      </View>
 
       <View style={styles.heroWrap}>
         <HardShadow borderRadius={radius.card}>
@@ -363,7 +416,7 @@ export default function DexScreen() {
       <FlatList
         data={families}
         keyExtractor={keyExtractor}
-        renderItem={renderFamily}
+        renderItem={view === 'compact' ? renderCompactFamily : renderFamily}
         ListHeaderComponent={header}
         windowSize={5}
         initialNumToRender={6}
@@ -660,12 +713,36 @@ const styles = StyleSheet.create({
   headerSection: {
     paddingTop: space.lg,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.xl,
+    marginBottom: space.md,
+  },
   title: {
     ...type.h1,
     color: palette.ink,
     fontWeight: '700',
-    paddingHorizontal: space.xl,
-    marginBottom: space.md,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    gap: 3,
+    backgroundColor: palette.card,
+    borderWidth: 2,
+    borderColor: palette.ink,
+    borderRadius: radius.pill,
+    padding: 3,
+  },
+  viewToggleCell: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewToggleCellActive: {
+    backgroundColor: palette.ink,
   },
 
   // Stats hero

@@ -7,6 +7,7 @@ import { signOut } from 'firebase/auth';
 import CompareCard from '../compare/CompareCard';
 import FriendSightingCard from '../FriendSightingCard';
 import { DayHeader } from '../journal/DayHeader';
+import { DexCompactFamily } from '../dex/DexCompactFamily';
 import { HardShadow } from '../SightingCard';
 import { Avatar } from '../social/Avatar';
 import { NotifBell } from '../social/NotifBell';
@@ -408,24 +409,18 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
           ) : (
             <View style={styles.dexWrap}>
               {dexFamilies.map(fam => (
-                <View key={fam.family} style={styles.dexFamily}>
-                  <View style={styles.dexFamilyHeader}>
-                    <Text style={styles.dexFamilyName}>{fam.family}</Text>
-                    <Text style={styles.dexFamilyCount}>{fam.seen}/{fam.total}</Text>
-                  </View>
-                  <View style={styles.dexBarTrack}>
-                    <View style={[styles.dexBarFill, { width: `${Math.min(100, (fam.seen / Math.max(1, fam.total)) * 100)}%` }]} />
-                  </View>
-                  <View style={styles.dexChips}>
-                    {fam.species.map(sp => (
-                      <View key={sp.name} style={styles.dexChip}>
-                        {sp.globalFirst && <Ionicons name="trophy" size={10} color={palette.sun} />}
-                        <Text style={styles.dexChipText}>{sp.name}</Text>
-                        {sp.count > 1 && <Text style={styles.dexChipCount}>×{sp.count}</Text>}
-                      </View>
-                    ))}
-                  </View>
-                </View>
+                <DexCompactFamily
+                  key={fam.family}
+                  family={fam.family}
+                  seen={fam.seen}
+                  total={fam.total}
+                  species={fam.species.map(sp => ({
+                    name: sp.name,
+                    seen: true,
+                    count: sp.count,
+                    globalFirst: sp.globalFirst,
+                  }))}
+                />
               ))}
             </View>
           )}
@@ -656,35 +651,7 @@ const styles = StyleSheet.create({
   segmentTextActive: { color: palette.cream },
 
   // Dex tab
-  dexWrap: { paddingHorizontal: space.xl, paddingTop: space.md },
-  dexFamily: { marginBottom: space.lg },
-  dexFamilyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  dexFamilyName: { fontFamily: font.display, fontSize: 14, fontWeight: '700', color: palette.ink, letterSpacing: -0.3 },
-  dexFamilyCount: { fontFamily: font.mono, fontSize: 10, color: palette.inkSoft },
-  dexBarTrack: {
-    height: 8,
-    backgroundColor: palette.card,
-    borderWidth: 1.5,
-    borderColor: palette.ink,
-    borderRadius: radius.pill,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  dexBarFill: { height: '100%', backgroundColor: palette.leaf },
-  dexChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
-  dexChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: radius.chip,
-    borderWidth: 1.5,
-    borderColor: palette.ink,
-    backgroundColor: palette.leafSoft,
-  },
-  dexChipText: { fontFamily: font.body, fontSize: 11, fontWeight: '600', color: palette.ink },
-  dexChipCount: { fontFamily: font.mono, fontSize: 9, color: palette.inkSoft },
+  dexWrap: { paddingTop: space.md },
 
   // Empty
   emptyWrap: { alignItems: 'center', paddingHorizontal: space.xl, paddingTop: space.xl },
