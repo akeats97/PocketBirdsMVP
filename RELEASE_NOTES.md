@@ -1,5 +1,61 @@
 # PocketBirds — Release Notes
 
+## Fairywren - June 14 2026
+**Builds:** iOS 1.0.0 (13) · Android 1.0.0 (versionCode 28, **APK** for Firebase App Distribution)
+**Headline:** The Bird Dex redrawn as collectible Atlas cards (with a new grid/compact toggle), a holographic "First on Pocket Birds" badge on both your Dex and the feed, and community photo galleries with ID credits.
+
+### Play Store - "What's new" (plain text, copy below this line)
+
+🃏 The Bird Dex, redrawn
+• Species are now collectible Atlas cards, two to a row, with their real scientific names
+• Birds you haven't seen show as dashed "ghost" slots
+• New grid / compact toggle up top: switch between the cards and a tighter checklist
+
+🔍 Community on every bird
+• Tap any Dex bird for a community photo gallery, now including your own shots
+• When someone IDs your Mystery Bird, they get an "ID'd by @name" credit on the card, tappable to their profile
+
+Plus:
+• Each day in your Journal now orders sightings by time when they were logged
+• Smoother holographic rendering and a flock list that refreshes right after you follow someone
+
+### TestFlight - "What's new" (plain text, copy below this line)
+
+🃏 The Bird Dex, redrawn
+• Species are now collectible Atlas cards, two to a row, with their real scientific names
+• Birds you haven't seen show as dashed "ghost" slots
+• New grid / compact toggle up top: switch between the cards and a tighter checklist
+
+🔍 Community on every bird
+• Tap any Dex bird for a community photo gallery, now including your own shots
+• When someone IDs your Mystery Bird, they get an "ID'd by @name" credit on the card, tappable to their profile
+
+Plus:
+• Each day in your Journal now orders sightings by when they were logged
+• A flock list that refreshes right after you follow someone
+
+### What shipped (engineering)
+- **Atlas Cards Dex + admin-verified global-first** (`ef58390`): Bird Dex redrawn as collapsible family region cards holding 2-up portrait trading cards (dashed ghost slots for unseen, gold first-edition for verified global-firsts), a hero milestone track, and real IOC Latin names (`constants/birdLatin.ts`). Global-first decoration now requires admin (Alex/Victoria) long-press verification of a photographed sighting; nothing grandfathered. `onSightingWriteGlobalFirst` Cloud Function is the server authority (recomputes holder on delete / species-edit / mystery-resolve); Firestore rules restrict verify + `globalFirst` writes to admins.
+- **Holographic Global First treatment** (`e0b225b`, `df48f64`): flat-gold "1ST EDITION" replaced by a reserved holographic finish (new token in `constants/Colors.ts`, reusable `components/Holo.tsx` `HoloFill`/`HoloRing` on the already-present `react-native-svg`, so no new native module). Globe "1ST" pill on the Dex art and, via the shared `GlobalFirstBadge`, on `SightingCard` + `FriendSightingCard` (shown when `globalFirst && verified`).
+- **Dex grid/compact view toggle** (`2b81958`): grid/compact toggle on the Dex tab (AsyncStorage-persisted), backed by a shared `components/dex/DexCompactFamily` that the profile Bird Dex tab also adopts.
+- **Community ID credit** (`bfc6d62`, backfill `860d351`): accepting a Mystery Bird proposal stamps `identifiedByUsername`; a tappable "ID'd by @name" line renders on `SightingCard`, `FriendSightingCard`, and the detail.
+- **Full community gallery** (`df48f64`): species Community tab now includes your own photos (dropped the self-exclusion in `getCommunityPhotosForSpecies`).
+- **Journal ordered by post time within each day** (`66f0a71`).
+- **Auto-follow new accounts** (`3450143`, `72e272b`): `onUserCreatedAutoFollow` Cloud Function makes brand-new accounts follow Alex (cold-start), landing a non-empty inbox; flock/feed refresh after follow.
+- **Fix:** HoloFill unpainted bottom sliver on Android (`5aee9e7`).
+
+### Known issues
+- The Global First log-time gold takeover is deactivated until it can fire at verify-time (by design).
+- iOS push entitlement (`aps-environment`) still missing from the provisioning profile, so Android→iOS push remains broken (`WORK_QUEUE.md` Bug 6). Requires an interactive EAS re-credential.
+- Android notification small icon renders inconsistently across OEMs (cosmetic; Bug 2).
+
+### Post-ship steps
+- **iOS:** build 1.0.0 (13) auto-submitted to TestFlight → "Friends" external group. No new capability; should skip Beta App Review.
+- **Android:** APK (not Play Store AAB). Distribute via Firebase App Distribution. Artifact: <https://expo.dev/artifacts/eas/g7I_6Z7cU02xyA4sZqHYwEJK8azotMVNAPs2TLaocR0.apk>
+- Stamp the `release-names.csv` Fairywren date (today). Next release name after Fairywren is **Sunbird** (wingspan ascending).
+
+---
+
 ## Tyrant - June 10 2026
 **Builds:** iOS 1.0.0 (11) · Android 1.0.0 (versionCode 26, **APK** for Firebase App Distribution)
 **Headline:** Tap any Dex bird to see community photos and your sightings, comment reactions and replies, smarter location entry, and more forgiving search.
