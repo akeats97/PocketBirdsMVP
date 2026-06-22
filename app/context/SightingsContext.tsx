@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { User } from 'firebase/auth';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { auth } from '../../config/firebaseConfig';
+import { auth, db } from '../../config/firebaseConfig';
 import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase, newSightingId, setSightingGlobalFirstVerified, updateSightingInFirebase } from '../services/sightingService';
 import { uploadPhoto } from '../services/photoService';
 import { isMilestone } from '../constants/milestones';
@@ -89,6 +90,33 @@ function mergeFirebaseSightings(
     keptLocal.push(s);
   }
   return [...keptLocal, ...firebaseSightings];
+}
+
+// The server-maintained denormalized summaries on a sighting doc. The
+// offline-first create/sync path owns everything else; these are owned by Cloud
+// Functions and only change after a sighting is synced: the social counters
+// (hoots / comments) plus the Community-ID summary on Mystery Birds
+// (proposalCount / leadingProposal).
+type Engagement = Pick<
+  Sighting,
+  'hootCount' | 'commentCount' | 'recentHooters' | 'topComment' | 'proposalCount' | 'leadingProposal'
+>;
+
+// True if `s` already carries the same engagement as `e` — lets the live
+// overlay return the previous array reference (no re-render / no AsyncStorage
+// write) when a snapshot brings nothing new for this row.
+function sameEngagement(s: Sighting, e: Engagement): boolean {
+  if ((s.hootCount ?? 0) !== (e.hootCount ?? 0)) return false;
+  if ((s.commentCount ?? 0) !== (e.commentCount ?? 0)) return false;
+  if ((s.proposalCount ?? 0) !== (e.proposalCount ?? 0)) return false;
+  const a = s.recentHooters ?? [];
+  const b = e.recentHooters ?? [];
+  if (a.length !== b.length || a.some((h, i) => h.uid !== b[i].uid)) return false;
+  if ((s.topComment?.uid ?? '') !== (e.topComment?.uid ?? '')) return false;
+  if ((s.topComment?.text ?? '') !== (e.topComment?.text ?? '')) return false;
+  // leadingProposal flips as proposals are added or out-hoot one another.
+  return (s.leadingProposal?.proposalId ?? '') === (e.leadingProposal?.proposalId ?? '') &&
+    (s.leadingProposal?.hootCount ?? 0) === (e.leadingProposal?.hootCount ?? 0);
 }
 
 export function SightingsProvider({ children }: { children: React.ReactNode }) {
@@ -284,6 +312,60 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
 
     return () => unsubscribe();
   }, [isLoading]); // Add isLoading as dependency so it re-runs when loading completes
+
+  // Live overlay of the server-maintained denormalized summaries (hoots /
+  // comments, plus the Community-ID proposal summary on Mystery Birds) on the
+  // user's OWN sightings. The fetch in loadFirebaseData/syncSightings reads
+  // these once; this keeps them fresh while the app is open, so your own cards
+  // and the detail screen reflect new hoots, comments, and proposals in real
+  // time (friends' sightings already do this via FriendSightingsContext). It
+  // ONLY patches these fields onto rows already in state — never adds, removes,
+  // or reorders sightings — so the offline merge / pending-sync machinery is
+  // untouched, and unsynced local rows (which aren't in this query) are ignored.
+  useEffect(() => {
+    let unsubSnap: (() => void) | undefined;
+
+    const unsubAuth = auth.onAuthStateChanged((user) => {
+      unsubSnap?.();
+      unsubSnap = undefined;
+      if (!user) return;
+
+      const q = query(collection(db, 'sightings'), where('userId', '==', user.uid));
+      unsubSnap = onSnapshot(
+        q,
+        (snapshot) => {
+          const engagement = new Map<string, Engagement>();
+          snapshot.forEach((d) => {
+            const data = d.data();
+            engagement.set(d.id, {
+              hootCount: data.hootCount ?? 0,
+              commentCount: data.commentCount ?? 0,
+              recentHooters: data.recentHooters ?? [],
+              topComment: data.topComment ?? undefined,
+              proposalCount: data.proposalCount ?? 0,
+              leadingProposal: data.leadingProposal ?? undefined,
+            });
+          });
+          setSightings((prev) => {
+            let changed = false;
+            const next = prev.map((s) => {
+              const e = engagement.get(s.id);
+              if (!e || sameEngagement(s, e)) return s;
+              changed = true;
+              return { ...s, ...e };
+            });
+            return changed ? next : prev;
+          });
+        },
+        (error) => console.error('Error in engagement overlay listener:', error)
+      );
+    });
+
+    return () => {
+      unsubSnap?.();
+      unsubAuth();
+    };
+  }, []);
 
   const loadFirebaseData = async () => {
     try {

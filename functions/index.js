@@ -410,6 +410,14 @@ async function recentHootersFor(sightingRef) {
   return hootsSnap.docs.map(d => ({ uid: d.data().uid, username: d.data().username }));
 }
 
+// Authoritative count of a subcollection. Recomputing the true size (instead of
+// incrementing) makes the denormalized counter self-healing: a single missed
+// trigger can't permanently desync it, since the next add/remove rewrites the
+// real value. Same pattern as refreshProposalSummary's proposalCount.
+async function subcollectionCount(parentRef, name) {
+  return (await parentRef.collection(name).count().get()).data().count;
+}
+
 exports.onHootAdded = onDocumentCreated('sightings/{sightingId}/hoots/{hooterUid}', async (event) => {
   const { sightingId, hooterUid } = event.params;
   const hoot = event.data.data();
@@ -425,7 +433,8 @@ exports.onHootAdded = onDocumentCreated('sightings/{sightingId}/hoots/{hooterUid
 
     // 1) maintain denormalized summary on the sighting doc
     const recentHooters = await recentHootersFor(sightingRef);
-    await sightingRef.update({ hootCount: FieldValue.increment(1), recentHooters });
+    const hootCount = await subcollectionCount(sightingRef, 'hoots');
+    await sightingRef.update({ hootCount, recentHooters });
 
     // 2) record activity + push the sighting owner (never notify yourself)
     if (sighting.userId === hooterUid) return;
@@ -456,7 +465,8 @@ exports.onHootRemoved = onDocumentDeleted('sightings/{sightingId}/hoots/{hooterU
     if (!sightingSnap.exists) return;
 
     const recentHooters = await recentHootersFor(sightingRef);
-    await sightingRef.update({ hootCount: FieldValue.increment(-1), recentHooters });
+    const hootCount = await subcollectionCount(sightingRef, 'hoots');
+    await sightingRef.update({ hootCount, recentHooters });
   } catch (error) {
     console.error('Error in onHootRemoved:', error);
   }
@@ -476,8 +486,9 @@ exports.onCommentAdded = onDocumentCreated('sightings/{sightingId}/comments/{com
     const sighting = sightingSnap.data();
 
     // 1) maintain count + newest-comment preview on the sighting doc
+    const commentCount = await subcollectionCount(sightingRef, 'comments');
     await sightingRef.update({
-      commentCount: FieldValue.increment(1),
+      commentCount,
       topComment: { uid: comment.uid, username: comment.username, text: comment.text },
     });
 
@@ -545,7 +556,7 @@ exports.onCommentHootAdded = onDocumentCreated(
       const comment = commentSnap.data();
 
       // 1) maintain the denormalized count on the comment doc
-      await commentRef.update({ hootCount: FieldValue.increment(1) });
+      await commentRef.update({ hootCount: await subcollectionCount(commentRef, 'hoots') });
 
       // 2) notify the comment author (never notify yourself)
       if (comment.uid === hooterUid) return;
@@ -579,7 +590,7 @@ exports.onCommentHootRemoved = onDocumentDeleted(
       const commentSnap = await commentRef.get();
       // If the comment itself was deleted, there's no counter to maintain.
       if (!commentSnap.exists) return;
-      await commentRef.update({ hootCount: FieldValue.increment(-1) });
+      await commentRef.update({ hootCount: await subcollectionCount(commentRef, 'hoots') });
     } catch (error) {
       console.error('Error in onCommentHootRemoved:', error);
     }
