@@ -3,7 +3,7 @@ import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { auth } from '../../config/firebaseConfig';
-import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase, setSightingGlobalFirstVerified, updateSightingInFirebase } from '../services/sightingService';
+import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase, newSightingId, setSightingGlobalFirstVerified, updateSightingInFirebase } from '../services/sightingService';
 import { uploadPhoto } from '../services/photoService';
 import { isMilestone } from '../constants/milestones';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -69,9 +69,11 @@ const PENDING_UPDATES_KEY = 'pendingUpdates';
 
 // Combine the authoritative server list with whatever local rows are still
 // unsynced. Synced rows in `prev` are discarded — Firebase is source of truth
-// for them. If a local pending row shares an id with a server row (shouldn't
-// happen since pending ids are local timestamps, but defensive), the server
-// copy wins.
+// for them. A local pending row sharing an id with a server row is the
+// lost-ack case: the create landed on the server but the client never saw the
+// ack, so the row is still pending locally under that same (client-minted) id.
+// We drop the local copy and keep the server one — this is how idempotent ids
+// dedupe a write whose response was lost.
 function mergeFirebaseSightings(
   prev: Sighting[],
   firebaseSightings: Sighting[],
@@ -433,7 +435,9 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
 
     const newSighting: Sighting = {
       ...sighting,
-      id: Date.now().toString(),
+      // Firestore-style id minted up front so the create is idempotent (a
+      // retried write after a lost ack rewrites the same doc, not a duplicate).
+      id: newSightingId(),
       syncStatus: 'pending',
       lastModified: new Date(),
       createdAt: new Date(),

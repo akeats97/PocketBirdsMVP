@@ -1,6 +1,16 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, orderBy, query, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, getDocsFromServer, limit, orderBy, query, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { Sighting } from '../types';
+
+// Mint a stable Firestore document id up front, so a sighting carries the SAME
+// id locally and in Firestore from the moment it's created. This is what makes
+// the create idempotent: if a write's ack is lost on a flaky connection (the
+// doc lands on the server but the client sees a failure and retries), the retry
+// re-writes the same id instead of creating a duplicate. Generated client-side
+// with no network call.
+export function newSightingId(): string {
+  return doc(collection(db, 'sightings')).id;
+}
 
 // Add a new sighting to Firestore
 export async function addSightingToFirebase(sighting: Sighting): Promise<string> {
@@ -44,9 +54,14 @@ export async function addSightingToFirebase(sighting: Sighting): Promise<string>
       firestoreSighting.globalFirst = true;
     }
 
-    const docRef = await addDoc(sightingsRef, firestoreSighting);
+    // setDoc to the sighting's own id (client-minted at creation) instead of
+    // addDoc's random id, so a retried write after a lost ack is idempotent
+    // rather than a duplicate. merge:true guards against clobbering any field a
+    // concurrent writer (e.g. an early hoot) added between the two attempts.
+    const sightingRef = doc(sightingsRef, sighting.id);
+    await setDoc(sightingRef, firestoreSighting, { merge: true });
 
-    return docRef.id; // Return the Firebase-generated ID
+    return sighting.id;
   } catch (error) {
     console.error('Error adding sighting to Firebase:', error);
     throw error;
@@ -222,15 +237,33 @@ export async function getCommunityPhotosForSpecies(
   return rows.map(r => ({ ...r, username: names.get(r.uid) ?? '' }));
 }
 
+// Reject a promise if it doesn't settle within `ms`. Used to cap the
+// global-first server read so a wedged connection degrades to "not first"
+// (the normal celebration) instead of leaving the Save flow waiting forever.
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('global-first check timed out')), ms)
+    ),
+  ]);
+}
+
 // Has ANY PocketBirds user ever logged this species? Returns true if no
 // matching sighting exists yet — i.e. the caller would be the global first.
 // Matches on exact birdName (canonical names come from the IOC picker, so
 // casing is consistent). Best effort: requires connectivity; throws on failure
 // so callers can default to "not first".
+//
+// getDocsFromServer (NOT getDocs) is deliberate: on a flaky connection getDocs
+// can resolve from an empty local cache, which would falsely report a global
+// first for a species that's actually been logged before. A server-only read
+// throws when the server is unreachable, so we only ever CLAIM a global first
+// after definitively confirming zero matches against Firestore.
 export async function isGlobalFirstSpecies(birdName: string): Promise<boolean> {
   const sightingsRef = collection(db, 'sightings');
   const q = query(sightingsRef, where('birdName', '==', birdName), limit(1));
-  const snap = await getDocs(q);
+  const snap = await withTimeout(getDocsFromServer(q), 5000);
   return snap.empty;
 }
 
