@@ -421,6 +421,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                   value={date}
                   mode="date"
                   display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  themeVariant="light"
                   onChange={(event, selectedDate) => {
                     setShowDatePicker(false);
                     if (selectedDate) {
