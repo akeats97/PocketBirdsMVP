@@ -4,6 +4,8 @@ Bugs and feature requests captured from a real-world testing day (May 23 2026). 
 
 The prompts are written to be standalone — Claude Code can act on them without reading this doc, but they all assume the agent has read `CLAUDE.md` (file layout, push setup, conventions).
 
+> **Reconciliation pass — Jun 22 2026.** Verified open items against the codebase and marked the ones that had silently shipped (mostly via the Jun 11 nav restructure). Newly closed: **Bug 1** (case-insensitive search), **Bug 4** (dropdown obsolete), **Features 3, 4, 7, 8** (follow push, per-friend bells, day-grouped Journal, hoots+comments). Still genuinely open: **Features 1, 2, 5, 6**; the Jun 12 batch **Q-6, Q-8, Q-10, Q-11, Q-12, Q-14**; **Bug 2** (deferred, cosmetic); and the two Ops/Security items (**Google Places key lockdown**, **Firebase Storage rules** — `storage.rules` still absent).
+
 ---
 
 ## User-reported (in-app Bug Report / Feature Request submissions, June 3–4 2026)
@@ -340,7 +342,9 @@ Listed in rough priority order. Bug 3 (offline data loss) is the only one that s
 
 ---
 
-### Bug 1 — Friend search is case-sensitive
+### Bug 1 — Friend search is case-sensitive ✅ DONE (superseded by the Jun 11 2026 server-side `searchUsers`)
+
+**Resolved:** the Jun 11 nav restructure replaced the old client-side filter with a server-side birder search (`searchUsers` in `app/services/userService.ts`), which lowercases both sides (`queryLower = usernameQuery.toLowerCase()` at :19, `.filter(d => d.id.toLowerCase().startsWith(queryLower))` at :28). "vic" / "VIC" both match "Victoria". Original write-up below.
 
 **What's happening:** In the Friends tab, typing `vic` does not match a user named `Victoria`. Search only matches when the case matches exactly. Users expect search to be case-insensitive.
 
@@ -572,7 +576,9 @@ DO NOT delete or refactor SightingsContext or sightingService as a whole. Treat 
 
 ---
 
-### Bug 4 — Friend search dropdown doesn't reappear after type+delete
+### Bug 4 — Friend search dropdown doesn't reappear after type+delete ✅ OBSOLETE (Jun 11 2026 nav restructure)
+
+**Obsolete:** the focus-gated dropdown this bug describes no longer exists. The Jun 11 nav restructure made Friends search a full-page birder list gated purely on `searchQuery.trim().length < 2` (`app/(tabs)/friends.tsx`), with no `isFocused` predicate to get stuck on — a short/empty query just falls back to the flock list. The whole affordance was replaced. Original write-up below.
 
 **What's happening:**
 1. Tap the friend search input → dropdown of all friends appears. Good.
@@ -959,7 +965,9 @@ Out of scope (don't build these yet):
 
 ---
 
-### Feature 3 — Push notification when someone follows you
+### Feature 3 — Push notification when someone follows you ✅ DONE
+
+**Shipped:** `onFollowCreated` in `functions/index.js:749` (trigger `following/{followerUid}/following/{followedUid}`) writes the "started following you" activity item and pushes the followed user. Also reused by the Q-7 auto-follow function. Original write-up below.
 
 **What we want:** When User B follows User A, A gets a push notification: "Victoria started following you on PocketBirds." Simple, single-event, no rate limiting needed for v1.
 
@@ -1010,7 +1018,9 @@ Verification: deploy the function (`firebase deploy --only functions:onFollowAdd
 
 ---
 
-### Feature 4 — Per-friend notification preferences (YouTube bell)
+### Feature 4 — Per-friend notification preferences (YouTube bell) ✅ DONE
+
+**Shipped:** `app/services/notificationPrefsService.ts` + per-friend bells on the Friends tab (all / highlights / none, default highlights). The sighting-push Cloud Function reads `users/{followerId}/notificationPrefs/{posterId}` and gates on the highlight check (`functions/index.js:101-115`). Original write-up below.
 
 **What we want:** Next to each friend in your friends list, a bell icon that opens a picker with three modes — exactly like YouTube's subscribe-bell:
 - **All** — push for every sighting the friend logs.
@@ -1277,7 +1287,9 @@ Out of scope:
 
 ---
 
-### Feature 7 — Field Journal grouped by day with daily counts (big day support)
+### Feature 7 — Field Journal grouped by day with daily counts (big day support) ✅ DONE
+
+**Shipped:** `app/utils/groupSightingsByDay.ts` + day-grouped SectionList on the Journal (`app/(tabs)/index.tsx`), with collapse support (`app/utils/useCollapsedDays.ts`). Original write-up below.
 
 **What we want:** Restructure the Field Journal screen so sightings are grouped under date headers. Each header shows the date, total sightings that day, and total unique species that day. This is the "big day" use case birders care about — *how many species did I see on Saturday?*
 
@@ -1334,7 +1346,9 @@ Compatibility: this PR coexists with Feature 1 (activity grid). If Feature 1 has
 
 ---
 
-### Feature 8 - Hoots and comments on friend sightings
+### Feature 8 - Hoots and comments on friend sightings ✅ DONE
+
+**Shipped:** subcollection model as specced (`sightings/{id}/hoots/{uid}`, `/comments/{cid}`, denormalized counts). Services landed as `hootService.ts` + `commentService.ts` (not the proposed `engagementService.ts`), with `HootsContext` + `useComments`. Cloud Functions `onHootAdded`/`onHootRemoved`/`onCommentAdded` (`functions/index.js:421+`). UI on `SightingCard` + the `app/sighting/[id].tsx` thread. (Comment hoots + proposal hoots also shipped alongside.) Original write-up below.
 
 **What we want:** Social engagement on a friend's sighting, in two layers:
 
@@ -1435,7 +1449,14 @@ Commit in revertible steps: (1) security rules + data model, (2) engagementServi
 
 ## Suggested build order
 
-Updated after the Feature 4 rewrite — Feature 4 no longer depends on Feature 2 (levels) or the annual goal model, so it's free to ship first.
+**Reconciled Jun 22 2026:** Features 3, 4, 7, 8 have all shipped (see ✅ markers on each). Remaining, in suggested order:
+
+1. **Feature 1 (activity grid)** — pure UI, no data model changes. Visible win.
+2. **Feature 6 ("I was there")** — small schema change (`coObserverOf` backref), meaningful UX win. Get the social mechanic in to start collecting feedback.
+3. **Feature 2 (levels)** — bigger UI lift but no risky data work. Once it lands, retrofit Feature 4's "highlights" mode to also push on level-ups (the v2 deferred item).
+4. **Feature 5 (account creation rethink)** — two-phase (audit + build). Save for when you have a clean stretch since the migration touches existing users.
+
+<details><summary>Original build order (pre-reconciliation, all of 3/4/7/8 now shipped)</summary>
 
 1. **Feature 4 (per-friend notification prefs)** — Alex wants this first. No dependencies after the rewrite. Touches Cloud Function + Friends UI.
 2. **Feature 7 (group Field Journal by day)** — small, contained, satisfying. Good follow-up.
@@ -1445,3 +1466,5 @@ Updated after the Feature 4 rewrite — Feature 4 no longer depends on Feature 2
 6. **Feature 8 (Hoots + comments)** - social engagement on sightings. Pairs with Feature 6: both touch SightingCard and need the same own-vs-friend card distinction, so build them back to back.
 7. **Feature 2 (levels)** — bigger UI lift but no risky data work. Once it lands, retrofit Feature 4's "highlights" mode to also push on level-ups (the v2 deferred item).
 8. **Feature 5 (account creation rethink)** — two-phase (audit + build). Save for when you have a clean stretch since the migration touches existing users.
+
+</details>
