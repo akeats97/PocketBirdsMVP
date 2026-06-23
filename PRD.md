@@ -188,9 +188,11 @@ Tapping a tile in the Dex opens a view that lists all the user's previous sighti
 
 ## 8. Ethics & Privacy
 
-PocketBirds is friends-only. Always.
+> **REVISED Jun 23 2026 — friends-only default overturned (Alex's call).** In service of opening signup to strangers, PocketBirds moves to **public-by-default with a per-account private opt-out**, rather than friends-only-always. Reasoning: the friends-only-forever model makes a stranger's first experience an empty, locked feed; a public default lets people discover and follow each other, which is the growth path once we're past the original two-user graph. "Public" means visible to **any signed-in user** (account required; no logged-out/web/SEO exposure). A user can flip their account to **private**, which hides their posts from non-followers while leaving a discoverable profile stub (username + avatar + Follow). The original friends-only text is preserved below for history; where it conflicts, this note wins. See WORK_QUEUE **PL-1** for the implementation. **The sensitive-species coordinate fuzzing below is NOT overturned — it becomes MORE important under a public default and must land before (or alongside) wide public rollout.**
 
-- **A sighting is visible only to confirmed mutual friends.** It is never public, never indexed, never broadcast.
+PocketBirds is friends-only. Always. _(Superseded Jun 23 2026 — see the note above.)_
+
+- **A sighting is visible only to confirmed mutual friends.** It is never public, never indexed, never broadcast. _(Superseded Jun 23 2026: public to any signed-in user by default; private opt-out gates to followers.)_
 - **Sensitive species coordinates are fuzzed.** For species flagged on the IUCN Red List as threatened, endangered, or critically endangered (and any others we manually flag for ethical reasons — e.g., owl roost locations), the exact coordinates are visible only to the user who logged the sighting. Friends see the species and an approximate location (e.g., truncated to nearest few km, or just a region name). This protects birds from being chased.
 - **No rare-bird broadcast.** PocketBirds does not have a "rare alert" feature. If a user sees something remarkable, it sits in their feed like any other sighting.
 - **User-deletable.** Users can delete any of their own sightings. (Long-press already supports this.)

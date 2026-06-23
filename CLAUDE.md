@@ -2,7 +2,7 @@
 
 ## Product North Star
 
-`PRD.md` (project root) is the product requirements / north-star doc: vision, bullseye user, core principles, anti-goals, mechanics, ethics, brand voice. **Read it before scoping a new feature, making a product or UX judgment call, or writing user-facing copy.** This file is the operational truth (what's currently true); PRD.md wins on questions of product direction. The always-true headlines: friends-only visibility is non-negotiable, leaderboards are friend-scoped never global, photos are celebrated never required, and the voice is cheeky about the app but respectful about the birds.
+`PRD.md` (project root) is the product requirements / north-star doc: vision, bullseye user, core principles, anti-goals, mechanics, ethics, brand voice. **Read it before scoping a new feature, making a product or UX judgment call, or writing user-facing copy.** This file is the operational truth (what's currently true); PRD.md wins on questions of product direction. The always-true headlines: leaderboards are friend-scoped never global, photos are celebrated never required, and the voice is cheeky about the app but respectful about the birds. **Visibility changed Jun 23 2026: the old "friends-only is non-negotiable" headline was overturned — PocketBirds is moving to public-by-default (visible to any signed-in user) with a per-account private opt-out, to support opening signup to strangers. See PRD §8 (revised) and WORK_QUEUE PL-1. Sensitive-species coordinate fuzzing is NOT overturned and gets more important under a public default.**
 
 ## Pending Design Work (Pocket Dex refactor, started May 21 2026)
 
