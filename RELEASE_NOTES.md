@@ -1,5 +1,54 @@
 # PocketBirds — Release Notes
 
+## Sunbird - June 22 2026
+**Builds:** iOS 1.0.0 (14) · Android 1.0.0 (versionCode 29, **APK** for Firebase App Distribution)
+**Headline:** A proper PocketBirds splash screen, live hoot & comment counts on your own sightings, and steadier syncing on weak connections.
+
+### Play Store - "What's new" (plain text, copy below this line)
+
+🎨 A proper welcome
+• New splash screen with the PocketBirds wordmark, replacing the old placeholder
+
+🦉 Live hoots & comments
+• Your own sightings now update their hoot and comment counts in real time, so a card never sits on "1 hoot" while three friends have actually hooted it
+
+📶 Steadier on weak signal
+• Hardened syncing so your sightings load and save reliably on flaky or slow connections
+
+### TestFlight - "What's new" (plain text, copy below this line)
+
+🎨 A proper welcome
+• New splash screen with the PocketBirds wordmark, replacing the old Expo placeholder
+• The app icon is now the PB logo (was a generic placeholder)
+
+🦉 Live hoots & comments
+• Your own sightings now update their hoot and comment counts in real time, so a card never sits on "1 hoot" while three friends have actually hooted it
+
+📶 Steadier on weak signal
+• Hardened syncing so your sightings load and save reliably on flaky or slow connections
+
+🌙 Fixes
+• Date picker text stays readable in dark mode (was dark-on-dark)
+
+### What shipped (engineering)
+- **PocketBirds splash wordmark** (`f4c9145`): replaced the default Expo grid/circles splash with a single-line "PocketBirds" wordmark (Bricolage Grotesque 700 Bold, ink on cream `#fdf6e6`) on both platforms. Sized by its bounding-box diagonal to fit inside the Android 12 splash safe-circle (the system masks `windowSplashScreenAnimatedIcon` to the center ~2/3). Bare workflow, so native assets edited directly (5 Android densities, iOS imageset + storyboard + colorset); `scripts/gen_splash_wordmark.py` is the reproducible generator.
+- **Live engagement counts on your own sightings** (`cb48b8b`): `SightingsContext` gained a live `onSnapshot` overlay that patches the server-maintained summary fields (`hootCount` / `commentCount` / `recentHooters` / `topComment` / `proposalCount` / `leadingProposal`) onto your own sightings — friends' were already live, own ones came from a one-shot fetch and went stale. Cloud Function hoot/comment counters made authoritative (recount via `.count()` instead of `FieldValue.increment`, so they're self-healing); one-time `backfillSocialCounts.js` reconciled 2 historically-drifted comment-hoot counts (sighting-level counts were already correct).
+- **Offline reliability hardening** (`2148e20`): `initializeFirestore` with `experimentalAutoDetectLongPolling` so reads/`onSnapshot` fall back to long-polling instead of hanging on connected-but-lossy links (Starlink). Client-minted doc ids + `setDoc(merge)` make retried creates idempotent (no duplicate sighting after a lost ack); global-first detection uses `getDocsFromServer` + a 5s timeout so a flaky-network cache read can't fabricate a lifer.
+- **iOS date picker readable in dark mode** (`ab89cd6`): forced the date picker to a light theme so its text stays black instead of dark-on-dark (`SightingForm.tsx`).
+- **iOS app icon** (`f7adc2b`): replaced the generic Expo placeholder app icon with the PB logo.
+
+### Known issues
+- iOS push entitlement (`aps-environment`) still missing from the provisioning profile, so Android→iOS push remains broken (`WORK_QUEUE.md` Bug 6). Requires an interactive EAS re-credential.
+- Android notification small icon renders inconsistently across OEMs (cosmetic; Bug 2).
+- Native persistent Firestore cache is still deferred (JS-SDK `persistentLocalCache` is unavailable on RN); the offline hardening above mitigates but doesn't replace it (`WORK_QUEUE.md` Q-5).
+
+### Post-ship steps
+- **iOS:** build 1.0.0 (14) auto-submitted to TestFlight → "Friends" external group. No new capability; should skip Beta App Review.
+- **Android:** APK (not Play Store AAB). Distribute via Firebase App Distribution. Artifact: <https://expo.dev/artifacts/eas/aw1ypa0qzSlqVtsb8vJef0znpQdaiZPM5WjQqKRC6wM.apk>
+- Stamp the `release-names.csv` Sunbird date (today). Next release name after Sunbird is **Scrub-Tyrant** (wingspan ascending).
+
+---
+
 ## Fairywren - June 14 2026
 **Builds:** iOS 1.0.0 (13) · Android 1.0.0 (versionCode 28, **APK** for Firebase App Distribution)
 **Headline:** The Bird Dex redrawn as collectible Atlas cards (with a new grid/compact toggle), a holographic "First on Pocket Birds" badge on both your Dex and the feed, and community photo galleries with ID credits.
