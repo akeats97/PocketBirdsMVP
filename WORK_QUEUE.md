@@ -8,6 +8,134 @@ The prompts are written to be standalone — Claude Code can act on them without
 
 ---
 
+## PRE-PUBLIC-LAUNCH — going from "friends" to "strangers" (audit Jun 23 2026)
+
+This whole app is architected as a **friends-only** product where every account belongs to Alex, Victoria, or someone they personally invited. Opening signup to strangers silently turns several deferred "niceties" into hard requirements (privacy enforcement, moderation, store compliance). This section is the gate: **PL-1, PL-2, PL-3 should be done before a single stranger has an account.** PL-4 through PL-8 should be done before a public store listing. PL-9 is the polish Alex already named (logo/assets).
+
+The deeper point: today "friends-only visibility" is a **client-side illusion** (the app filters by the follow graph in JS), while the Firestore rules let *any* signed-in account read *everything*. That's invisible at a 2-person scale and a real breach at stranger scale.
+
+---
+
+### PL-1 — Server-enforce friends-only visibility (PRIVACY BLOCKER, P0)
+
+**Problem.** `firestore.rules` gates `sightings`, `users`, and the `following` graph on `isSignedIn()` only. Friend-scoping happens **client-side** (the app fetches and filters by the follow graph in JS). So any stranger who creates an account — or just lifts an auth token and hits the REST/gRPC API directly — can read **every user's sightings, notes, photo URLs, and exact GPS coordinates** across the entire app. This violates PRD §8 ("never public, never indexed, never broadcast"), the non-negotiable in CLAUDE.md, and the unbuilt sensitive-species coordinate-fuzzing promise. Harmless at 2 users; a genuine privacy breach the moment signup is open.
+
+**Why it's not a one-liner.** The client *reads broadly today*: the merged Journal, the Friends hub stats, the profile Venn compare, the Dex "Community photos" tab, global-first detection (`isGlobalFirstSpecies` queries sightings app-wide), and `searchUsers` (scans the whole `usernames` collection). Tightening the rules without re-shaping these queries will break them. This is a coordinated rules + query refactor.
+
+**DECISIONS (Alex, Jun 23 2026):**
+- **Visibility model = one-way follow.** A sighting is readable by its owner OR any account that follows the owner. Matches the existing one-directional follow edges; no mutual-accept rework. Rules check `exists(/following/$(myUid())/following/$(ownerUid))`.
+- **Community photos stays app-wide, gated via a denormalized public projection.** Firestore rules are document-level (no field-level reads), so "everyone sees the photo but only followers see the sighting" CANNOT be done on the `sightings` doc itself. Architecture: a separate **world-readable `communityPhotos/{sightingId}`** projection holding ONLY the public-safe fields (`species`, `photoURL`, `username`, `uid`, `createdAt` — **no notes, no coordinates, no exact location**), maintained by a **Cloud Function** on sighting create/update/delete (consistent with how counters are already CF-maintained). The Dex Community tab (`getCommunityPhotosForSpecies`, `app/species/[name].tsx`) reads `communityPhotos`, NOT `sightings`. The real `sightings` doc goes owner-or-follower-only. Net: the only thing a stranger can see is "someone photographed this species" — never the note, never where. (Revisit owner-consent/opt-out for appearing in the public gallery if it ever matters; not blocking v1.)
+
+**Design decisions to make with Alex before building:**
+- **Visibility predicate.** Likely "a sighting is readable by its owner OR by someone who follows the owner." Rules can check `exists(/following/$(myUid())/following/$(ownerUid))`. Note: PRD says *mutual* friends; the app currently models one-directional follow. Decide whether read = "I follow them" (one-way, matches current data) or true mutual. One-way is simpler and matches the existing graph.
+- **The app-wide reads that must change shape:**
+  - **Global-first detection** (`sightingService.isGlobalFirstSpecies`) genuinely needs to see *all* sightings to know if a species is an app-first. That can't be a client read under tightened rules. Move it server-side (a Cloud Function / callable that does the global query with Admin privileges) or accept that global-first is computed only in a trusted context.
+  - **Dex "Community photos"** (`getCommunityPhotosForSpecies`, `app/species/[name].tsx`) is *deliberately* app-wide (Q-13). That contradicts friends-only. Decide: narrow it to you+followed, or keep it app-wide as an intentional public surface (then it needs its own server-gated, owner-consented path). **Flag for Alex — this is a product call, not just a rules call.**
+  - **`searchUsers`** scans all usernames so anyone is findable by handle (see PL-6).
+- **Sensitive-species fuzzing (PRD §8).** Even among friends, threatened-species coordinates should be owner-only. This is tied to the unbuilt IUCN ingest (CLAUDE.md). At minimum, decide whether launch ships without fuzzing (accepting friends-see-exact-coords) or blocks on it. Recommend: ship friends-only first, fuzzing as a fast-follow, but do NOT open coordinates to non-followers.
+
+**READ INVENTORY (done Jun 23 2026).** Every client read of `sightings`, classified against the chosen "owner OR I-follow-owner" rule:
+
+| Read site | Query | Survives? |
+|---|---|---|
+| `SightingsContext.tsx:333` | `where userId == me` | ✅ owner |
+| `getUserSightingsFromFirebase` (`:80`) | `where userId == me` | ✅ owner |
+| `FriendSightingsContext.tsx:79` | `where userId in [followed]` | ✅ I follow them — **see Wrinkle A** |
+| `getSightingsByUid` (`:137`) | `where userId == uid` | ⚠️ only if I follow `uid` — **see Wrinkle B** |
+| `getCommunityPhotosForSpecies` (`:207`) | app-wide `where birdName ==` | ❌ → read new `communityPhotos` projection |
+| `isGlobalFirstSpecies` (`:264`) | app-wide `limit 1` | ❌ → move server-side (callable / CF) |
+| `recomputeSpeciesGlobalFirst` (`:340`) | app-wide `where birdName ==` (admin verify; also WRITES across users) | ❌ → move into a Cloud Function |
+
+`users` reads stay `isSignedIn` (profile cards need username/avatar across users; revisit under PL-6). `following` collection-group read stays (follower-count derivation). No `sightings` write path changes.
+
+**Two wrinkles the inventory surfaced (decide before/with the build):**
+- **Wrinkle A — friend feed caps at 30.** `FriendSightingsContext` uses `where('userId','in', userIds)`; Firestore's `in` is capped at 30 values. With a handful of friends this never mattered; a stranger following >30 people silently stops seeing the rest. Pre-existing, but stranger-scale makes it real. Fix is a chunked/fan-out query or a different feed model — track as its own item, not strictly part of PL-1.
+- **Wrinkle B — non-followed profiles go dark.** `getSightingsByUid` powers viewing *another* user's profile (their Dex, the Venn compare, and their stat counts are derived from it). Under owner-or-follower rules, opening the profile of someone you DON'T follow can no longer load their sightings — so a stranger's profile would show username only, no Dex/compare/counts. That's arguably correct for friends-only, but it's a **behavior change** that needs an explicit call (tied to PL-6 discoverability): what does a not-yet-followed profile show? Likely just username + "Follow" + maybe denormalized public counts on the user doc. Confirm with Alex.
+
+**Build order (rules + queries must land together — tightening rules alone breaks the app):**
+1. Cloud Function: maintain `communityPhotos/{sightingId}` projection on sighting create/update/delete (public-safe fields only) + a one-time backfill of existing photographed sightings.
+2. Cloud Function / callable: server-side global-first check (replaces `isGlobalFirstSpecies` client query) and move `recomputeSpeciesGlobalFirst` server-side.
+3. Repoint `getCommunityPhotosForSpecies` at `communityPhotos`; repoint Add-flow global-first at the callable.
+4. Decide Wrinkle B; adjust profile screens for the not-followed case.
+5. THEN tighten `firestore.rules` (sightings read → owner-or-follower; add `communityPhotos` world-readable, CF-write-only) + emulator-validate + dev-client regression. **Deploy rules only with Alex's go.**
+
+**Approach:**
+1. Inventory every client read of `sightings` / `users` / `following` (grep the services + contexts). For each, decide: still allowed under "owner or follower", or move server-side. **(DONE — table above.)**
+2. Tighten `firestore.rules`: `sightings` read → `isOwner() || followsOwner()`; reconsider `users` read breadth (profile cards need *some* cross-user read — scope to the fields a follower needs, or keep profile-readable but lock sighting bodies).
+3. Re-validate in the Firestore emulator with `@firebase/rules-unit-testing` (the existing suite is the template — add stranger-can't-read denials).
+4. Move global-first detection to a trusted path.
+5. Full regression on the dev client: Journal, Friends stats, Venn compare, Dex, Add (global-first), profiles.
+
+**Standalone prompt:**
+> Read `CLAUDE.md` and `PRD.md` §8 first, then `firestore.rules`. Today friends-only visibility is enforced only client-side; the rules let any signed-in user read every sighting/user/follow doc. Make it server-enforced: a sighting is readable only by its owner or an account that follows the owner. Before changing rules, inventory every client-side read of `sightings`/`users`/`following` (services + contexts) and identify which break under the tighter rule — especially `isGlobalFirstSpecies` (app-wide query; must move to a trusted/server path) and `getCommunityPhotosForSpecies` (app-wide by design — flag it, don't silently break it). Tighten the rules, re-validate in the Firestore emulator with `@firebase/rules-unit-testing` (extend the existing suite with stranger-cannot-read denials), and regression-test Journal/Friends/Venn/Dex/Add on the dev client. Report the read inventory and what you moved server-side BEFORE deploying any rule change (do not deploy rules without Alex's go — see the firebase-writes memory).
+
+---
+
+### PL-2 — Report / block / mute + UGC moderation (SAFETY + STORE BLOCKER, P0)
+
+**Problem.** `grep` finds zero moderation primitives. Strangers will be able to follow you, comment on your sightings, and propose IDs with no way to report or block them. Two independent reasons this blocks a stranger launch:
+- **Store rejection.** Apple App Store Guideline 1.2 and Google's UGC policy *require*, for apps where users encounter each other's content: (1) a way to **report** objectionable content/users, (2) a way to **block** abusive users, (3) a content filter, (4) a published mechanism to **act on reports** (Apple expects action within ~24h), and (5) an EULA/agreement to community guidelines. A stranger-facing social app submitted without these is a standard rejection. TestFlight's closed "Friends" group has masked this.
+- **Actual safety.** No way to remove a creep from your feed/Dms-that-don't-exist-but-comments-that-do.
+
+**Scope (minimum viable, side-project-sustainable per PRD §4.7):**
+- **Block.** `users/{me}/blocked/{uid}`. A block hides their content from you, removes the follow edges both directions, and prevents them commenting/proposing on your sightings (enforce in rules: `canEngage()` should also check the owner hasn't blocked the actor). Surfaced from a profile and from any of their content (a ⋯ action).
+- **Report.** `reports/{id}` ( reporter, targetType: user|sighting|comment|proposal, targetId, reason, createdAt ). Write-only for the reporter; readable only by admins (the existing `isAdmin()` allowlist in rules). A Cloud Function can email Alex on new reports so action is possible without a console.
+- **Admin action.** Reuse the admin allowlist: admins can already touch any sighting's verification fields; extend to a soft-hide/remove path for reported content. Keep it manual (Alex acts) — that's sustainable at this scale.
+- **Guidelines + EULA.** A short Community Guidelines + EULA screen/link (you already have Privacy + Deletion pages on GitHub Pages — add these there and link in-app, likely from the You-tab ⋯ menu and signup).
+
+**Design calls for Alex:** does block also hide *you* from *them* (recommended yes); where does Report live (⋯ on content + on profiles); do we need profanity filtering on usernames/notes at signup, or is report-driven moderation enough for v1 (recommend report-driven + a small username denylist).
+
+**Standalone prompt:**
+> Read `CLAUDE.md` and `PRD.md` first. Add minimum-viable UGC moderation so the app can face strangers and pass App Store Guideline 1.2 / Google UGC policy. Three pieces: (1) **Block** — `users/{me}/blocked/{uid}`; blocking hides their content, drops follow edges both ways, and blocks them engaging on your sightings (extend `canEngage()` in `firestore.rules` to also require the owner hasn't blocked the actor); add a ⋯ "Block" action on profiles + content cards. (2) **Report** — a `reports` collection (reporter/targetType/targetId/reason/createdAt), reporter-write-only, admin-read-only via the existing `isAdmin()` allowlist; a Cloud Function emails Alex on new reports. (3) **Guidelines + EULA** link (mirror the existing Privacy/Deletion GitHub Pages pattern) surfaced at signup and in the You-tab ⋯ menu. Keep admin action manual (reuse the admin allowlist). Validate the new rules in the emulator. Confirm the data shapes with Alex before writing rules; don't deploy rules without his go.
+
+---
+
+### PL-3 — Firebase Storage security rules (PRIVACY BLOCKER, P0)
+
+**Problem.** There is no `storage.rules` in the repo and `firebase.json` doesn't reference Storage. Photos upload to `sightings/{filename}` (`photoService.ts`). Whatever currently protects them lives only in the Firebase console (unversioned, unknown — possibly still test-mode-open or default-locked). Firestore got hardened + version-controlled in June; Storage never did. Before strangers upload images this needs an explicit, committed rule: authenticated read, owner-only write, content-type = image, and a size cap. Add the `storage` block to `firebase.json` so it deploys with the rest. (Already flagged as open in the Jun 22 reconciliation note above.)
+
+**Standalone prompt:**
+> Read `CLAUDE.md`. Create a version-controlled `storage.rules` for Firebase Storage (photos live at `sightings/{filename}`, see `photoService.ts`) and wire it into `firebase.json` (add a `storage` block). Rules: require auth to read; restrict writes to image content-types under a size cap (e.g. 10MB); scope write to the path the app uses. Check the current console rules first and report what they were before replacing them. Don't deploy without Alex's go.
+
+---
+
+### PL-4 — Lock down the Google Places API key (OPS, P0-cheap)
+
+Already an open TODO (CLAUDE.md Location section, WORK_QUEUE reconciliation note): the key is **unrestricted in GCP** (confirmed May 24 2026). In a stranger-distributed app an unrestricted key is a billing-drain / abuse magnet. Restrict it to the Places API + the two bundle IDs (`com.akeats97.pocketbirds` and `.dev`), both signed with EAS keystore SHA-1 `9F:80:48:66:0E:82:8F:1B:85:6D:1D:9B:3A:C5:0F:55:2A:CA:6C:85`. Verify both production and dev-client builds still autocomplete after restricting.
+
+---
+
+### PL-5 — Deep-link friend invite (the actual growth engine; PRD §6)
+
+The PRD's *primary* onboarding/virality path is the deep-link invite (existing user generates a link → friend taps → installs → first launch knows the inviter → auto-friended → first feed item is the inviter's sighting). **It does not exist in the code** — only a `Share.share` on a single sighting (`app/sighting/[id].tsx`). The Q-7 auto-follow-Alex Cloud Function is a band-aid (every stranger ends up following *Alex* and nobody else). Without real invites, a stranger lands in an empty feed and can't bring their own friends — which is the whole engine (PRD §4.1). This is a feature build (link generation, deep-link handling, attribution on first launch, auto-friend). Scope it as its own effort; it's the highest-leverage *non-blocker* on this list.
+
+---
+
+### PL-6 — Open-signup hardening: email verification + username discoverability decision
+
+- **No email verification** (`sendEmailVerification` is nowhere). Fine for trusted friends; open signup invites junk/throwaway accounts with no recourse. Add verification (gate nothing hard on it at first if you want, but capture the signal).
+- **`searchUsers` makes everyone findable by handle**, which CLAUDE.md calls an intentional drift but PRD §6/§9 say "no public profiles, discovery via invite." Combined with PL-1, decide deliberately whether strangers can search-find each other or whether discovery is invite-only. This is a product call for Alex, not a bug.
+
+---
+
+### PL-7 — Push reliability (Q-6) must be closed first
+
+PRD §3: the single magic moment is the friend-sighting push. Q-6 (pushes silently dropping for some events — Vic's Chimney Swift / Red-bellied Woodpecker) is still open and marked P0. If the core loop misfires on a stranger's first day, the product fails on first contact. Close Q-6 before widening the audience. (Includes adding push-receipt checking + dead-token cleanup, which matters more with strangers whose tokens churn.)
+
+---
+
+### PL-8 — Outstanding on-device verifications
+
+Several "done in code, never confirmed on a shipped build" items should be verified before a public build: keyboard-controller migration (UR-1, needs a dev-client rebuild), Android photo zoom rebuild (pending), and the Q-5 Option-A offline hardening (verify on a real flaky network). None are stranger-specific but all are first-impression surfaces.
+
+---
+
+### PL-9 — Branding & store assets (Alex's item)
+
+A real logo / app icon, adaptive icon, splash, store screenshots, and listing copy. Needed before a public store listing. The smallest item on this list in risk terms, but real. (Current `app.json` points at placeholder `./assets/images/icon.png` etc.)
+
+---
+
 ## User-reported (in-app Bug Report / Feature Request submissions, June 3–4 2026)
 
 Pulled from the `sightings` collection (entries with `birdName` = "Bug Report" / "Feature Request"). Submitters: alex, victoria, evaloon. Triaged below. Dupes of existing backlog items are cross-referenced rather than re-specced; jokes are recorded but parked.

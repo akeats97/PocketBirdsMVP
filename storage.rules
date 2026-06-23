@@ -1,0 +1,36 @@
+rules_version = '2';
+
+// PocketBirds Firebase Storage security rules.
+//
+// Companion to firestore.rules. Until now there was NO version-controlled
+// Storage rule (only whatever lived in the console). Sighting photos upload to
+// `sightings/{sightingId}.{ext}` via app/services/photoService.ts.
+//
+// Posture: authenticated read; authenticated image-only writes under a size
+// cap. Anything not matched is denied by default.
+//
+// NOTE (owner-scoping limitation): the current upload path carries no uploader
+// uid (`sightings/{file}`), so these rules cannot bind a write to the owner —
+// any signed-in user could overwrite another sighting's photo by guessing its
+// id. To get true owner-scoped writes, namespace uploads by uid
+// (`sightings/{uid}/{file}` in photoService) and switch the write rule to
+// `request.auth.uid == uid`. Tracked in WORK_QUEUE PL-3. Existing photos are
+// served via tokenized download URLs (which bypass rules), so a later path
+// change won't break already-uploaded images.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Sighting photos.
+    match /sightings/{fileName} {
+      // Any signed-in user may read (the app renders friends' photos). Already
+      // posted photos are also reachable via their tokenized download URLs.
+      allow read: if request.auth != null;
+
+      // Writes: signed-in, image content-type only, 10MB cap. See the
+      // owner-scoping note above for the residual to close in PL-3.
+      allow write: if request.auth != null
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+  }
+}
