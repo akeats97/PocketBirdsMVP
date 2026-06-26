@@ -1,0 +1,190 @@
+dataset,ioc_name,ioc_latin,method,confidence,matched_name,value,note
+AVONET,Sabah Partridge,Tropicoperdix graydoni,genus-synonym,medium,Arborophila graydoni,269.2g/160.4mm/Forest/Omnivore/sedentary,
+AVONET,Tschudi's Nightjar,Quechuavis decussata,genus-synonym,medium,Systellura decussata,45.6g/133.2mm/Shrubland/Invertivore/sedentary,corroborated by IUCN
+AVONET,Cinnamon-sided Hummingbird,Ramosomyia wagneri,genus-synonym,medium,Amazilia wagneri,6.3g/57.1mm/Woodland/Nectarivore/sedentary,corroborated by IUCN
+AVONET,Copper-tailed Hummingbird,Saucerottia cupreicauda,genus-synonym,medium,Amazilia cupreicauda,3.7g/49.2mm/Forest/Nectarivore/sedentary,
+AVONET,Ruspoli's Turaco,Menelikornis ruspolii,genus-synonym,medium,Tauraco ruspolii,263.0g/182.0mm/Woodland/Frugivore/sedentary,corroborated by IUCN
+AVONET,White-throated Ground Dove,Pampusana xanthonura,genus-synonym,medium,Gallicolumba xanthonura,110.6g/139.2mm/Forest/Frugivore/sedentary,
+AVONET,Samoan Woodhen,Gallinula pacifica,crosswalk (1BL to 1eBird),low,Pareudiastes pacificus,450.0g/122.0mm/None/None/None,
+AVONET,North Island Takahe,Porphyrio mantelli,crosswalk (Many BL to 1BT),low,Porphyrio hochstetteri,2462.2g/232.5mm/Grassland/Omnivore/sedentary,
+AVONET,Rufous-faced Crake,Rufirallus xenopterus,genus-synonym,medium,Laterallus xenopterus,56.9g/69.5mm/Grassland/Aquatic predator/sedentary,
+AVONET,Red-and-white Crake,Rufirallus leucopyrrhus,genus-synonym,medium,Laterallus leucopyrrhus,45.5g/78.6mm/Wetland/Aquatic predator/sedentary,corroborated by IUCN
+AVONET,Double-striped Thick-knee,Hesperoburhinus bistriatus,genus-synonym,medium,Burhinus bistriatus,787.0g/241.8mm/Grassland/Invertivore/sedentary,corroborated by IUCN
+AVONET,Three-banded Plover,Thinornis tricollaris,genus-synonym,medium,Charadrius tricollaris,31.2g/109.0mm/Wetland/Aquatic predator/sedentary,corroborated by IUCN
+AVONET,Long-billed Plover,Thinornis placidus,genus-synonym,medium,Charadrius placidus,62.7g/137.8mm/Riverine/Aquatic predator/migratory,corroborated by IUCN
+AVONET,Oriental Plover,Anarhynchus veredus,genus-synonym,medium,Charadrius veredus,95.0g/158.6mm/Wetland/Omnivore/migratory,
+AVONET,Siberian Sand Plover,Anarhynchus mongolus,genus-synonym,medium,Charadrius mongolus,64.0g/128.8mm/Wetland/Aquatic predator/migratory,
+AVONET,Wilson's Plover,Anarhynchus wilsonia,genus-synonym,medium,Charadrius wilsonia,55.1g/117.4mm/Coastal/Aquatic predator/partial,
+AVONET,Two-banded Plover,Anarhynchus falklandicus,genus-synonym,medium,Charadrius falklandicus,65.0g/126.0mm/Wetland/Aquatic predator/migratory,
+AVONET,Kittlitz's Plover,Anarhynchus pecuarius,genus-synonym,medium,Charadrius pecuarius,34.0g/102.2mm/Wetland/Aquatic predator/sedentary,
+AVONET,St. Helena Plover,Anarhynchus sanctaehelenae,genus-synonym,medium,Charadrius sanctaehelenae,48.7g/111.4mm/Grassland/Invertivore/sedentary,
+AVONET,Snowy Plover,Anarhynchus nivosus,genus-synonym,medium,Charadrius nivosus,42.3g/102.5mm/Coastal/Aquatic predator/partial,
+AVONET,Kentish Plover,Anarhynchus alexandrinus,genus-synonym,medium,Charadrius alexandrinus,42.3g/106.2mm/Coastal/Aquatic predator/partial,corroborated by IUCN
+AVONET,White-faced Plover,Anarhynchus dealbatus,genus-synonym,medium,Charadrius dealbatus,42.3g/107.7mm/Coastal/Aquatic predator/partial,
+AVONET,North Island Snipe,Coenocorypha barrierensis,crosswalk (Many BL to 1BT),low,Coenocorypha aucklandica,108.2g/99.8mm/Grassland/Invertivore/sedentary,
+AVONET,South Island Snipe,Coenocorypha iredalei,crosswalk (Many BL to 1BT),low,Coenocorypha aucklandica,108.2g/99.8mm/Grassland/Invertivore/sedentary,
+AVONET,Chestnut-flanked Sparrowhawk,Aerospiza castanilius,genus-synonym,medium,Accipiter castanilius,157.5g/163.5mm/Forest/Vertivore/partial,corroborated by IUCN
+AVONET,African Goshawk,Aerospiza tachiro,genus-synonym,medium,Accipiter tachiro,290.2g/217.4mm/Forest/Vertivore/sedentary,corroborated by IUCN
+AVONET,Rufous-necked Sparrowhawk,Tachyspiza erythrauchen,genus-synonym,medium,Accipiter erythrauchen,156.0g/191.2mm/Forest/Vertivore/sedentary,corroborated by IUCN
+AVONET,Vinous-breasted Sparrowhawk,Tachyspiza rhodogaster,genus-synonym,medium,Accipiter rhodogaster,172.7g/172.6mm/Forest/Vertivore/sedentary,corroborated by IUCN
+AVONET,Chinese Sparrowhawk,Tachyspiza soloensis,genus-synonym,medium,Accipiter soloensis,164.8g/187.8mm/Forest/Vertivore/migratory,corroborated by IUCN
+AVONET,Frances's Sparrowhawk,Tachyspiza francesiae,genus-synonym,medium,Accipiter francesiae,136.8g/155.8mm/Forest/Invertivore/sedentary,corroborated by IUCN
+AVONET,Variable Goshawk,Tachyspiza hiogaster,genus-synonym,medium,Accipiter hiogaster,326.1g/197.2mm/Forest/Vertivore/sedentary,corroborated by IUCN
+AVONET,Imitator Goshawk,Tachyspiza imitator,genus-synonym,medium,Accipiter imitator,222.5g/200.0mm/Forest/Vertivore/sedentary,corroborated by IUCN
+AVONET,Cooper's Hawk,Astur cooperii,genus-synonym,medium,Accipiter cooperii,429.7g/241.2mm/Woodland/Vertivore/migratory,corroborated by IUCN
+AVONET,Gundlach's Hawk,Astur gundlachi,genus-synonym,medium,Accipiter gundlachi,675.0g/228.0mm/Forest/Vertivore/sedentary,corroborated by IUCN
+AVONET,Eurasian Goshawk,Astur gentilis,genus-synonym,medium,Accipiter gentilis,866.0g/337.6mm/Forest/Vertivore/partial,corroborated by IUCN
+AVONET,Meyer's Goshawk,Astur meyerianus,genus-synonym,medium,Accipiter meyerianus,763.5g/309.5mm/Forest/Vertivore/sedentary,corroborated by IUCN
+AVONET,Henst's Goshawk,Astur henstii,genus-synonym,medium,Accipiter henstii,1050.0g/290.5mm/Forest/Vertivore/sedentary,corroborated by IUCN
+AVONET,African Fish Eagle,Icthyophaga vocifer,genus-synonym,medium,Haliaeetus vocifer,3400.0g/548.2mm/Wetland/Aquatic predator/sedentary,corroborated by IUCN
+AVONET,Madagascar Fish Eagle,Icthyophaga vociferoides,genus-synonym,medium,Haliaeetus vociferoides,3000.0g/487.2mm/Woodland/Aquatic predator/sedentary,corroborated by IUCN
+AVONET,Makira Owl,Athene roseoaxillaris,genus-synonym,medium,Ninox roseoaxillaris,200.8g/148.2mm/Forest/Invertivore/sedentary,corroborated by IUCN
+AVONET,Blue-fronted Fig Parrot,Nannopsittacus gulielmitertii,genus-synonym,medium,Cyclopsitta gulielmitertii,31.0g/90.0mm/Forest/Granivore/sedentary,corroborated by IUCN
+AVONET,Dusky-cheeked Fig Parrot,Nannopsittacus melanogenia,genus-synonym,medium,Cyclopsitta melanogenia,31.0g/77.0mm/Forest/Granivore/sedentary,corroborated by IUCN
+AVONET,Slaty-winged Foliage-gleaner,Neophilydor fuscipenne,genus-synonym,medium,Philydor fuscipenne,26.4g/86.7mm/Forest/Invertivore/sedentary,corroborated by IUCN
+AVONET,Rufous-rumped Foliage-gleaner,Neophilydor erythrocercum,genus-synonym,medium,Philydor erythrocercum,25.3g/86.7mm/Forest/Invertivore/sedentary,corroborated by IUCN
+AVONET,Caatinga Antwren,Radinopsyche sellowi,genus-synonym,medium,Herpsilochmus sellowi,7.5g/48.0mm/Woodland/Invertivore/sedentary,
+AVONET,Sao Paulo Bristle Tyrant,Pogonotriccus paulista,genus-synonym,medium,Phylloscartes paulista,7.5g/49.1mm/Forest/Invertivore/sedentary,corroborated by IUCN
+AVONET,Nuku Hiva Monarch,Pomarea nukuhivae,crosswalk (Many BL to 1BT),low,Pomarea mendozae,29.6g/90.2mm/Forest/Invertivore/sedentary,
+AVONET,Eiao Monarch,Pomarea fluxa,crosswalk (Many BL to 1BT),low,Pomarea iphis,23.9g/89.8mm/Forest/Invertivore/sedentary,
+AVONET,Western Jackdaw,Coloeus monedula,genus-synonym,medium,Corvus monedula,246.0g/231.1mm/Human Modified/Omnivore/partial,corroborated by IUCN
+AVONET,Daurian Jackdaw,Coloeus dauuricus,genus-synonym,medium,Corvus dauuricus,208.0g/232.3mm/Grassland/Omnivore/partial,corroborated by IUCN
+AVONET,Wilson's Bird-of-paradise,Diphyllodes respublica,genus-synonym,medium,Cicinnurus respublica,58.4g/95.6mm/Forest/Omnivore/sedentary,corroborated by IUCN
+AVONET,Gillett's Lark,Calendulauda gilletti,genus-synonym,medium,Mirafra gilletti,22.4g/84.6mm/Shrubland/Omnivore/sedentary,
+AVONET,Bengal Bush Lark,Plocealauda assamica,genus-synonym,medium,Mirafra assamica,26.2g/79.8mm/Grassland/Omnivore/sedentary,
+AVONET,Flappet Lark,Amirafra rufocinnamomea,genus-synonym,medium,Mirafra rufocinnamomea,26.3g/78.2mm/Woodland/Invertivore/sedentary,
+AVONET,Cape Clapper Lark,Corypha apiata,genus-synonym,medium,Mirafra apiata,26.9g/80.2mm/Grassland/Invertivore/sedentary,
+AVONET,Red-winged Lark,Corypha hypermetra,genus-synonym,medium,Mirafra hypermetra,61.4g/112.4mm/Grassland/Invertivore/sedentary,corroborated by IUCN
+AVONET,Blue-wattled Bulbul,Microtarsus nieuwenhuisii,genus-synonym,medium,Pycnonotus nieuwenhuisii,25.5g/84.7mm/Forest/Frugivore/partial,
+AVONET,Aguiguan Reed Warbler,Acrocephalus nijoi,crosswalk (Many BL to 1BT),low,Acrocephalus luscinius,30.6g/85.7mm/Wetland/Invertivore/sedentary,
+AVONET,Pagan Reed Warbler,Acrocephalus yamashinae,crosswalk (Many BL to 1BT),low,Acrocephalus luscinius,30.6g/85.7mm/Wetland/Invertivore/sedentary,
+AVONET,Mangareva Reed Warbler,Acrocephalus astrolabii,crosswalk (Many BL to 1BT),low,Acrocephalus luscinius,30.6g/85.7mm/Wetland/Invertivore/sedentary,
+AVONET,Garrett's Reed Warbler,Acrocephalus musae,crosswalk (Many BL to 1BT),low,Acrocephalus caffer,43.8g/93.2mm/Forest/Invertivore/sedentary,
+AVONET,Chatham Islands Fernbird,Poodytes rufescens,crosswalk (Many BL to 1BT),low,Bowdleria punctata,25.2g/66.4mm/Shrubland/Invertivore/sedentary,
+AVONET,Marianne White-eye,Zosterops semiflavus,crosswalk (Many BL to 1BT),low,Zosterops maderaspatanus,8.9g/54.3mm/Forest/Invertivore/sedentary,
+AVONET,Larwo Shama,Copsychus omissus,genus-synonym,medium,Cyornis omissus,18.0g/73.6mm/Forest/Invertivore/sedentary,corroborated by IUCN
+AVONET,Blue-fronted Blue Flycatcher,Eumyias hoevelli,genus-synonym,medium,Cyornis hoevelli,20.5g/86.4mm/Forest/Invertivore/sedentary,corroborated by IUCN
+AVONET,Bornean Forktail,Enicurus borneensis,genus-synonym,medium,Myophonus borneensis,89.7g/143.8mm/Forest/Omnivore/sedentary,corroborated by IUCN
+AVONET,Legge's Flowerpecker,Pachyglossa vincens,genus-synonym,medium,Dicaeum vincens,8.5g/55.5mm/Forest/Frugivore/sedentary,corroborated by IUCN
+AVONET,Lanai Hookbill,Dysmorodrepanis munroi,genus-synonym,medium,Hemignathus munroi,28.0g/73.4mm/Forest/Invertivore/sedentary,
+AVONET,Laysan Honeycreeper,Himatione fraithii,crosswalk (Many BL to 1BT),low,Himatione sanguinea,15.2g/71.7mm/Forest/Nectarivore/sedentary,
+AVONET,Oahu Akepa,Loxops wolstenholmei,crosswalk (Many BL to 1BT),low,Loxops coccineus,10.5g/61.8mm/Forest/Invertivore/sedentary,
+AVONET,Black-cheeked Ant Tanager,Driophlox atrimaxillaris,genus-synonym,medium,Habia atrimaxillaris,48.9g/93.5mm/Forest/Invertivore/sedentary,corroborated by IUCN
+IUCN,Coqui Francolin,Campocolinus coqui,genus-synonym,medium,Peliperdix coqui,LC,
+IUCN,Tschudi's Nightjar,Quechuavis decussata,genus-synonym,medium,Systellura decussata,LC,
+IUCN,Spot-tailed Nightjar,Antiurus maculicaudus,genus-synonym,medium,Hydropsalis maculicaudus,LC,
+IUCN,Magenta-throated Woodstar,Philodice bryantae,genus-synonym,medium,Calliphlox bryantae,LC,
+IUCN,Cuban Emerald,Riccordia ricordii,genus-synonym,medium,Chlorostilbon ricordii,LC,
+IUCN,Brace's Emerald,Riccordia bracei,genus-synonym,medium,Chlorostilbon bracei,EX,
+IUCN,Puerto Rican Emerald,Riccordia maugaeus,genus-synonym,medium,Chlorostilbon maugaeus,LC,
+IUCN,Canivet's Emerald,Cynanthus canivetii,genus-synonym,medium,Chlorostilbon canivetii,LC,
+IUCN,Curve-winged Sabrewing,Pampa curvipennis,genus-synonym,medium,Campylopterus curvipennis,LC,
+IUCN,Cinnamon-sided Hummingbird,Ramosomyia wagneri,genus-synonym,medium,Amazilia wagneri,LC,
+IUCN,Berylline Hummingbird,Saucerottia beryllina,genus-synonym,medium,Amazilia beryllina,LC,
+IUCN,Blue-tailed Hummingbird,Saucerottia cyanura,genus-synonym,medium,Amazilia cyanura,LC,
+IUCN,Snowy-bellied Hummingbird,Saucerottia edward,genus-synonym,medium,Amazilia edward,LC,
+IUCN,Indigo-capped Hummingbird,Saucerottia cyanifrons,genus-synonym,medium,Amazilia cyanifrons,LC,
+IUCN,Amazilia Hummingbird,Amazilis amazilia,genus-synonym,medium,Amazilia amazilia,LC,
+IUCN,Andean Emerald,Uranomitra franciae,genus-synonym,medium,Amazilia franciae,LC,
+IUCN,Humboldt's Sapphire,Chrysuronia humboldtii,genus-synonym,medium,Amazilia humboldtii,LC,
+IUCN,Rufous-throated Sapphire,Hylocharis sapphirina,genus-synonym,medium,Amazilia sapphirina,LC,
+IUCN,White-bellied Hummingbird,Elliotomyia chionogaster,genus-synonym,medium,Amazilia chionogaster,LC,
+IUCN,Green-and-white Hummingbird,Elliotomyia viridicauda,genus-synonym,medium,Amazilia viridicauda,LC,
+IUCN,White-bellied Emerald,Chlorestes candida,genus-synonym,medium,Amazilia candida,LC,
+IUCN,Blue-throated Sapphire,Chlorestes eliciae,genus-synonym,medium,Hylocharis eliciae,LC,
+IUCN,Ruspoli's Turaco,Menelikornis ruspolii,genus-synonym,medium,Tauraco ruspolii,NT,
+IUCN,Red-and-white Crake,Rufirallus leucopyrrhus,genus-synonym,medium,Laterallus leucopyrrhus,LC,
+IUCN,St. Helena Rail,Aphanocrex podarces,genus-synonym,medium,Laterallus podarces,EX,
+IUCN,Striped Crake,Aenigmatolimnas marginalis,genus-synonym,medium,Amaurornis marginalis,LC,
+IUCN,White-naped Crane,Antigone vipio,genus-synonym,medium,Grus vipio,VU,
+IUCN,Sarus Crane,Antigone antigone,genus-synonym,medium,Grus antigone,VU,
+IUCN,Brolga,Antigone rubicunda,genus-synonym,medium,Grus rubicunda,LC,
+IUCN,Double-striped Thick-knee,Hesperoburhinus bistriatus,genus-synonym,medium,Burhinus bistriatus,LC,
+IUCN,Three-banded Plover,Thinornis tricollaris,genus-synonym,medium,Charadrius tricollaris,LC,
+IUCN,Long-billed Plover,Thinornis placidus,genus-synonym,medium,Charadrius placidus,LC,
+IUCN,Kentish Plover,Anarhynchus alexandrinus,genus-synonym,medium,Charadrius alexandrinus,LC,
+IUCN,Laughing Gull,Leucophaeus atricilla,genus-synonym,medium,Larus atricilla,LC,
+IUCN,Franklin's Gull,Leucophaeus pipixcan,genus-synonym,medium,Larus pipixcan,LC,
+IUCN,Relict Gull,Ichthyaetus relictus,genus-synonym,medium,Larus relictus,VU,
+IUCN,Audouin's Gull,Ichthyaetus audouinii,genus-synonym,medium,Larus audouinii,VU,
+IUCN,Chestnut-flanked Sparrowhawk,Aerospiza castanilius,genus-synonym,medium,Accipiter castanilius,LC,
+IUCN,African Goshawk,Aerospiza tachiro,genus-synonym,medium,Accipiter tachiro,LC,
+IUCN,Rufous-necked Sparrowhawk,Tachyspiza erythrauchen,genus-synonym,medium,Accipiter erythrauchen,LC,
+IUCN,Vinous-breasted Sparrowhawk,Tachyspiza rhodogaster,genus-synonym,medium,Accipiter rhodogaster,LC,
+IUCN,Chinese Sparrowhawk,Tachyspiza soloensis,genus-synonym,medium,Accipiter soloensis,LC,
+IUCN,Frances's Sparrowhawk,Tachyspiza francesiae,genus-synonym,medium,Accipiter francesiae,LC,
+IUCN,Variable Goshawk,Tachyspiza hiogaster,genus-synonym,medium,Accipiter hiogaster,LC,
+IUCN,Imitator Goshawk,Tachyspiza imitator,genus-synonym,medium,Accipiter imitator,NT,
+IUCN,Cooper's Hawk,Astur cooperii,genus-synonym,medium,Accipiter cooperii,LC,
+IUCN,Gundlach's Hawk,Astur gundlachi,genus-synonym,medium,Accipiter gundlachi,EN,
+IUCN,Eurasian Goshawk,Astur gentilis,genus-synonym,medium,Accipiter gentilis,LC,
+IUCN,Meyer's Goshawk,Astur meyerianus,genus-synonym,medium,Accipiter meyerianus,LC,
+IUCN,Henst's Goshawk,Astur henstii,genus-synonym,medium,Accipiter henstii,VU,
+IUCN,African Fish Eagle,Icthyophaga vocifer,genus-synonym,medium,Haliaeetus vocifer,LC,
+IUCN,Madagascar Fish Eagle,Icthyophaga vociferoides,genus-synonym,medium,Haliaeetus vociferoides,CR,
+IUCN,Collared Owlet,Taenioptynx brodiei,genus-synonym,medium,Glaucidium brodiei,LC,
+IUCN,Makira Owl,Athene roseoaxillaris,genus-synonym,medium,Ninox roseoaxillaris,VU,
+IUCN,Blakiston's Fish Owl,Ketupa blakistoni,genus-synonym,medium,Bubo blakistoni,VU,
+IUCN,Puerto Rican Owl,Gymnasio nudipes,genus-synonym,medium,Megascops nudipes,LC,
+IUCN,Japanese Pygmy Woodpecker,Yungipicus kizuki,genus-synonym,medium,Picoides kizuki,LC,
+IUCN,Arabian Woodpecker,Dendrocoptes dorae,genus-synonym,medium,Dendropicos dorae,NT,
+IUCN,Middle Spotted Woodpecker,Dendrocoptes medius,genus-synonym,medium,Leiopicus medius,LC,
+IUCN,Bearded Woodpecker,Chloropicus namaquus,genus-synonym,medium,Dendropicos namaquus,LC,
+IUCN,Yellow-crested Woodpecker,Chloropicus xantholophus,genus-synonym,medium,Dendropicos xantholophus,LC,
+IUCN,Fire-bellied Woodpecker,Chloropicus pyrrhogaster,genus-synonym,medium,Dendropicos pyrrhogaster,LC,
+IUCN,Blue-crowned Parakeet,Thectocercus acuticaudatus,genus-synonym,medium,Psittacara acuticaudatus,LC,
+IUCN,Red-fronted Lorikeet,Hypocharmosyna rubronotata,genus-synonym,medium,Charmosyna rubronotata,LC,
+IUCN,Red-flanked Lorikeet,Hypocharmosyna placentis,genus-synonym,medium,Charmosyna placentis,LC,
+IUCN,Blue-fronted Lorikeet,Charmosynopsis toxopei,genus-synonym,medium,Charmosyna toxopei,DD,
+IUCN,Striated Lorikeet,Synorhacma multistriata,genus-synonym,medium,Charmosyna multistriata,LC,
+IUCN,Red-chinned Lorikeet,Vini rubrigularis,genus-synonym,medium,Charmosyna rubrigularis,LC,
+IUCN,Purple-crowned Lorikeet,Parvipsitta porphyrocephala,genus-synonym,medium,Glossopsitta porphyrocephala,LC,
+IUCN,Goldie's Lorikeet,Glossoptilus goldiei,genus-synonym,medium,Psitteuteles goldiei,LC,
+IUCN,Blue-fronted Fig Parrot,Nannopsittacus gulielmitertii,genus-synonym,medium,Cyclopsitta gulielmitertii,LC,
+IUCN,Dusky-cheeked Fig Parrot,Nannopsittacus melanogenia,genus-synonym,medium,Cyclopsitta melanogenia,LC,
+IUCN,Streaked Xenops,Xenops rutilans,genus-synonym,medium,Synallaxis rutilans,LC,
+IUCN,Slaty-winged Foliage-gleaner,Neophilydor fuscipenne,genus-synonym,medium,Philydor fuscipenne,LC,
+IUCN,Rufous-rumped Foliage-gleaner,Neophilydor erythrocercum,genus-synonym,medium,Philydor erythrocercum,LC,
+IUCN,Sao Paulo Bristle Tyrant,Pogonotriccus paulista,genus-synonym,medium,Phylloscartes paulista,NT,
+IUCN,Fire-eyed Diucon,Pyrope pyrope,genus-synonym,medium,Xolmis pyrope,LC,
+IUCN,Salinas Monjita,Neoxolmis salinarum,genus-synonym,medium,Xolmis salinarum,LC,
+IUCN,Red-cheeked Wattle-eye,Platysteira blissetti,genus-synonym,medium,Dyaphorophyia blissetti,LC,
+IUCN,Tinian Monarch,Monarcha takatsukasae,genus-synonym,medium,Metabolus takatsukasae,NT,
+IUCN,Western Jackdaw,Coloeus monedula,genus-synonym,medium,Corvus monedula,LC,
+IUCN,Daurian Jackdaw,Coloeus dauuricus,genus-synonym,medium,Corvus dauuricus,LC,
+IUCN,Growling Riflebird,Ptiloris intercedens,genus-synonym,medium,Lophorina intercedens,LC,
+IUCN,Wilson's Bird-of-paradise,Diphyllodes respublica,genus-synonym,medium,Cicinnurus respublica,NT,
+IUCN,Red-winged Lark,Corypha hypermetra,genus-synonym,medium,Mirafra hypermetra,LC,
+IUCN,Yellow-wattled Bulbul,Microtarsus urostictus,genus-synonym,medium,Pycnonotus urostictus,LC,
+IUCN,Pallas's Grasshopper Warbler,Helopsaltes certhiola,genus-synonym,medium,Locustella certhiola,LC,
+IUCN,Sunda Scimitar Babbler,Pomatorhinus bornensis,genus-synonym,medium,Mixornis bornensis,LC,
+IUCN,Ruby-crowned Kinglet,Corthylio calendula,genus-synonym,medium,Regulus calendula,LC,
+IUCN,Larwo Shama,Copsychus omissus,genus-synonym,medium,Cyornis omissus,LC,
+IUCN,Herero Chat,Namibornis herero,genus-synonym,medium,Melaenornis herero,LC,
+IUCN,Silverbird,Empidornis semipartitus,genus-synonym,medium,Melaenornis semipartitus,LC,
+IUCN,Fiscal Flycatcher,Sigelus silens,genus-synonym,medium,Melaenornis silens,LC,
+IUCN,Blue-fronted Blue Flycatcher,Eumyias hoevelli,genus-synonym,medium,Cyornis hoevelli,LC,
+IUCN,Bornean Forktail,Enicurus borneensis,genus-synonym,medium,Myophonus borneensis,LC,
+IUCN,Legge's Flowerpecker,Pachyglossa vincens,genus-synonym,medium,Dicaeum vincens,NT,
+IUCN,Double-barred Finch,Stizoptera bichenovii,genus-synonym,medium,Taeniopygia bichenovii,LC,
+IUCN,Streak-headed Mannikin,Mayrimunia tristissima,genus-synonym,medium,Lonchura tristissima,LC,
+IUCN,Black-cheeked Waxbill,Brunhilda charmosyna,genus-synonym,medium,Estrilda charmosyna,LC,
+IUCN,Grey Waxbill,Glaucestrilda perreini,genus-synonym,medium,Estrilda perreini,LC,
+IUCN,Hispaniolan Euphonia,Chlorophonia musica,genus-synonym,medium,Euphonia musica,LC,
+IUCN,Five-striped Sparrow,Amphispizopsis quinquestriata,genus-synonym,medium,Amphispiza quinquestriata,LC,
+IUCN,Black-cheeked Ant Tanager,Driophlox atrimaxillaris,genus-synonym,medium,Habia atrimaxillaris,NT,
+IUCN,Crimson-collared Grosbeak,Periporphyrus celaeno,genus-synonym,medium,Caryothraustes celaeno,LC,
+IUCN,Mangrove Finch,Camarhynchus heliobates,genus-synonym,medium,Geospiza heliobates,CR,
+IUCN,Medium Tree Finch,Camarhynchus pauper,genus-synonym,medium,Geospiza pauper,CR,
+IUCN,Spotted Tanager,Ixothraupis punctata,genus-synonym,medium,Tangara punctata,LC,
+IUCN,Yellow-bellied Tanager,Ixothraupis xanthogastra,genus-synonym,medium,Tangara xanthogastra,LC,
+IUCN,Golden-naped Tanager,Chalcothraupis ruficervix,genus-synonym,medium,Tangara ruficervix,LC,
+IUCN,Sayaca Tanager,Thraupis sayaca,genus-synonym,medium,Tangara sayaca,LC,
+IUCN,Glaucous Tanager,Thraupis glaucocolpa,genus-synonym,medium,Tangara glaucocolpa,LC,
+IUCN,Yellow-winged Tanager,Thraupis abbas,genus-synonym,medium,Tangara abbas,LC,
+IUCN,Silver-backed Tanager,Stilpnia viridicollis,genus-synonym,medium,Tangara viridicollis,LC,
+IUCN,Straw-backed Tanager,Stilpnia argyrofenges,genus-synonym,medium,Tangara argyrofenges,VU,
+IUCN,Masked Tanager,Stilpnia nigrocincta,genus-synonym,medium,Tangara nigrocincta,LC,
+IUCN,Chestnut-backed Tanager,Stilpnia preciosa,genus-synonym,medium,Tangara preciosa,LC,
+IUCN,Green-capped Tanager,Stilpnia meyerdeschauenseei,genus-synonym,medium,Tangara meyerdeschauenseei,NT,
+IUCN,Scrub Tanager,Stilpnia vitriolina,genus-synonym,medium,Tangara vitriolina,LC,
