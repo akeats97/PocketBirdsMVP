@@ -250,6 +250,15 @@ The Community tab already queried sightings **app-wide** (no friends filter) and
 
 ### Q-14 — Dex bird reference data: range/migration maps, wingspan, ID info (P3, blocked on sourcing)
 
+> **✅ MOSTLY SHIPPED Jun 26 2026 — the "Species Guide" (Option C).** The sourcing spike succeeded: all data is bundled, commercially-clean, and works **fully offline** (no runtime APIs). Tapping a Dex species now opens a **Guide** tab (new default, left of Community/Yours) reading Description → Measurements → Conservation → Where it lives.
+> - **`constants/avonet.ts`** — AVONET (Tobias 2022, CC BY 4.0): body mass, wing chord, habitat, diet, migration. 10,628/11,228 species (~95%); misses render "not in AVONET".
+> - **`constants/iucnStatus.ts`** + **`statusFor()`** — IUCN status via Wikidata P141 (CC0). 10,344 (~92%); misses → `NE`. (Wikidata's status entities no longer carry P528 codes — the build maps the status Q-ids instead.)
+> - **`constants/wikiBlurbs.ts`** — Wikipedia intros (CC BY-SA), **bundled** so Description is offline: 11,220/11,228 (99.9%). Runtime `app/services/wikiService.ts` is now just a fallback for non-IOC names.
+> - **Where it lives** — realm world map (`assets/images/world-equirect.png` + new `regionsFor()` over the existing `birdNames` realms) + 3-state migration. No licensed seasonal range *polygons* exist, so we ship coarse realm membership + a migration class — the honest answer.
+> - UI in `components/species/SpeciesGuide.tsx`; header redesigned (family · name · Latin + IUCN pill + wishlist star). Rebuild data via `scripts/build-species-data.py` (IUCN+AVONET) and `scripts/build-wiki-blurbs.py` (Wikipedia).
+>
+> **Still open:** the **IUCN strip on every *sighting card*** (a different surface — `statusFor()` now exists to power it; see CLAUDE.md IUCN item) and the threatened-species color dot on Dex tiles.
+
 When you tap a species in the Dex, Alex wants real reference content: **seasonal range maps (migration / summer / winter / breeding), regions, wingspan, and ID-helping facts.** Value is high but it's **blocked on data sourcing** — Alex's hard constraint: the data must be **free, online, and commercially licensable** (this app may monetize). This is a research task before any UI.
 
 **Sourcing leads to evaluate (license is the gate, verify each before relying on it):**
