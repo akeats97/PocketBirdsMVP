@@ -13,8 +13,10 @@ Two-stage join per dataset:
          (catches genus reassignments, e.g. Icthyophaga vocifer -> Haliaeetus vocifer).
        - crosswalk (AVONET only): the IOC binomial appears in AVONET's
          BirdLife<->eBird / BirdLife<->BirdTree crosswalk; use the partner row.
-     Every recovered entry is LOWER confidence than a direct match and is written
-     to scripts/species-data-recovered.csv for manual review.
+     Every recovered entry is LOWER confidence than a direct match. The audit CSV
+     scripts/species-data-recovered.csv lists, for manual review, BOTH every
+     recovered entry (confidence medium/low) AND every species still missing the
+     dataset (confidence 'missing') — across AVONET, IUCN, and Wikipedia.
 
 INPUTS (fetch first, then pass their paths):
 
@@ -50,8 +52,19 @@ QCODE = {
 PRIORITY = {'CR': 0, 'EN': 1, 'VU': 2, 'NT': 3, 'LC': 4, 'EW': 5, 'EX': 6, 'DD': 7}
 MIG = {1: 'sedentary', 2: 'partial', 3: 'migratory'}
 
-# audit rows collected across both datasets: dict per recovered entry
+# audit rows collected across datasets: every recovered AND still-missing entry
 AUDIT = []
+
+
+def emit_missing(dataset, have, order, latin, fam):
+    """Append an audit row for each IOC species with no data in `have` (a set or
+    dict of covered common names) for this dataset."""
+    for name in order:
+        if name in have:
+            continue
+        AUDIT.append({'dataset': dataset, 'ioc_name': name, 'family': fam.get(name, ''),
+                      'ioc_latin': latin.get(name, ''), 'method': 'missing',
+                      'confidence': 'missing', 'matched_name': '', 'value': '', 'note': ''})
 
 
 def norm(s):
@@ -156,10 +169,11 @@ def build_iucn(wikidata_json, latin, order, fam, genus_fams):
             iucn[common] = by_sci[match]
             resolved[common] = match
             recovered += 1
-            AUDIT.append({'dataset': 'IUCN', 'ioc_name': common, 'ioc_latin': lat,
-                          'method': 'genus-synonym', 'confidence': 'medium',
+            AUDIT.append({'dataset': 'IUCN', 'ioc_name': common, 'family': fam.get(common, ''),
+                          'ioc_latin': lat, 'method': 'genus-synonym', 'confidence': 'medium',
                           'matched_name': sci_case(match), 'value': by_sci[match], 'note': ''})
 
+    emit_missing('IUCN', iucn, order, latin, fam)
     write_iucn_ts(iucn, order, recovered)
     return resolved
 
@@ -284,9 +298,11 @@ def build_avonet(xlsx, latin, order, iucn_resolved, fam, genus_fams):
         r = av[match]
         val = f"{r['mass']}g/{r['wingChord']}mm/{r['habitat']}/{r['diet']}/{r['migration']}"
         note = 'corroborated by IUCN' if iucn_resolved.get(common) == match else ''
-        AUDIT.append({'dataset': 'AVONET', 'ioc_name': common, 'ioc_latin': lat,
-                      'method': method, 'confidence': conf,
+        AUDIT.append({'dataset': 'AVONET', 'ioc_name': common, 'family': fam.get(common, ''),
+                      'ioc_latin': lat, 'method': method, 'confidence': conf,
                       'matched_name': sci_case(match), 'value': val, 'note': note})
+
+    emit_missing('AVONET', ioc, order, latin, fam)
 
     write_avonet_ts(ioc, order, recovered)
 
@@ -335,15 +351,33 @@ def write_avonet_ts(ioc, order, recovered):
     print(f"wrote {out}: {len(keys)} entries ({recovered} recovered)")
 
 
+def emit_wiki_missing(order, latin, fam):
+    """Append a missing row for each IOC species with no bundled Wikipedia intro.
+    Reads the already-built constants/wikiBlurbs.ts (skips if it doesn't exist)."""
+    path = os.path.join(ROOT, 'constants', 'wikiBlurbs.ts')
+    if not os.path.exists(path):
+        return
+    # Keys are JSON-encoded (non-ASCII names are \u-escaped), so json.loads each
+    # key token back to its real string before comparing to the IOC names.
+    have = {json.loads(k) for k in re.findall(r'^\s*("(?:[^"\\]|\\.)*")\s*:', open(path).read(), re.M)}
+    emit_missing('Wikipedia', have, order, latin, fam)
+
+
+# recovered rows first (medium, then low), then the still-missing ones.
+CONF_RANK = {'medium': 0, 'low': 1, 'missing': 2}
+
+
 def write_audit_csv(order):
     rank = {n: i for i, n in enumerate(order)}
-    AUDIT.sort(key=lambda r: (r['dataset'], rank.get(r['ioc_name'], 1e9)))
+    AUDIT.sort(key=lambda r: (r['dataset'], CONF_RANK.get(r['confidence'], 9), rank.get(r['ioc_name'], 1e9)))
     with open(CSV_OUT, 'w', newline='') as f:
-        w = csv.DictWriter(f, fieldnames=['dataset', 'ioc_name', 'ioc_latin',
+        w = csv.DictWriter(f, fieldnames=['dataset', 'ioc_name', 'family', 'ioc_latin',
                                           'method', 'confidence', 'matched_name', 'value', 'note'])
         w.writeheader()
         w.writerows(AUDIT)
-    print(f"wrote {CSV_OUT}: {len(AUDIT)} recovered entries for review")
+    rec = sum(1 for r in AUDIT if r['confidence'] != 'missing')
+    miss = len(AUDIT) - rec
+    print(f"wrote {CSV_OUT}: {rec} recovered + {miss} still-missing = {len(AUDIT)} rows")
 
 
 def main():
@@ -355,6 +389,7 @@ def main():
     gfam = genus_families(latin, fam)
     iucn_resolved = build_iucn(sys.argv[1], latin, order, fam, gfam)
     build_avonet(sys.argv[2], latin, order, iucn_resolved, fam, gfam)
+    emit_wiki_missing(order, latin, fam)
     write_audit_csv(order)
 
 
