@@ -33,14 +33,36 @@ export async function pickImage(): Promise<ImagePicker.ImagePickerResult> {
   });
 }
 
+// EXIF GPS values arrive in wildly different shapes depending on platform and
+// how the native side read them: a decimal-degrees number, a decimal string,
+// or Android ExifInterface's raw DMS rational string ("43/1,39/1,3072/100").
+// Android's native export can also collapse the DMS rational to a useless 0.0
+// (getAttributeDouble can't parse 3-component rationals), which must read as
+// "no value", not the Gulf of Guinea.
+function exifCoordToDecimal(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const parts = value.split(',').map(part => {
+    const [num, den] = part.split('/');
+    const n = parseFloat(num);
+    const d = den === undefined ? 1 : parseFloat(den);
+    return Number.isFinite(n) && Number.isFinite(d) && d !== 0 ? n / d : NaN;
+  });
+  if (parts.some(Number.isNaN)) return null;
+  if (parts.length === 1) return parts[0]; // decimal degrees
+  if (parts.length === 3) return parts[0] + parts[1] / 60 + parts[2] / 3600; // DMS
+  return null;
+}
+
 function coordsFromExif(exif: Record<string, any> | null | undefined): Coordinates | null {
   if (!exif) return null;
   // expo-image-picker flattens GPS onto the exif object on Android; some iOS
   // payloads nest it under a "{GPS}" dictionary.
   const gps = exif['{GPS}'] ?? exif;
-  const lat = gps.GPSLatitude ?? gps.Latitude;
-  const lng = gps.GPSLongitude ?? gps.Longitude;
-  if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+  const lat = exifCoordToDecimal(gps.GPSLatitude ?? gps.Latitude);
+  const lng = exifCoordToDecimal(gps.GPSLongitude ?? gps.Longitude);
+  if (lat === null || lng === null) return null;
+  // 0,0 is overwhelmingly "the reader defaulted", not a real fix.
   if (lat === 0 && lng === 0) return null;
   const latRef = gps.GPSLatitudeRef ?? gps.LatitudeRef;
   const lngRef = gps.GPSLongitudeRef ?? gps.LongitudeRef;
@@ -65,10 +87,12 @@ export async function readPhotoCoordinates(
   asset: ImagePicker.ImagePickerAsset
 ): Promise<Coordinates | null> {
   const fromExif = coordsFromExif(asset.exif as any);
+  const rawGps = (asset.exif as any)?.['{GPS}'] ?? asset.exif ?? {};
   console.log(
     '[photoService] photo coords: assetId =', asset.assetId ?? 'null',
-    '| exif keys =', Object.keys(asset.exif ?? {}).filter(k => /gps|lat|lon/i.test(k)),
-    '| exif branch =', fromExif ? 'hit' : 'miss'
+    '| raw GPSLatitude =', JSON.stringify(rawGps.GPSLatitude ?? rawGps.Latitude ?? null),
+    '| raw GPSLongitude =', JSON.stringify(rawGps.GPSLongitude ?? rawGps.Longitude ?? null),
+    '| exif branch =', fromExif ? `hit (${fromExif.latitude}, ${fromExif.longitude})` : 'miss'
   );
   if (fromExif) return fromExif;
 
