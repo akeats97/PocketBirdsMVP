@@ -1,0 +1,35 @@
+diff --git a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt
+index a8a2547..18cb0f5 100644
+--- a/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt
++++ b/node_modules/expo-image-picker/android/src/main/java/expo/modules/imagepicker/ImagePickerUtils.kt
+@@ -276,5 +276,29 @@ internal fun Uri.getMediaStoreAssetId(): String? {
+     val rawId = DocumentsContract.getDocumentId(this)
+     return if (rawId.contains(':')) rawId.split(':')[1] else rawId
+   }
+-  return null
++  return getPhotoPickerAssetId()
++}
++
++/**
++ * The Android Photo Picker (PickVisualMedia) returns URIs of the form
++ * `content://media/picker/<user-id>/<provider-authority>/media/<id>`
++ * (or `picker_get_content` when the picker handles ACTION_GET_CONTENT).
++ * For items served by the LOCAL provider the trailing `<id>` is the media
++ * store asset id; cloud-provider items use foreign ids, so those (and any
++ * unrecognized layout) return `null`.
++ */
++private fun Uri.getPhotoPickerAssetId(): String? {
++  // MediaStore.AUTHORITY
++  if (authority != "media") {
++    return null
++  }
++  val segments = pathSegments
++  if (segments.size < 5 ||
++    (segments[0] != "picker" && segments[0] != "picker_get_content") ||
++    segments[2] != "com.android.providers.media.photopicker" ||
++    segments[segments.size - 2] != "media"
++  ) {
++    return null
++  }
++  return segments.last().takeIf { id -> id.isNotEmpty() && id.all { it.isDigit() } }
+ }

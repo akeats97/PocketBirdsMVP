@@ -406,6 +406,20 @@ When you tap a species in the Dex, Alex wants real reference content: **seasonal
 
 ---
 
+### Q-15 — Bring back photo cropping (P3, deferred) — added Jul 1 2026
+
+**Context.** The Jul 1 2026 photo-location work (photo-first Add flow + location-based species ranking) **removed `allowsEditing` from `pickImage` in `app/services/photoService.ts`**. That was deliberate: the picker's crop step re-encodes a fresh file that **drops the GPS EXIF on Android**, which would break the photo-location read the ranking depends on. Losing the crop is a real UX downgrade (Alex noted it), just an acceptable trade for now.
+
+**The task.** Reinstate cropping *without* losing photo location. Options to evaluate:
+- **Crop after reading location.** Read `readPhotoCoordinates(asset)` from the *original* picked asset first, then run a separate crop step (e.g. `expo-image-manipulator`) on the result. Location comes from the untouched original, so the cropped output losing EXIF no longer matters. This is the cleanest path and keeps us in the Expo module family.
+- Or a picker that preserves EXIF through its own crop (e.g. `react-native-image-crop-picker`) — heavier, adds a native dep, but confirms EXIF survival.
+
+**Note:** on iOS location is read via the library asset id (`getAssetInfoAsync`), not the file EXIF, so iOS cropping never lost location — this is an Android-driven constraint. Ties into the eventual multi-photo-per-sighting work (own data-model workstream).
+
+**Update (Jul 1 2026, photo-location bugfix):** Android now ALSO reads location via the library asset id (the file-EXIF path turned out to be dead: the system Photo Picker redacts GPS from the served file; see the `patches/expo-image-picker+16.1.4.patch` note in CLAUDE.md). That strengthens option 1: since location comes from the library asset rather than the picked file on both platforms, a post-pick crop step can't lose it. When building this, keep reading coords from the ORIGINAL asset before any manipulation, and re-verify on Android that `allowsEditing` (if reconsidered) doesn't change the picker's returned URI shape in a way that breaks the patched `assetId` extraction.
+
+---
+
 ## SECURITY — Firestore rules hardened ✅ (DONE Jun 4 2026, commit 5ed3a6e)
 
 **Was:** production Firestore used the default test-mode catch-all `allow read, write: if true` — entire DB publicly readable/writable. Discovered Jun 3 2026 during the Hoot & Comments build; rules were not in the repo.

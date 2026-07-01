@@ -11790,3 +11790,43 @@ export function familyForBird(name: string): string | null {
 export function regionsFor(name: string): RegionCode[] {
   return _nameToRegions.get(name.trim().toLowerCase()) ?? [];
 }
+
+// Rough zoogeographic realm for a coordinate. Coarse by design: it only needs to
+// tell continents apart (a magpie in Alberta vs one in Australia), not pinpoint.
+// The boundaries near the US/Mexico line, the Sahara, the Himalayas and the
+// Wallace line are approximate; since callers only RANK species by realm (never
+// hide any), boundary fuzz just makes the "most likely near you" sort slightly
+// off, never wrong. Returns null for missing/invalid coords.
+export function realmForCoordinates(
+  coords: { latitude: number; longitude: number } | null | undefined
+): RegionCode | null {
+  if (!coords) return null;
+  const lat = coords.latitude;
+  const lng = coords.longitude;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  // Americas (western Atlantic to eastern Pacific).
+  if (lng >= -170 && lng <= -30) {
+    if (lat >= 28) return 'NA'; // US, Canada, Alaska, Greenland
+    if (lat >= 13) return 'MA'; // Mexico, Central America, Caribbean
+    if (lat >= -60) return 'SA'; // South America
+    return 'OC';
+  }
+
+  // Europe, Africa, Middle East.
+  if (lng > -30 && lng < 60) {
+    if (lat >= 21) return 'PAL'; // Europe, N Africa, Middle East (north of the Sahara)
+    if (lat >= -40) return 'AF'; // Sub-Saharan Africa
+    return 'OC';
+  }
+
+  // Asia, Australasia, Pacific (east of 60°E, plus the dateline wrap below -170°).
+  if (lng >= 60 || lng < -170) {
+    if (lat <= -10) return 'AU'; // Australia, NZ, southern Pacific
+    if (lng >= 120 && lat <= 8) return 'AU'; // New Guinea, eastern Indonesia, western Pacific
+    if (lat >= 33) return 'PAL'; // N Asia, Mongolia, N China, northern Japan
+    return 'OR'; // India, SE Asia, southern China, Philippines
+  }
+
+  return null;
+}

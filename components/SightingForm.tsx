@@ -6,13 +6,14 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import ClearableInput from './ClearableInput';
 import { HardShadow } from './SightingCard';
 import { birdNamesAlpha, birdNamesAlphaNorm, birdNamesAlphaCompact, normalizeSearch } from '../constants/birdNamesLower';
+import { realmForCoordinates, regionsFor } from '../constants/birdNames';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { CUSTOM_SPECIES } from '../constants/customSpecies';
 import { REPORT_TYPES, isReportEntry } from '../constants/reportTypes';
 import { UNKNOWN_BIRD } from '../constants/unknownBird';
 import { useSightings } from '../app/context/SightingsContext';
-import { pickImage } from '../app/services/photoService';
-import { getCurrentCoordinates, getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission } from '../app/services/locationService';
+import { pickImage, readPhotoCoordinates, requestPhotoPermission } from '../app/services/photoService';
+import { getCurrentCoordinates, getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission, reverseGeocodeLabel } from '../app/services/locationService';
 import { getPlaceCoordinates, getPlacesAutocomplete, PlaceSuggestion } from '../app/services/placesService';
 import { buildRecentLocations, RecentLocation } from '../app/utils/recentLocations';
 import { Coordinates, Sighting } from '../app/types';
@@ -75,6 +76,9 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
 
   const [searchQuery, setSearchQuery] = useState(isEdit ? initial?.birdName ?? '' : '');
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  // How many of the leading `suggestions` are in the user's realm. Drives the
+  // "Most likely near you" / "Everywhere else" section split. 0 = no split.
+  const [likelyCount, setLikelyCount] = useState(0);
   const [selectedBird, setSelectedBird] = useState(isEdit ? initial?.birdName ?? '' : '');
   const [location, setLocation] = useState(isEdit ? initial?.location ?? '' : lastLocation.label);
   const [locationCoords, setLocationCoords] = useState<Coordinates | undefined>(
@@ -90,6 +94,10 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
   const [photoUri, setPhotoUri] = useState<string | null>(
     isEdit ? initial?.photoUrl ?? initial?.photoPath ?? null : null
   );
+  // Coordinates read from the picked photo's metadata (add mode). Highest-
+  // priority signal for ranking the bird list, and stays put even if the user
+  // later edits the location text.
+  const [photoCoords, setPhotoCoords] = useState<Coordinates | undefined>(undefined);
   const textInputRef = useRef<TextInput>(null);
   const notesInputRef = useRef<TextInput>(null);
   const locationInputRef = useRef<TextInput>(null);
@@ -108,18 +116,36 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
   // is focused and empty. Free path — no Google Places call.
   const recentLocations = useMemo(() => buildRecentLocations(sightings), [sightings]);
 
-  // Silently resolve the user's current position for autocomplete biasing.
-  // Never prompts — getCurrentCoordinates returns null unless permission is
-  // already granted, and we fall back to lastLocation.coordinates below.
+  // The realm used to rank the bird list. Priority: photo location (best — it's
+  // where the bird actually was) -> the location attached to this sighting
+  // (prefill / locate / place pick) -> silent current position. Null if we have
+  // no coordinates at all, in which case search stays plain alphabetical.
+  const activeRealm = useMemo(
+    () => realmForCoordinates(photoCoords ?? locationCoords ?? biasCoords),
+    [photoCoords, locationCoords, biasCoords]
+  );
+
+  // Add mode proactively asks for the two permissions this screen depends on:
+  // location (photo-location autofill, species ranking, autocomplete biasing)
+  // and photos (picking + reading the photo's GPS). Asking up front means the
+  // photo flow doesn't silently run without them. Sequential on purpose,
+  // stacked system dialogs are disorienting. Both are no-ops when already
+  // granted or permanently denied. Then resolve the current position for
+  // autocomplete biasing (edit mode skips the prompts and stays silent-only).
   useEffect(() => {
     let cancelled = false;
-    getCurrentCoordinates().then(coords => {
+    (async () => {
+      if (!isEdit) {
+        await requestLocationPermission();
+        await requestPhotoPermission();
+      }
+      const coords = await getCurrentCoordinates();
       if (!cancelled && coords) setBiasCoords(coords);
-    });
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isEdit]);
 
   // Debounced Google Places autocomplete. Only fires when the user actively
   // typed into the location field (not on pre-fill, locate, or suggestion tap).
@@ -199,10 +225,13 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
   };
 
   // Filter bird names based on search query (debounced 100ms). Rank: prefix >
-  // word-start > substring. Cap to 20. (Same hot-path search as Add.)
+  // word-start > substring. Cap to 20. (Same hot-path search as Add.) When we
+  // know the user's realm, species that live there float to the top under a
+  // "Most likely near you" section.
   useEffect(() => {
     if (!searchQuery || searchQuery === selectedBird) {
       setSuggestions([]);
+      setLikelyCount(0);
       return;
     }
     const handle = setTimeout(() => {
@@ -210,12 +239,16 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
 
       if (q.startsWith('?')) {
         setSuggestions([UNKNOWN_BIRD]);
+        setLikelyCount(0);
         return;
       }
 
       const qSpace = ' ' + q;
       const qCompact = q.replace(/ /g, '');
       const CAP = 20;
+      // Gather more than we display so in-realm matches aren't truncated before
+      // ranking. (For specific queries like "magpie" the pool is far smaller.)
+      const COLLECT = 60;
       const tier0: string[] = [];
       const tier1: string[] = [];
       const tier2: string[] = [];
@@ -229,23 +262,40 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       for (let i = 0; i < birdNamesAlpha.length; i++) {
         const norm = birdNamesAlphaNorm[i];
         if (norm.startsWith(q)) {
-          if (tier0.length < CAP) tier0.push(birdNamesAlpha[i]);
-        } else if (tier0.length < CAP) {
+          if (tier0.length < COLLECT) tier0.push(birdNamesAlpha[i]);
+        } else if (tier0.length < COLLECT) {
           if (norm.includes(qSpace)) {
-            if (tier1.length < CAP) tier1.push(birdNamesAlpha[i]);
+            if (tier1.length < COLLECT) tier1.push(birdNamesAlpha[i]);
           } else if (norm.includes(q)) {
-            if (tier2.length < CAP) tier2.push(birdNamesAlpha[i]);
+            if (tier2.length < COLLECT) tier2.push(birdNamesAlpha[i]);
           } else if (birdNamesAlphaCompact[i].includes(qCompact)) {
-            if (tier3.length < CAP) tier3.push(birdNamesAlpha[i]);
+            if (tier3.length < COLLECT) tier3.push(birdNamesAlpha[i]);
           }
         }
-        if (tier0.length >= CAP) break;
+        if (tier0.length >= COLLECT) break;
       }
 
-      setSuggestions([...reportMatches, ...customMatches, ...tier0, ...tier1, ...tier2, ...tier3].slice(0, CAP));
+      const birds = [...tier0, ...tier1, ...tier2, ...tier3];
+      const hasFixed = reportMatches.length + customMatches.length > 0;
+
+      // Realm ranking only applies to plain bird searches. Report / custom
+      // matches are pinned at the very top and never sectioned.
+      if (activeRealm && !hasFixed) {
+        const inRealm: string[] = [];
+        const outRealm: string[] = [];
+        for (const name of birds) {
+          if (regionsFor(name).includes(activeRealm)) inRealm.push(name);
+          else outRealm.push(name);
+        }
+        setSuggestions([...inRealm, ...outRealm].slice(0, CAP));
+        setLikelyCount(Math.min(inRealm.length, CAP));
+      } else {
+        setSuggestions([...reportMatches, ...customMatches, ...birds].slice(0, CAP));
+        setLikelyCount(0);
+      }
     }, 100);
     return () => clearTimeout(handle);
-  }, [searchQuery, selectedBird]);
+  }, [searchQuery, selectedBird, activeRealm]);
 
   const handleBirdSelect = (bird: string) => {
     setSelectedBird(bird);
@@ -274,9 +324,37 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
   const handleSelectPhoto = async () => {
     try {
       const result = await pickImage();
-      if (!result.canceled) {
-        setPhotoUri(result.assets[0].uri);
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      setPhotoUri(asset.uri);
+
+      // In add mode the photo drives the sighting's location: it's where the
+      // bird actually was, which beats "where I'm standing now" for both ranking
+      // the bird list and filling in the location field.
+      if (isEdit) return;
+      const coords = await readPhotoCoordinates(asset);
+      if (!coords) {
+        // A GPS-less replacement must not keep ranking by the previous photo.
+        setPhotoCoords(undefined);
+        return;
       }
+      setPhotoCoords(coords);
+      setLocationCoords(coords);
+      setShouldAutocompleteLocation(false);
+      setPlaceSuggestions([]);
+      // Naming the spot means reverse-geocoding, which requires LOCATION
+      // permission on Android (the picker only grants PHOTO permission). Ask for
+      // it once so the label can autofill; the coords and the "near you" ranking
+      // already work without it.
+      let granted = await hasLocationPermission();
+      if (!granted) granted = await requestLocationPermission();
+      const label = granted ? await reverseGeocodeLabel(coords) : '';
+      // The photo's location is authoritative. Overwrite the remembered prefill
+      // (or empty field) with the photo's place name. If we couldn't resolve a
+      // name, clear the prefill too — leaving the PREVIOUS sighting's label
+      // paired with THIS photo's coordinates would be wrong. Never clobber a
+      // location the user typed or picked themselves.
+      setLocation(prev => (prev.trim() === '' || prev === lastLocation.label ? label : prev));
     } catch (error) {
       Alert.alert('Error', 'Failed to select photo');
     }
@@ -312,6 +390,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       setNotes('');
       setDate(new Date());
       setPhotoUri(null);
+      setPhotoCoords(undefined);
     }
   };
 
@@ -328,6 +407,54 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     isEdit && !!initial && selectedBird.toLowerCase() !== initial.birdName.toLowerCase();
   const cueIsNew = nameChanged ? evaluateNewSpecies(selectedBird, initial!.id).isNewSpecies : false;
 
+  // Only section the list when the realm split is meaningful — some matches are
+  // local and some aren't. All-local or all-elsewhere shows no headers.
+  const showRealmSections = likelyCount > 0 && likelyCount < suggestions.length;
+
+  // Photo field. Rendered first (and larger, with an encouraging hint) in add
+  // mode; kept in its original position in edit mode. It's the lead of the Add
+  // flow but never required — the hint says so and the rest of the form works
+  // without it.
+  const photoField = (
+    <View style={styles.fieldGroup}>
+      <Text style={styles.label}>PHOTO</Text>
+      <TouchableOpacity
+        style={[
+          photoUri ? styles.photoButtonFilled : styles.photoButtonEmpty,
+          { height: photoUri ? 200 : isEdit ? 88 : 140 },
+        ]}
+        onPress={handleSelectPhoto}
+      >
+        {photoUri ? (
+          <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+        ) : (
+          <View style={styles.photoPlaceholder}>
+            <Ionicons name="camera" size={isEdit ? 24 : 32} color={palette.inkSoft} />
+            <Text style={styles.photoPlaceholderText}>Add a photo</Text>
+            {!isEdit && (
+              <Text style={styles.photoPlaceholderHint}>
+                Helps ID the bird and fills in where you were. Optional.
+              </Text>
+            )}
+          </View>
+        )}
+        {photoUri && (
+          <TouchableOpacity
+            style={styles.removePhotoButton}
+            onPress={() => {
+              setPhotoUri(null);
+              setPhotoCoords(undefined);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Remove photo"
+          >
+            <Ionicons name="close" size={16} color={palette.ink} />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <KeyboardAwareScrollView
       style={styles.container}
@@ -342,6 +469,9 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
           {!isEdit && <Text style={styles.title}>Add Sighting</Text>}
 
           <View style={styles.form}>
+            {/* Photo — leads the Add flow (add mode only). */}
+            {!isEdit && photoField}
+
             {/* Bird Name */}
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>BIRD</Text>
@@ -383,17 +513,28 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                     nestedScrollEnabled={true}
                   >
                     {suggestions.map((item, i) => (
-                      <Pressable
-                        key={item}
-                        style={({ pressed }) => [
-                          styles.suggestionButton,
-                          i === suggestions.length - 1 && styles.suggestionButtonLast,
-                          pressed && { backgroundColor: palette.leafSoft },
-                        ]}
-                        onPress={() => handleBirdSelect(item)}
-                      >
-                        <Text style={styles.suggestionButtonText}>{item}</Text>
-                      </Pressable>
+                      <React.Fragment key={item}>
+                        {showRealmSections && i === 0 && (
+                          <Text style={styles.suggestionSectionHeader}>MOST LIKELY NEAR YOU</Text>
+                        )}
+                        {showRealmSections && i === likelyCount && (
+                          <Text
+                            style={[styles.suggestionSectionHeader, styles.suggestionSectionHeaderDivided]}
+                          >
+                            EVERYWHERE ELSE
+                          </Text>
+                        )}
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.suggestionButton,
+                            i === suggestions.length - 1 && styles.suggestionButtonLast,
+                            pressed && { backgroundColor: palette.leafSoft },
+                          ]}
+                          onPress={() => handleBirdSelect(item)}
+                        >
+                          <Text style={styles.suggestionButtonText}>{item}</Text>
+                        </Pressable>
+                      </React.Fragment>
                     ))}
                   </ScrollView>
                 </View>
@@ -523,36 +664,8 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
               ) : null}
             </View>
 
-            {/* Photo */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>PHOTO</Text>
-              <TouchableOpacity
-                style={[
-                  photoUri ? styles.photoButtonFilled : styles.photoButtonEmpty,
-                  { height: photoUri ? 200 : 88 },
-                ]}
-                onPress={handleSelectPhoto}
-              >
-                {photoUri ? (
-                  <Image source={{ uri: photoUri }} style={styles.photoPreview} />
-                ) : (
-                  <View style={styles.photoPlaceholder}>
-                    <Ionicons name="camera" size={24} color={palette.inkSoft} />
-                    <Text style={styles.photoPlaceholderText}>Add Photo</Text>
-                  </View>
-                )}
-                {photoUri && (
-                  <TouchableOpacity
-                    style={styles.removePhotoButton}
-                    onPress={() => setPhotoUri(null)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    accessibilityLabel="Remove photo"
-                  >
-                    <Ionicons name="close" size={16} color={palette.ink} />
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-            </View>
+            {/* Photo — original position in edit mode. */}
+            {isEdit && photoField}
 
             {/* Notes */}
             <View style={styles.fieldGroup}>
@@ -768,6 +881,19 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
     paddingHorizontal: space.lg,
   },
+  suggestionSectionHeader: {
+    ...recipes.fieldLabel,
+    marginBottom: 0,
+    paddingTop: space.sm,
+    paddingBottom: space.xs,
+    paddingHorizontal: space.lg,
+    backgroundColor: palette.card,
+  },
+  suggestionSectionHeaderDivided: {
+    borderTopWidth: 1,
+    borderTopColor: palette.rule,
+    paddingTop: space.md,
+  },
   recentRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -832,6 +958,12 @@ const styles = StyleSheet.create({
     ...type.bodyS,
     color: palette.inkSoft,
     fontWeight: '600',
+  },
+  photoPlaceholderHint: {
+    ...type.bodyS,
+    color: palette.muted,
+    textAlign: 'center',
+    paddingHorizontal: space.lg,
   },
   removePhotoButton: {
     position: 'absolute',

@@ -24,6 +24,41 @@ interface LocationResult {
   coordinates: Coordinates;
 }
 
+// Reverse-geocode a coordinate to a human-readable label using expo-location's
+// free native call. Returns '' on any failure (offline, no result). Shared by
+// the locate button and the photo-location autofill.
+export async function reverseGeocodeLabel(coords: {
+  latitude: number;
+  longitude: number;
+}): Promise<string> {
+  try {
+    const results = await Location.reverseGeocodeAsync({
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+    });
+    if (results.length === 0) return '';
+    const r = results[0];
+    // The geocoder returns structured fields. On Android `name` is often just
+    // the street number ("170"), so we can't trust it as a label. Build
+    // something useful from the address pieces instead.
+    const nameLooksLikeNumber = r.name && /^\d+[a-z]?$/i.test(r.name);
+    const nameIsJustStreetNumber = r.name && r.name === r.streetNumber;
+    const nameIsUseful = r.name && !nameLooksLikeNumber && !nameIsJustStreetNumber;
+
+    if (nameIsUseful) {
+      return r.name!;
+    } else if (r.streetNumber && r.street) {
+      return `${r.streetNumber} ${r.street}${r.city ? `, ${r.city}` : ''}`;
+    } else if (r.street) {
+      return `${r.street}${r.city ? `, ${r.city}` : ''}`;
+    }
+    return r.city || r.region || r.subregion || r.country || '';
+  } catch (err) {
+    console.log('[locationService] Reverse geocode failed:', err);
+    return '';
+  }
+}
+
 // One-shot GPS fix + reverse geocode to a human-readable label. Catches all
 // errors and returns null so callers never need to think about failure modes.
 //
@@ -66,37 +101,7 @@ export async function getCurrentLocationWithLabel(
     };
 
     // Reverse-geocode using expo-location's free native call.
-    let label = '';
-    try {
-      const results = await Location.reverseGeocodeAsync({
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-      });
-      if (results.length > 0) {
-        const r = results[0];
-        // The geocoder returns structured fields. On Android `name` is often
-        // just the street number ("170"), so we can't trust it as a label.
-        // Build something useful from the address pieces instead.
-        const nameLooksLikeNumber = r.name && /^\d+[a-z]?$/i.test(r.name);
-        const nameIsJustStreetNumber = r.name && r.name === r.streetNumber;
-        const nameIsUseful = r.name && !nameLooksLikeNumber && !nameIsJustStreetNumber;
-
-        if (nameIsUseful) {
-          // Named place like "Columbia Lake" or a business name.
-          label = r.name!;
-        } else if (r.streetNumber && r.street) {
-          label = `${r.streetNumber} ${r.street}`;
-          if (r.city) label += `, ${r.city}`;
-        } else if (r.street) {
-          label = r.street;
-          if (r.city) label += `, ${r.city}`;
-        } else {
-          label = r.city || r.region || r.subregion || r.country || '';
-        }
-      }
-    } catch (err) {
-      console.log('[locationService] Reverse geocode failed, returning coords only:', err);
-    }
+    const label = await reverseGeocodeLabel(coordinates);
 
     return { label, coordinates };
   } catch (err) {
@@ -150,6 +155,7 @@ const locationService = {
   requestLocationPermission,
   getCurrentLocationWithLabel,
   getCurrentCoordinates,
+  reverseGeocodeLabel,
 };
 
 export default locationService;

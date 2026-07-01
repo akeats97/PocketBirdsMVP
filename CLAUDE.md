@@ -2,7 +2,7 @@
 
 ## Product North Star
 
-`PRD.md` (project root) is the product requirements / north-star doc: vision, bullseye user, core principles, anti-goals, mechanics, ethics, brand voice. **Read it before scoping a new feature, making a product or UX judgment call, or writing user-facing copy.** This file is the operational truth (what's currently true); PRD.md wins on questions of product direction. The always-true headlines: leaderboards are friend-scoped never global, photos are celebrated never required, and the voice is cheeky about the app but respectful about the birds. **Visibility changed Jun 23 2026: the old "friends-only is non-negotiable" headline was overturned — PocketBirds is moving to public-by-default (visible to any signed-in user) with a per-account private opt-out, to support opening signup to strangers. See PRD §8 (revised) and WORK_QUEUE PL-1. Sensitive-species coordinate fuzzing is NOT overturned and gets more important under a public default.**
+`PRD.md` (project root) is the product requirements / north-star doc: vision, bullseye user, core principles, anti-goals, mechanics, ethics, brand voice. **Read it before scoping a new feature, making a product or UX judgment call, or writing user-facing copy.** This file is the operational truth (what's currently true); PRD.md wins on questions of product direction. The always-true headlines: leaderboards are friend-scoped never global, photos are celebrated (now **strongly encouraged**, see below), and the voice is cheeky about the app but respectful about the birds. **Photo stance changed Jul 1 2026: the old "photos celebrated never required" headline was softened — with the user base growing, photoless sightings feel thin, so the Add flow now leads photo-first with the skip de-emphasized. Photos are strongly encouraged but still NOT hard-required (Mystery Bird / heard-only / backlog logging need the escape hatch), and features are never gated behind having one. See PRD §6 (revised).** **Visibility changed Jun 23 2026: the old "friends-only is non-negotiable" headline was overturned — PocketBirds is moving to public-by-default (visible to any signed-in user) with a per-account private opt-out, to support opening signup to strangers. See PRD §8 (revised) and WORK_QUEUE PL-1. Sensitive-species coordinate fuzzing is NOT overturned and gets more important under a public default.**
 
 ## Pending Design Work (Pocket Dex refactor, started May 21 2026)
 
@@ -311,6 +311,20 @@ Sightings can now carry optional GPS coordinates alongside the freeform location
 - Free-typed labels with no suggestion/locate tap save with no coords (label only).
 
 **SightingCard:** the location pin icon tints green when `coordinates` are attached, default gray otherwise. Subtle visual cue for verification.
+
+---
+
+## Photo location + realm-ranked bird search (Jul 1 2026)
+
+Add mode leads with the photo; adding one reads the photo's GPS, ranks the bird-name suggestions by zoogeographic realm ("Most likely near you" / "Everywhere else", `realmForCoordinates` in `constants/birdNames.ts`), and reverse-geocodes to autofill the LOCATION label. Ranking fallback chain: photo coords -> sighting coords -> silent current position -> plain alphabetical.
+
+**How the photo GPS read actually works (`photoService.readPhotoCoordinates`):** on BOTH platforms the working path is `asset.assetId` -> `expo-media-library getAssetInfoAsync().location`. The `asset.exif` branch is a lucky hit at best: Android's system Photo Picker redacts location from the file it serves (by OS design, `ACCESS_MEDIA_LOCATION` does not apply to picker URIs), and expo-image-picker's `quality < 1` re-encode drops GPS EXIF anyway.
+
+- **`patches/expo-image-picker+16.1.4.patch` is LOAD-BEARING.** Upstream expo-image-picker returns `assetId: null` for Android Photo Picker URIs (`content://media/picker/...`, known open issue expo/expo#17399), which killed the whole feature. The patch maps local-provider picker URIs back to their MediaStore id. Applied by `patch-package` via the `postinstall` script; it's a NATIVE change, so it only takes effect in a dev-client / EAS build made after it landed. If expo-image-picker is upgraded, re-check whether upstream learned to do this before dropping the patch.
+- The media-library lookup needs `ACCESS_MEDIA_LOCATION` (in `AndroidManifest.xml`) + the photos runtime permission; `photoService.requestPhotoPermission()` wraps that (granular `['photo']`). Cloud-only Google Photos items and Android 14 partial photo access ("Select photos") can still yield null; callers fall back gracefully.
+- **Permissions are requested proactively on Add-screen mount** (add mode only, `SightingForm.tsx`): location first, then photos, sequentially. Picking itself never requires the photos permission (system pickers), so denial only disables the GPS read; `pickImage` deliberately does NOT gate on it.
+- Cropping (`allowsEditing`) was removed from `pickImage` because the crop re-encode drops EXIF GPS on Android. Re-adding crop without losing location is WORK_QUEUE Q-15 (crop AFTER reading coords).
+- The photo's location only ever overwrites the remembered prefill or an empty field, never a user-typed/picked label.
 
 ---
 
