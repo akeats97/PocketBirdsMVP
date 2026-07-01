@@ -1,6 +1,8 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
+import { Platform } from 'react-native';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
+import { gpsFromJpegFile } from '../utils/exifGps';
 import { Coordinates } from '../types';
 
 // Photos permission (Android: READ_MEDIA_IMAGES + ACCESS_MEDIA_LOCATION; iOS:
@@ -83,6 +85,124 @@ function coordsFromExif(exif: Record<string, any> | null | undefined): Coordinat
 // Returns null when the photo carries no location (screenshot, download,
 // camera location off, cloud-only picker item) or permission is denied;
 // callers fall back to phone location.
+// EXIF DateTimeOriginal is "YYYY:MM:DD HH:MM:SS" in the device's local time.
+function parseExifDate(value: unknown): Date | null {
+  if (typeof value !== 'string') return null;
+  const m = value.match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Same photo, ignoring rotation: picker dims are post-rotation, MediaStore's
+// aren't always, so compare as an unordered pair.
+function dimsMatch(
+  a: { width: number; height: number },
+  b: { width: number; height: number }
+): boolean {
+  if (!a.width || !a.height || !b.width || !b.height) return false;
+  return (
+    (a.width === b.width && a.height === b.height) ||
+    (a.width === b.height && a.height === b.width)
+  );
+}
+
+// Locate the picked photo's ORIGINAL library asset when the picker hands back
+// no usable asset id (cloud-provider picker items). The provider renames files
+// (e.g. "1000026869.jpg"), so filename equality is only one signal; capture
+// time + pixel dimensions identify the photo regardless of naming.
+async function findLibraryAssetMatch(
+  fileName: string,
+  takenAt: Date | null,
+  dims: { width: number; height: number }
+): Promise<MediaLibrary.Asset | null> {
+  const windowMs = 26 * 60 * 60 * 1000;
+  const page = await MediaLibrary.getAssetsAsync({
+    mediaType: 'photo',
+    first: 200,
+    sortBy: [['creationTime', false]],
+    ...(takenAt
+      ? {
+          createdAfter: takenAt.getTime() - windowMs,
+          createdBefore: takenAt.getTime() + windowMs,
+        }
+      : {}),
+  });
+  console.log(
+    '[photoService] library window scan:', page.assets.length, 'assets',
+    takenAt ? `around ${takenAt.toISOString()}` : '(no capture time, newest first)'
+  );
+  const target = fileName.toLowerCase();
+  const byName = page.assets.filter(a => a.filename?.toLowerCase() === target);
+  if (byName.length > 0) {
+    if (!takenAt || byName.length === 1) return byName[0];
+    return byName.reduce((best, a) =>
+      Math.abs(a.creationTime - takenAt.getTime()) < Math.abs(best.creationTime - takenAt.getTime())
+        ? a
+        : best
+    );
+  }
+  // No filename match; fall back to capture time + dimensions. Only safe when
+  // we actually have a capture time to anchor on.
+  if (!takenAt) return null;
+  const byFingerprint = page.assets
+    .filter(a => dimsMatch(a, dims))
+    .sort(
+      (a, b) =>
+        Math.abs(a.creationTime - takenAt.getTime()) - Math.abs(b.creationTime - takenAt.getTime())
+    );
+  // Camera timestamps and MediaStore DATE_TAKEN agree to the second; allow a
+  // couple of minutes for timezone-less EXIF weirdness, no more.
+  if (byFingerprint.length > 0) {
+    const best = byFingerprint[0];
+    if (Math.abs(best.creationTime - takenAt.getTime()) <= 2 * 60 * 1000) return best;
+  }
+  return null;
+}
+
+// Cloud-provider picker items are often named "<numeric id>.jpg". Sometimes
+// that number IS the local media-store id, so probe it, but only trust the
+// result if the asset corroborates (capture time or dimensions), since a
+// foreign cloud id could collide with an unrelated local asset.
+async function probeNumericFilenameAsId(
+  fileName: string,
+  takenAt: Date | null,
+  dims: { width: number; height: number }
+): Promise<MediaLibrary.AssetInfo | null> {
+  const m = fileName.match(/^(\d{1,19})\.\w+$/);
+  if (!m) return null;
+  try {
+    const info = await MediaLibrary.getAssetInfoAsync(m[1]);
+    if (!info) return null;
+    const timeOk =
+      takenAt !== null && Math.abs(info.creationTime - takenAt.getTime()) <= 48 * 60 * 60 * 1000;
+    const dimsOk = dimsMatch(info, dims);
+    console.log(
+      '[photoService] numeric-id probe:', m[1],
+      '| found asset', info.filename,
+      '| timeOk =', timeOk, '| dimsOk =', dimsOk
+    );
+    return timeOk || dimsOk ? info : null;
+  } catch {
+    console.log('[photoService] numeric-id probe:', m[1], '| no such local asset');
+    return null;
+  }
+}
+
+async function locationFromAssetInfo(
+  assetRef: string | MediaLibrary.Asset,
+  label: string
+): Promise<Coordinates | null> {
+  const info = await MediaLibrary.getAssetInfoAsync(assetRef);
+  console.log(`[photoService] ${label} location =`, info.location ?? 'null');
+  if (!info.location) return null;
+  return {
+    latitude: info.location.latitude,
+    longitude: info.location.longitude,
+    capturedAt: new Date(),
+  };
+}
+
 export async function readPhotoCoordinates(
   asset: ImagePicker.ImagePickerAsset
 ): Promise<Coordinates | null> {
@@ -90,26 +210,61 @@ export async function readPhotoCoordinates(
   const rawGps = (asset.exif as any)?.['{GPS}'] ?? asset.exif ?? {};
   console.log(
     '[photoService] photo coords: assetId =', asset.assetId ?? 'null',
+    '| fileName =', asset.fileName ?? 'null',
     '| raw GPSLatitude =', JSON.stringify(rawGps.GPSLatitude ?? rawGps.Latitude ?? null),
-    '| raw GPSLongitude =', JSON.stringify(rawGps.GPSLongitude ?? rawGps.Longitude ?? null),
     '| exif branch =', fromExif ? `hit (${fromExif.latitude}, ${fromExif.longitude})` : 'miss'
   );
   if (fromExif) return fromExif;
 
-  if (!asset.assetId) return null;
+  // Parse the GPS straight out of the picked file's EXIF bytes. The reason
+  // code distinguishes "photo has no GPS" (no-exif-app1 / no-gps-ifd) from
+  // "the Photo Picker redacted it" (zeroed-coords).
+  const fromFile = await gpsFromJpegFile(asset.uri);
+  console.log(
+    '[photoService] jpeg exif parse =',
+    fromFile.coords
+      ? `hit (${fromFile.coords.latitude}, ${fromFile.coords.longitude})`
+      : `miss (${fromFile.reason})`
+  );
+  if (fromFile.coords) {
+    return { ...fromFile.coords, capturedAt: new Date() };
+  }
+
   try {
     if (!(await requestPhotoPermission())) return null;
-    const info = await MediaLibrary.getAssetInfoAsync(asset.assetId);
-    console.log('[photoService] getAssetInfoAsync location =', info.location ?? 'null');
-    if (info.location) {
-      return {
-        latitude: info.location.latitude,
-        longitude: info.location.longitude,
-        capturedAt: new Date(),
-      };
+
+    if (asset.assetId) {
+      const coords = await locationFromAssetInfo(asset.assetId, 'getAssetInfoAsync');
+      if (coords) return coords;
+    }
+
+    // Fallbacks: no (or fruitless) asset id from the picker. Try to re-find
+    // the photo's ORIGINAL in the local library (the picker's copy is
+    // location-redacted, the original is not) and read its location.
+    if (Platform.OS === 'android' && asset.fileName) {
+      const takenAt = parseExifDate(
+        (asset.exif as any)?.DateTimeOriginal ?? (asset.exif as any)?.DateTime
+      );
+      const dims = { width: asset.width, height: asset.height };
+
+      const probed = await probeNumericFilenameAsId(asset.fileName, takenAt, dims);
+      if (probed) {
+        const coords = await locationFromAssetInfo(probed, 'numeric-id probe');
+        if (coords) return coords;
+      }
+
+      const match = await findLibraryAssetMatch(asset.fileName, takenAt, dims);
+      console.log(
+        '[photoService] library match fallback:', asset.fileName,
+        '| takenAt =', takenAt?.toISOString() ?? 'null',
+        '| match =', match ? `${match.id} (${match.filename})` : 'none'
+      );
+      if (match) {
+        return await locationFromAssetInfo(match, 'library match');
+      }
     }
   } catch (err) {
-    console.log('[photoService] getAssetInfoAsync failed:', err);
+    console.log('[photoService] library location read failed:', err);
   }
   return null;
 }

@@ -349,6 +349,10 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       let granted = await hasLocationPermission();
       if (!granted) granted = await requestLocationPermission();
       const label = granted ? await reverseGeocodeLabel(coords) : '';
+      console.log(
+        '[SightingForm] photo coords attached:', coords.latitude, coords.longitude,
+        '| locPermission =', granted, '| geocoded label =', label || '(none)'
+      );
       // The photo's location is authoritative. Overwrite the remembered prefill
       // (or empty field) with the photo's place name. If we couldn't resolve a
       // name, clear the prefill too — leaving the PREVIOUS sighting's label
