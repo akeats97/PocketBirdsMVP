@@ -18,6 +18,7 @@ import {
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HardShadow } from '../../components/SightingCard';
+import { SpeciesNameLink } from '../../components/SpeciesNameLink';
 import { Owl } from '../../components/Owl';
 import { Avatar } from '../../components/social/Avatar';
 import { FacePile } from '../../components/social/FacePile';
@@ -382,7 +383,7 @@ export default function SightingDetailScreen() {
             </Pressable>
           </View>
 
-          <Text style={styles.birdName}>{sighting.birdName}</Text>
+          <SpeciesNameLink name={sighting.birdName} textStyle={styles.birdName} glyphSize={18} />
 
           <View style={styles.metaRow}>
             {sighting.location ? (

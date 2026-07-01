@@ -17,6 +17,7 @@ import { IdentifiedByLine } from './community/IdentifiedByLine';
 import { NeedsIdPill } from './community/NeedsIdPill';
 import { GlobalFirstBadge } from './GlobalFirstBadge';
 import { Owl } from './Owl';
+import { SpeciesNameLink } from './SpeciesNameLink';
 
 interface SightingCardProps {
   sighting: Sighting;
@@ -95,7 +96,7 @@ function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardP
         <View style={styles.body}>
           <View style={styles.headerRow}>
             <View style={styles.nameBlock}>
-              <Text style={styles.birdName} numberOfLines={2}>{sighting.birdName}</Text>
+              <SpeciesNameLink name={sighting.birdName} textStyle={styles.birdName} numberOfLines={2} />
             </View>
 
             {/* A verified global-first wears the holo "1ST" globe pill (same as

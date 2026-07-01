@@ -14,6 +14,7 @@ import { border, font, palette, radius, recipes, space, type } from '../constant
 import { isMysteryBird } from '../constants/unknownBird';
 import { BottomSheet } from './BottomSheet';
 import { HardShadow } from './SightingCard';
+import { SpeciesNameLink } from './SpeciesNameLink';
 import { GlobalFirstBadge } from './GlobalFirstBadge';
 import { IdentifiedByLine } from './community/IdentifiedByLine';
 import { NeedsIdPill } from './community/NeedsIdPill';
@@ -111,7 +112,7 @@ function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSighti
 
           <View style={styles.headerRow}>
             <View style={styles.nameBlock}>
-              <Text style={styles.birdName} numberOfLines={2}>{sighting.birdName}</Text>
+              <SpeciesNameLink name={sighting.birdName} textStyle={styles.birdName} numberOfLines={2} />
             </View>
 
             {/* A verified global-first wears the holo "1ST" globe pill (same as
