@@ -10,8 +10,8 @@ import { getWikiBlurb, WikiBlurb } from '../../app/services/wikiService';
 import { HardShadow } from '../SightingCard';
 
 // The Guide tab — licensed open data only (AVONET morphology, IUCN status via
-// Wikidata, Wikipedia description, the app's eight realms). Option C order:
-// Description -> Measurements -> Conservation -> Where it lives.
+// Wikidata, Wikipedia description, the app's eight realms). Order leads with
+// range: Where it lives -> Description -> Measurements -> Conservation.
 
 // Approximate realm positions over the equirectangular map (percent x/y).
 const REALM_POS: Record<RegionCode, { x: number; y: number }> = {
@@ -37,36 +37,8 @@ export default function SpeciesGuide({ name, latin }: { name: string; latin: str
 
   return (
     <View style={styles.body}>
-      {/* 1. Description */}
-      <SectionLabel>Description</SectionLabel>
-      <WikiCard name={name} latin={latin} />
-
-      {/* 2. Measurements */}
-      <SectionLabel style={styles.sectionGap}>Measurements</SectionLabel>
-      <View style={styles.statRow}>
-        <StatCell icon="scale-outline" label="Body mass" value={av?.mass ?? null} unit="g" sub="typical adult" />
-        <StatCell icon="resize-outline" label="Wing chord" value={av?.wingChord ?? null} unit="mm" sub="folded wing" />
-      </View>
-      <View style={styles.chipRow}>
-        <FactChip icon="leaf-outline" label="Habitat" value={av?.habitat ?? null} tint={palette.leafSoft} />
-        <FactChip icon="nutrition-outline" label="Diet" value={av?.diet ?? null} tint={palette.sunSoft} />
-      </View>
-
-      {/* 3. Conservation */}
-      <SectionLabel style={styles.sectionGap}>Conservation</SectionLabel>
-      <HardShadow offset={3} borderRadius={radius.card}>
-        <View style={styles.statusCard}>
-          <View style={[styles.statusStrip, { backgroundColor: STATUS_VISUAL[status].bg }]}>
-            <Text style={[styles.statusText, { color: STATUS_VISUAL[status].fg }]}>
-              {status} · {STATUS_LABEL[status]}
-            </Text>
-            <Text style={[styles.statusText, { color: STATUS_VISUAL[status].fg, opacity: 0.7 }]}>IUCN</Text>
-          </View>
-        </View>
-      </HardShadow>
-
-      {/* 4. Where it lives */}
-      <SectionLabel style={styles.sectionGap}>Where it lives</SectionLabel>
+      {/* 1. Where it lives */}
+      <SectionLabel>Where it lives</SectionLabel>
       <View style={styles.mapCard}>
         <RealmWorld realms={realms} />
         <View style={styles.realmList}>
@@ -90,6 +62,34 @@ export default function SpeciesGuide({ name, latin }: { name: string; latin: str
         </View>
         <MigrationIndicator migration={av?.migration ?? null} />
       </View>
+
+      {/* 2. Description */}
+      <SectionLabel style={styles.sectionGap}>Description</SectionLabel>
+      <WikiCard name={name} latin={latin} />
+
+      {/* 3. Measurements */}
+      <SectionLabel style={styles.sectionGap}>Measurements</SectionLabel>
+      <View style={styles.statRow}>
+        <StatCell icon="scale-outline" label="Body mass" value={av?.mass ?? null} unit="g" sub="typical adult" />
+        <StatCell icon="resize-outline" label="Wing chord" value={av?.wingChord ?? null} unit="mm" sub="folded wing" />
+      </View>
+      <View style={styles.chipRow}>
+        <FactChip icon="leaf-outline" label="Habitat" value={av?.habitat ?? null} tint={palette.leafSoft} />
+        <FactChip icon="nutrition-outline" label="Diet" value={av?.diet ?? null} tint={palette.sunSoft} />
+      </View>
+
+      {/* 4. Conservation */}
+      <SectionLabel style={styles.sectionGap}>Conservation</SectionLabel>
+      <HardShadow offset={3} borderRadius={radius.card}>
+        <View style={styles.statusCard}>
+          <View style={[styles.statusStrip, { backgroundColor: STATUS_VISUAL[status].bg }]}>
+            <Text style={[styles.statusText, { color: STATUS_VISUAL[status].fg }]}>
+              {status} · {STATUS_LABEL[status]}
+            </Text>
+            <Text style={[styles.statusText, { color: STATUS_VISUAL[status].fg, opacity: 0.7 }]}>IUCN</Text>
+          </View>
+        </View>
+      </HardShadow>
 
       {/* 5. Credit line */}
       <Text style={styles.credit}>
