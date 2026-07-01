@@ -11770,12 +11770,23 @@ export const birdNames: string[] = birdFamilies.flatMap(f => f.birds.map(b => b.
 
 // Lowercase species name -> family. Built once at module load.
 const _nameToFamily = new Map<string, string>();
+// Lowercase species name -> zoogeographic realms it occupies.
+const _nameToRegions = new Map<string, RegionCode[]>();
 for (const fam of birdFamilies) {
-  for (const b of fam.birds) _nameToFamily.set(b.name.toLowerCase(), fam.family);
+  for (const b of fam.birds) {
+    _nameToFamily.set(b.name.toLowerCase(), fam.family);
+    _nameToRegions.set(b.name.toLowerCase(), b.regions);
+  }
 }
 
 // Family a species belongs to, or null if the name isn't in the IOC list
 // (custom / legacy / orphan names). Case-insensitive.
 export function familyForBird(name: string): string | null {
   return _nameToFamily.get(name.trim().toLowerCase()) ?? null;
+}
+
+// Realms a species occupies (e.g. ['NA','MA']), or [] if the name isn't in the
+// IOC list. Case-insensitive. Drives the Guide tab's "Where it lives" map.
+export function regionsFor(name: string): RegionCode[] {
+  return _nameToRegions.get(name.trim().toLowerCase()) ?? [];
 }

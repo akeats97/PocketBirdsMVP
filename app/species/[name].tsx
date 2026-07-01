@@ -5,15 +5,18 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SightingCard, { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
+import SpeciesGuide from '../../components/species/SpeciesGuide';
+import { latinFor } from '../../constants/birdLatin';
 import { familyForBird } from '../../constants/birdNames';
-import { font, palette, radius, space } from '../../constants/Colors';
+import { font, palette, radius, space, STATUS_VISUAL } from '../../constants/Colors';
+import { statusFor } from '../../constants/iucnStatus';
 import { isReportEntry } from '../../constants/reportTypes';
 import { useSightings } from '../context/SightingsContext';
 import { useWishlist } from '../context/WishlistContext';
 import { CommunityPhoto, getCommunityPhotosForSpecies } from '../services/sightingService';
 import { Sighting } from '../types';
 
-type Tab = 'community' | 'yours';
+type Tab = 'guide' | 'community' | 'yours';
 
 // YOUR relationship to a species, derived from your own sightings + wishlist.
 interface Relationship {
@@ -30,9 +33,11 @@ export default function SpeciesScreen() {
   const insets = useSafeAreaInsets();
 
   const { sightings } = useSightings();
-  const { wishlist } = useWishlist();
+  const { wishlist, toggle: toggleWishlist } = useWishlist();
 
   const family = useMemo(() => familyForBird(name), [name]);
+  const latin = useMemo(() => latinFor(name), [name]);
+  const status = useMemo(() => statusFor(name), [name]);
 
   // Your sightings of this species, newest first.
   const mine = useMemo(() => {
@@ -55,10 +60,10 @@ export default function SpeciesScreen() {
     return mine.reduce((earliest, s) => (s.date < earliest.date ? s : earliest), mine[0]).id;
   }, [mine]);
 
-  // Adaptive default: a seen bird leads with your record, an unseen bird leads
-  // with discovery. An explicit ?tab= param overrides.
+  // Guide leads by default (the species reference is the point of the screen).
+  // An explicit ?tab= param still deep-links straight to Community / Yours.
   const [tab, setTab] = useState<Tab>(
-    tabParam === 'community' || tabParam === 'yours' ? tabParam : (rel.seen ? 'yours' : 'community')
+    tabParam === 'guide' || tabParam === 'community' || tabParam === 'yours' ? tabParam : 'guide'
   );
 
   const [community, setCommunity] = useState<CommunityPhoto[]>([]);
@@ -92,12 +97,26 @@ export default function SpeciesScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Identity */}
+        {/* Identity — family · name · latin, with IUCN status + wishlist star */}
         <View style={styles.identity}>
           {family && <Text style={styles.family}>{family.toUpperCase()}</Text>}
-          <Text style={styles.speciesName}>{name}</Text>
-          <View style={styles.chipRow}>
-            <StatusChip rel={rel} />
+          <View style={styles.identityRow}>
+            <View style={styles.identityLeft}>
+              <Text style={styles.speciesName}>{name}</Text>
+              {latin ? <Text style={styles.latin}>{latin}</Text> : null}
+            </View>
+            <View style={styles.identityRight}>
+              <View style={[styles.statusPill, { backgroundColor: STATUS_VISUAL[status].bg }]}>
+                <Text style={[styles.statusPillText, { color: STATUS_VISUAL[status].fg }]}>{status}</Text>
+              </View>
+              <Pressable
+                onPress={() => toggleWishlist(name)}
+                hitSlop={8}
+                style={[styles.wishStar, rel.wish && styles.wishStarOn]}
+              >
+                <Ionicons name={rel.wish ? 'star' : 'star-outline'} size={rel.wish ? 15 : 16} color={palette.ink} />
+              </Pressable>
+            </View>
           </View>
         </View>
 
@@ -111,7 +130,9 @@ export default function SpeciesScreen() {
           />
         </View>
 
-        {tab === 'community' ? (
+        {tab === 'guide' ? (
+          <SpeciesGuide name={name} latin={latin} />
+        ) : tab === 'community' ? (
           <CommunityZone
             photos={community}
             loading={loadingCommunity}
@@ -133,44 +154,31 @@ export default function SpeciesScreen() {
   );
 }
 
-// ─── Status chip — your relationship to this species ────────────────────────
-function StatusChip({ rel }: { rel: Relationship }) {
-  let bg: string, fg: string, borderColor: string, icon: keyof typeof Ionicons.glyphMap, label: string;
-  if (rel.first) {
-    bg = palette.sun; fg = palette.ink; borderColor = palette.ink; icon = 'flag'; label = 'First find';
-  } else if (rel.seen) {
-    bg = palette.leafSoft; fg = palette.leaf; borderColor = palette.leaf; icon = 'checkmark'; label = `Seen ×${rel.count}`;
-  } else if (rel.wish) {
-    bg = palette.sunSoft; fg = palette.ink; borderColor = palette.sun; icon = 'star'; label = 'On your wishlist';
-  } else {
-    bg = palette.card; fg = palette.inkSoft; borderColor = palette.rule; icon = 'star-outline'; label = 'Not seen yet';
-  }
-  return (
-    <View style={[styles.chip, { backgroundColor: bg, borderColor }]}>
-      <Ionicons name={icon} size={12} color={fg} />
-      <Text style={[styles.chipText, { color: fg }]}>{label}</Text>
-    </View>
-  );
-}
-
-// ─── Segmented toggle — Community | Yours, with live counts ──────────────────
+// ─── Segmented toggle — Guide | Community | Yours ───────────────────────────
+// Guide (with a book icon) leads; Community / Yours carry live count badges.
 function SpeciesTabs({ tab, setTab, community, yours }: {
   tab: Tab; setTab: (t: Tab) => void; community: number; yours: number;
 }) {
-  const Item = ({ id, label, count }: { id: Tab; label: string; count: number }) => {
+  const Item = ({ id, label, count, icon }: {
+    id: Tab; label: string; count?: number; icon?: keyof typeof Ionicons.glyphMap;
+  }) => {
     const on = tab === id;
     return (
       <Pressable onPress={() => setTab(id)} style={[styles.tabItem, on && styles.tabItemActive]}>
+        {icon && <Ionicons name={icon} size={13} color={on ? palette.cream : palette.inkSoft} />}
         <Text style={[styles.tabLabel, on && styles.tabLabelActive]}>{label}</Text>
-        <View style={[styles.tabBadge, on ? styles.tabBadgeActive : styles.tabBadgeInactive]}>
-          <Text style={[styles.tabBadgeText, on && styles.tabBadgeTextActive]}>{count}</Text>
-        </View>
+        {count != null && (
+          <View style={[styles.tabBadge, on ? styles.tabBadgeActive : styles.tabBadgeInactive]}>
+            <Text style={[styles.tabBadgeText, on && styles.tabBadgeTextActive]}>{count}</Text>
+          </View>
+        )}
       </Pressable>
     );
   };
   return (
     <HardShadow offset={3} borderRadius={radius.pill}>
       <View style={styles.tabBar}>
+        <Item id="guide" label="Guide" icon="book-outline" />
         <Item id="community" label="Community" count={community} />
         <Item id="yours" label="Yours" count={yours} />
       </View>
@@ -364,26 +372,28 @@ const styles = StyleSheet.create({
   // Identity
   identity: { paddingHorizontal: space.xl, paddingTop: space.xs },
   family: { fontFamily: font.mono, fontSize: 10.5, color: palette.inkSoft, letterSpacing: 1 },
+  identityRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginTop: 5 },
+  identityLeft: { flex: 1 },
   speciesName: {
     fontFamily: font.displayBlack,
-    fontSize: 30,
+    fontSize: 27,
     color: palette.ink,
     letterSpacing: -1.1,
-    lineHeight: 31,
-    marginTop: 5,
+    lineHeight: 28,
   },
-  chipRow: { flexDirection: 'row', marginTop: 11 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: 1.5,
-    borderRadius: radius.pill,
-    paddingVertical: 4,
-    paddingLeft: 9,
-    paddingRight: 11,
+  latin: { fontFamily: font.mono, fontSize: 12, fontStyle: 'italic', color: palette.inkSoft, marginTop: 4 },
+  identityRight: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
+  statusPill: {
+    borderWidth: 1.5, borderColor: palette.ink, borderRadius: radius.pill,
+    paddingVertical: 4, paddingHorizontal: 9,
   },
-  chipText: { fontFamily: font.bodyBold, fontSize: 12, letterSpacing: 0.2 },
+  statusPillText: { fontFamily: font.monoBold, fontSize: 9.5, letterSpacing: 0.5 },
+  wishStar: {
+    width: 34, height: 34, borderRadius: radius.pill, backgroundColor: palette.card,
+    borderWidth: 2, borderColor: palette.ink, alignItems: 'center', justifyContent: 'center',
+    boxShadow: `2px 2px 0 ${palette.ink}`,
+  },
+  wishStarOn: { backgroundColor: palette.sun },
 
   // Toggle
   tabsWrap: { paddingHorizontal: space.xl, paddingTop: space.md + 2, paddingBottom: space.sm },
@@ -401,12 +411,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
+    gap: 5,
     paddingVertical: 9,
+    paddingHorizontal: 2,
     borderRadius: radius.pill,
   },
   tabItemActive: { backgroundColor: palette.ink },
-  tabLabel: { fontFamily: font.display, fontSize: 14, fontWeight: '700', color: palette.inkSoft, letterSpacing: -0.2 },
+  tabLabel: { fontFamily: font.display, fontSize: 13, fontWeight: '700', color: palette.inkSoft, letterSpacing: -0.3 },
   tabLabelActive: { color: palette.cream },
   tabBadge: {
     minWidth: 20,
