@@ -3,6 +3,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import FriendSightingCard from '../../components/FriendSightingCard';
 import { DayHeader } from '../../components/journal/DayHeader';
+import LoadingSplash from '../../components/journal/LoadingSplash';
 import SightingCard, { HardShadow } from '../../components/SightingCard';
 import { border, font, palette, radius, recipes, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -63,7 +64,7 @@ function EmptyState({ hasFriends, onFindFriends }: { hasFriends: boolean; onFind
 export default function JournalScreen() {
   const router = useRouter();
   const { sightings } = useSightings();
-  const { friendSightings, friends, refreshFriends } = useFriendSightings();
+  const { friendSightings, friends, friendsReady, refreshFriends } = useFriendSightings();
   const { unreadBySighting } = useActivity();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -163,6 +164,19 @@ export default function JournalScreen() {
       setIsRefreshing(false);
     }
   };
+
+  // Hold the loading splash on first open until the friend feed has settled, so
+  // we don't flash your local-only sightings and then reflow when friends pop
+  // in. When offline / friendless / errored, friendsReady flips fast and we fall
+  // through to the feed (own sightings only). Never re-triggers on refresh.
+  if (!friendsReady) {
+    return (
+      <View style={styles.container}>
+        <JournalHeader />
+        <LoadingSplash />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

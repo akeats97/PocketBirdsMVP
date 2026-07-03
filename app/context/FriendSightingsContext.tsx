@@ -1,3 +1,4 @@
+import NetInfo from '@react-native-community/netinfo';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
@@ -9,6 +10,13 @@ interface FriendSightingsContextType {
   friendSightings: FriendSighting[];
   friends: { id: string; name: string }[];
   isLoadingFriends: boolean;
+  // True once the initial friend load has settled: the first sightings snapshot
+  // delivered, or we have no friends, or we're offline / errored. Unlike
+  // isLoadingFriends (which flips as soon as the *following list* is fetched,
+  // before the sightings arrive), this waits for the actual feed data so the
+  // Journal can hold a loader until there's nothing left to pop in. Only ever
+  // false -> true, so pull-to-refresh never re-triggers the full-screen loader.
+  friendsReady: boolean;
   refreshFriends: () => Promise<void>;
 }
 
@@ -20,6 +28,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
   const [friendSightings, setFriendSightings] = useState<FriendSighting[]>([]);
   const [friends, setFriends] = useState<{ id: string; name: string }[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(true);
+  const [friendsReady, setFriendsReady] = useState(false);
   // Holds the active sightings onSnapshot unsubscribe so we can tear it down on
   // logout / re-fetch. Without this the listener leaks and, under the strict
   // Firestore rules, fires a permission error the moment auth drops at logout.
@@ -29,32 +38,52 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
   const fetchFollowing = async () => {
     if (!auth.currentUser) {
       setIsLoadingFriends(false);
+      setFriendsReady(true);
       return;
     }
-    
+
     setIsLoadingFriends(true);
+    // Offline: reveal the feed right away (local/own sightings only) rather than
+    // holding the loader on a network round-trip that won't complete. Any cached
+    // friend data still fills in later if Firestore's cache resolves. Check for
+    // an explicit `false` only — on cold start NetInfo often reports `null`
+    // (not-yet-determined), and treating that as offline would reveal the feed
+    // before friends load and make them pop in as a second chunk. `null` waits
+    // for the snapshot (fast when online) or the 3s ceiling (if truly dead).
+    NetInfo.fetch().then(state => {
+      if (state.isConnected === false) setFriendsReady(true);
+    });
+    // Hard ceiling: NetInfo.isConnected only means "an interface is up", not
+    // "the internet is reachable" — so a connected-but-dead network (e.g. a
+    // dropped Starlink link) wouldn't hit the offline branch above and could
+    // hang on getFollowing. Guarantee the Journal loader clears within 3s no
+    // matter the failure mode. Idempotent with the other friendsReady triggers.
+    setTimeout(() => setFriendsReady(true), 3000);
     try {
       // Get list of users the current user is following
       const followingUsers = await getFollowing();
-      
+
       // Convert to the format expected by the UI
       const friendsList = followingUsers.map(user => ({
         id: user.uid,
         name: user.username
       }));
-      
+
       setFriends(friendsList);
-      
-      // If we have friends, fetch their sightings
+
+      // If we have friends, fetch their sightings (friendsReady flips when the
+      // first snapshot delivers). No friends -> nothing to wait for, ready now.
       if (followingUsers.length > 0) {
         fetchFriendSightings(followingUsers);
       } else {
         setFriendSightings([]);
+        setFriendsReady(true);
       }
     } catch (error) {
       console.error('Error fetching following:', error);
+      setFriendsReady(true);
       Alert.alert(
-        'Error', 
+        'Error',
         'Failed to load friends. Please check your connection and try again.'
       );
     } finally {
@@ -138,10 +167,13 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
           } else {
             setFriendSightings(sightings);
           }
+          // First feed data is in — the Journal can drop its loader now.
+          setFriendsReady(true);
         },
         (error) => {
           console.error('Error fetching sightings:', error);
           // Keep whatever was last loaded; never inject placeholder data.
+          setFriendsReady(true);
         }
       );
       
@@ -149,6 +181,8 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
       sightingsUnsubRef.current = unsubscribe;
     } catch (error) {
       console.error('Error setting up sightings listener:', error);
+      // Listener never got established — don't leave the Journal loader hanging.
+      setFriendsReady(true);
     }
   };
   
@@ -165,6 +199,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
         setFriends([]);
         setFriendSightings([]);
         setIsLoadingFriends(false);
+        setFriendsReady(true);
       }
     });
 
@@ -186,6 +221,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
         friendSightings,
         friends,
         isLoadingFriends,
+        friendsReady,
         refreshFriends
       }}
     >
