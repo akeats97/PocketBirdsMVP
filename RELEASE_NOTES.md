@@ -8,19 +8,19 @@
 
 📖 A field guide for every bird
 • Tap any bird in your Dex to open its Guide: what it looks like, how big it is, its conservation status, and where in the world it lives
-• Bird names now show on sighting cards, tap one to jump straight to its guide
+• Bird names on sighting cards bring you straight to its guide
 
 📷 Photo-first logging
 • Adding a sighting now leads with the photo. Add one and PocketBirds reads where it was taken to fill in your location for you
 
 🔍 Smarter bird search
-• Type a name and the birds that actually occur near you rise to the top, now down to your state or province, not just the continent
+• Type a name and the birds that actually occur near you rise to the top, down to your state or province
 
 🗂️ Filter your Dex by photos
 • New camera filter: show only species you've photographed, or only the ones you've seen but still owe a photo
 
 ✨ Nicer to open
-• A playful new loading screen when you open your Field Journal
+• A new loading screen when you open your Field Journal
 • Your Journal now loads your sightings and your friends' together in one pass, instead of popping in
 • Tap anywhere to dismiss the location list while adding a sighting
 
@@ -62,7 +62,7 @@
 - iOS push entitlement (`aps-environment`) still missing from the provisioning profile, so Android→iOS push remains broken (`WORK_QUEUE.md` Bug 6).
 
 ### Post-ship steps
-- **iOS:** build 1.0.0 (15) built successfully (IPA ready), but the auto-submit to TestFlight FAILED: Apple reported "a required agreement is missing or has expired." Sign the pending agreement in App Store Connect (Business → Agreements, Tax, and Banking, or a Terms of Service prompt), then re-submit the existing build with `eas submit -p ios --latest` (no rebuild needed). Lands in the "Friends" external group; no new native capability, should skip Beta App Review.
+- **iOS:** build 1.0.0 (15) built and submitted to TestFlight → "Friends" external group. The initial auto-submit was blocked on an unsigned Apple agreement ("a required agreement is missing or has expired"); after signing it in App Store Connect, `eas submit -p ios --latest` re-sent the same build successfully. Now processing on Apple's side (5-10 min). No new native capability, should skip Beta App Review.
 - **Android:** APK (not Play Store AAB). Distribute via Firebase App Distribution. Artifact: <https://expo.dev/artifacts/eas/wG1KADTIXJjS_UMiTGpYlp5oa5EHwTy3RtW4SLnUZwQ.apk>
 - Rolled `constants/release.ts` `CURRENT_RELEASE_NAME` Scrub-Tyrant → **Doradito**, and stamped the `release-names.csv` Scrub-Tyrant date (July 3, 2026). Next name after Doradito is by wingspan ascending.
 
