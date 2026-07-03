@@ -7,13 +7,14 @@ import ClearableInput from './ClearableInput';
 import { HardShadow } from './SightingCard';
 import { birdNamesAlpha, birdNamesAlphaNorm, birdNamesAlphaCompact, normalizeSearch } from '../constants/birdNamesLower';
 import { realmForCoordinates, regionsFor } from '../constants/birdNames';
+import { rangeStatusFor, hasRegion } from '../constants/birdRanges';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { CUSTOM_SPECIES } from '../constants/customSpecies';
 import { REPORT_TYPES, isReportEntry } from '../constants/reportTypes';
 import { UNKNOWN_BIRD } from '../constants/unknownBird';
 import { useSightings } from '../app/context/SightingsContext';
 import { pickImage, readPhotoCoordinates, requestPhotoPermission } from '../app/services/photoService';
-import { getCurrentCoordinates, getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission, reverseGeocodeLabel } from '../app/services/locationService';
+import { getCurrentCoordinates, getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission, reverseGeocodeLabel, reverseGeocodeRegion } from '../app/services/locationService';
 import { getPlaceCoordinates, getPlacesAutocomplete, PlaceSuggestion } from '../app/services/placesService';
 import { buildRecentLocations, RecentLocation } from '../app/utils/recentLocations';
 import { Coordinates, Sighting } from '../app/types';
@@ -124,6 +125,29 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     () => realmForCoordinates(photoCoords ?? locationCoords ?? biasCoords),
     [photoCoords, locationCoords, biasCoords]
   );
+
+  // The fine (state/province) region for the same coords, resolved by reverse-
+  // geocode. Ranks the bird list by admin-1 range where we have data (tells a
+  // Black-billed Magpie in Alberta from a California-only Yellow-billed, which
+  // realm can't). Null until resolved / on failure -> realm ranking stands in.
+  const [activeRegion, setActiveRegion] = useState<{
+    countryCode: string;
+    province: string;
+  } | null>(null);
+  const rankCoords = photoCoords ?? locationCoords ?? biasCoords;
+  useEffect(() => {
+    if (!rankCoords) {
+      setActiveRegion(null);
+      return;
+    }
+    let cancelled = false;
+    reverseGeocodeRegion(rankCoords).then(region => {
+      if (!cancelled) setActiveRegion(region);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [rankCoords?.latitude, rankCoords?.longitude]);
 
   // Add mode proactively asks for the two permissions this screen depends on:
   // location (photo-location autofill, species ranking, autocomplete biasing)
@@ -278,9 +302,27 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       const birds = [...tier0, ...tier1, ...tier2, ...tier3];
       const hasFixed = reportMatches.length + customMatches.length > 0;
 
-      // Realm ranking only applies to plain bird searches. Report / custom
+      // "Near you" ranking only applies to plain bird searches. Report / custom
       // matches are pinned at the very top and never sectioned.
-      if (activeRealm && !hasFixed) {
+      const useRegion =
+        !hasFixed && activeRegion && hasRegion(activeRegion.countryCode, activeRegion.province);
+      if (useRegion) {
+        // Admin-1 ranking: a species is "most likely near you" if it's expected
+        // in the user's state/province. Species with no GBIF range data (the
+        // ~12%) fall back to the coarser realm test so they're still placed.
+        const { countryCode, province } = activeRegion!;
+        const likely: string[] = [];
+        const unlikely: string[] = [];
+        for (const name of birds) {
+          const status = rangeStatusFor(name, countryCode, province);
+          const isLikely =
+            status === 'expected' ||
+            (status === 'unknown' && !!activeRealm && regionsFor(name).includes(activeRealm));
+          (isLikely ? likely : unlikely).push(name);
+        }
+        setSuggestions([...likely, ...unlikely].slice(0, CAP));
+        setLikelyCount(Math.min(likely.length, CAP));
+      } else if (activeRealm && !hasFixed) {
         const inRealm: string[] = [];
         const outRealm: string[] = [];
         for (const name of birds) {
@@ -295,7 +337,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       }
     }, 100);
     return () => clearTimeout(handle);
-  }, [searchQuery, selectedBird, activeRealm]);
+  }, [searchQuery, selectedBird, activeRealm, activeRegion]);
 
   const handleBirdSelect = (bird: string) => {
     setSelectedBird(bird);
@@ -401,6 +443,13 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
   const handleOutsidePress = () => {
     if (suggestions.length > 0) setSuggestions([]);
     if (placeSuggestions.length > 0) setPlaceSuggestions([]);
+    // Cancel any in-flight debounced Places fetch, otherwise it resolves right
+    // after this and re-shows the dropdown (it renders on placeSuggestions, not
+    // focus). Then blur so the cursor actually leaves the field, not just the
+    // keyboard closing.
+    setShouldAutocompleteLocation(false);
+    locationInputRef.current?.blur();
+    textInputRef.current?.blur();
     Keyboard.dismiss();
   };
 
@@ -435,11 +484,6 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
           <View style={styles.photoPlaceholder}>
             <Ionicons name="camera" size={isEdit ? 24 : 32} color={palette.inkSoft} />
             <Text style={styles.photoPlaceholderText}>Add a photo</Text>
-            {!isEdit && (
-              <Text style={styles.photoPlaceholderHint}>
-                Helps ID the bird and fills in where you were. Optional.
-              </Text>
-            )}
           </View>
         )}
         {photoUri && (
@@ -468,7 +512,11 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       bottomOffset={20}
       onScrollBeginDrag={handleOutsidePress}
     >
-      <Pressable onPress={handleOutsidePress} android_disableSound={true}>
+      <Pressable
+        onPress={handleOutsidePress}
+        android_disableSound={true}
+        style={{ flexGrow: 1 }}
+      >
         <View style={styles.innerContainer}>
           {!isEdit && <Text style={styles.title}>Add Sighting</Text>}
 
@@ -491,7 +539,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                     setSearchQuery('');
                     setSuggestions([]);
                   }}
-                  placeholder="What'd you see?"
+                  placeholder="Who'd you see?"
                   placeholderTextColor={palette.muted}
                   onBlur={() => setSuggestions([])}
                 />
@@ -962,12 +1010,6 @@ const styles = StyleSheet.create({
     ...type.bodyS,
     color: palette.inkSoft,
     fontWeight: '600',
-  },
-  photoPlaceholderHint: {
-    ...type.bodyS,
-    color: palette.muted,
-    textAlign: 'center',
-    paddingHorizontal: space.lg,
   },
   removePhotoButton: {
     position: 'absolute',

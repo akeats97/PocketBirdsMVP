@@ -59,6 +59,29 @@ export async function reverseGeocodeLabel(coords: {
   }
 }
 
+// Reverse-geocode a coordinate to its admin-1 region (ISO country code +
+// state/province name), for the bird-list "near you" ranking. Returns null on
+// any failure so the caller falls back to realm ranking. The province string is
+// whatever the OS geocoder emits ("Alberta"); birdRanges.ts normalizes it.
+export async function reverseGeocodeRegion(coords: {
+  latitude: number;
+  longitude: number;
+}): Promise<{ countryCode: string; province: string } | null> {
+  try {
+    const results = await Location.reverseGeocodeAsync({
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+    });
+    if (results.length === 0) return null;
+    const r = results[0];
+    if (!r.isoCountryCode || !r.region) return null;
+    return { countryCode: r.isoCountryCode, province: r.region };
+  } catch (err) {
+    console.log('[locationService] reverseGeocodeRegion failed:', err);
+    return null;
+  }
+}
+
 // One-shot GPS fix + reverse geocode to a human-readable label. Catches all
 // errors and returns null so callers never need to think about failure modes.
 //
@@ -156,6 +179,7 @@ const locationService = {
   getCurrentLocationWithLabel,
   getCurrentCoordinates,
   reverseGeocodeLabel,
+  reverseGeocodeRegion,
 };
 
 export default locationService;
