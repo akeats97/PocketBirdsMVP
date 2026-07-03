@@ -61,6 +61,12 @@ function prevMilestone(count: number): number {
 export default function DexScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<FilterMode>('seen');
+  // Additive photo refinement, chosen in a Region-style picker:
+  //   off     - no photo constraint
+  //   with    - only species you've photographed
+  //   without - only seen species you have NOT photographed (still need a shot)
+  const [photoFilter, setPhotoFilter] = useState<'off' | 'with' | 'without'>('off');
+  const [photoModalOpen, setPhotoModalOpen] = useState(false);
   const [selectedRegions, setSelectedRegions] = useState<RegionCode[]>(ALL_REGIONS);
   const [regionsModalOpen, setRegionsModalOpen] = useState(false);
   // Collapsed families, keyed by family name. Lifted out of the card so the
@@ -231,6 +237,9 @@ export default function DexScreen() {
         if (filter === 'seen' && !seen) continue;
         if (filter === 'wishlist' && !wished) continue;
         if (filter === 'all' && !passesRegion(b.regions, seen || wished)) continue;
+        const hasPhoto = seenMap[b.name]?.hasPhoto ?? false;
+        if (photoFilter === 'with' && !hasPhoto) continue;
+        if (photoFilter === 'without' && !(seen && !hasPhoto)) continue;
         if (q && !b.name.toLowerCase().includes(q)) continue;
         filtered.push(toVisBird(b.name));
       }
@@ -250,6 +259,9 @@ export default function DexScreen() {
         const wished = wishlist.has(name);
         if (filter === 'seen' && !seen) return false;
         if (filter === 'wishlist' && !wished) return false;
+        const hasPhoto = seenMap[name]?.hasPhoto ?? false;
+        if (photoFilter === 'with' && !hasPhoto) return false;
+        if (photoFilter === 'without' && !(seen && !hasPhoto)) return false;
         return true;
       })
       .filter((name) => !q || name.toLowerCase().includes(q))
@@ -261,7 +273,7 @@ export default function DexScreen() {
     }
 
     return out;
-  }, [searchQuery, filter, seenMap, selectedRegions, wishlist]);
+  }, [searchQuery, filter, photoFilter, seenMap, selectedRegions, wishlist]);
 
   const regionsLabel =
     selectedRegions.length === ALL_REGIONS.length
@@ -407,6 +419,11 @@ export default function DexScreen() {
         <Chip label={`Seen · ${stats.uniqueSpecies}`} active={filter === 'seen'} onPress={() => setFilter('seen')} />
         <Chip label={`Wishlist · ${wishlist.size}`} active={filter === 'wishlist'} onPress={() => setFilter('wishlist')} />
         <Chip label={`Region · ${regionsLabel}`} active={false} onPress={() => setRegionsModalOpen(true)} />
+        <Chip
+          icon={photoFilter === 'off' ? 'camera-outline' : 'camera'}
+          active={photoFilter !== 'off'}
+          onPress={() => setPhotoModalOpen(true)}
+        />
       </ScrollView>
     </View>
   );
@@ -486,6 +503,55 @@ export default function DexScreen() {
                     );
                   })}
                 </ScrollView>
+              </View>
+            </HardShadow>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={photoModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPhotoModalOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setPhotoModalOpen(false)}>
+          <Pressable onPress={() => {}}>
+            <HardShadow borderRadius={radius.card}>
+              <View style={styles.modalSheet}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Photos</Text>
+                  <Pressable
+                    onPress={() => setPhotoModalOpen(false)}
+                    style={styles.modalCloseButton}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close" size={20} color={palette.ink} />
+                  </Pressable>
+                </View>
+
+                {([
+                  ['off', 'Any'],
+                  ['with', 'With a photo'],
+                  ['without', 'Without a photo'],
+                ] as const).map(([value, label]) => {
+                  const on = photoFilter === value;
+                  return (
+                    <Pressable
+                      key={value}
+                      style={styles.regionRow}
+                      onPress={() => {
+                        setPhotoFilter(value);
+                        setPhotoModalOpen(false);
+                      }}
+                    >
+                      <View style={styles.radioOuter}>
+                        {on && <View style={styles.radioInner} />}
+                      </View>
+                      <Text style={styles.regionLabel}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             </HardShadow>
           </Pressable>
@@ -692,15 +758,35 @@ const ACCard = React.memo(function ACCard({
   );
 });
 
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function Chip({
+  label,
+  icon,
+  active,
+  onPress,
+}: {
+  label?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  active: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       onPress={onPress}
       style={[styles.chip, active && styles.chipActive]}
     >
-      <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
-        {label}
-      </Text>
+      {icon && (
+        <Ionicons
+          name={icon}
+          size={14}
+          color={active ? palette.cream : palette.ink}
+          style={label ? { marginRight: 4 } : undefined}
+        />
+      )}
+      {label ? (
+        <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
+          {label}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -877,6 +963,8 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
   },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: radius.pill,
@@ -1227,6 +1315,21 @@ const styles = StyleSheet.create({
   checkboxChecked: {
     backgroundColor: palette.leaf,
     borderColor: palette.ink,
+  },
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: palette.ink,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioInner: {
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: palette.leaf,
   },
   regionLabel: {
     ...type.bodyL,
