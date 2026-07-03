@@ -1,5 +1,73 @@
 # PocketBirds — Release Notes
 
+## Scrub-Tyrant - July 3 2026
+**Builds:** iOS 1.0.0 (15) · Android 1.0.0 (versionCode 30, **APK** for Firebase App Distribution)
+**Headline:** A new Species Guide for every bird, photo-first logging that fills in where you were, bird search that ranks by what's actually near you, a playful new loading screen, and Dex filtering by photo.
+
+### Play Store - "What's new" (plain text, copy below this line)
+
+📖 A field guide for every bird
+• Tap any bird in your Dex to open its Guide: what it looks like, how big it is, its conservation status, and where in the world it lives
+• Bird names now show on sighting cards, tap one to jump straight to its guide
+
+📷 Photo-first logging
+• Adding a sighting now leads with the photo. Add one and PocketBirds reads where it was taken to fill in your location for you
+
+🔍 Smarter bird search
+• Type a name and the birds that actually occur near you rise to the top, now down to your state or province, not just the continent
+
+🗂️ Filter your Dex by photos
+• New camera filter: show only species you've photographed, or only the ones you've seen but still owe a photo
+
+✨ Nicer to open
+• A playful new loading screen when you open your Field Journal
+• Your Journal now loads your sightings and your friends' together in one pass, instead of popping in
+• Tap anywhere to dismiss the location list while adding a sighting
+
+### TestFlight - "What's new" (plain text, copy below this line)
+
+📖 A field guide for every bird
+• Tap any bird in your Dex to open its Guide: what it looks like, how big it is, its conservation status, and where in the world it lives
+• Bird names now show on sighting cards, tap one to jump straight to its guide
+
+📷 Photo-first logging
+• Adding a sighting now leads with the photo. Add one and PocketBirds reads where it was taken to fill in your location for you
+
+🔍 Smarter bird search
+• Type a name and the birds that actually occur near you rise to the top, now down to your state or province, not just the continent
+
+🗂️ Filter your Dex by photos
+• New camera filter: show only species you've photographed, or only the ones you've seen but still owe a photo
+
+✨ Nicer to open
+• A playful new loading screen when you open your Field Journal
+• Your Journal now loads your sightings and your friends' together in one pass, instead of popping in
+• Tap anywhere to dismiss the location list while adding a sighting
+
+### What shipped (engineering)
+- **Species Guide tab** (`4abbf5c`, `95b677d`): tapping a Dex species opens `app/species/[name].tsx` on a new Guide tab, Description (bundled Wikipedia) → Measurements (AVONET) → Conservation (IUCN) → Where it lives (realm map + migration). All data bundled and offline; `scripts/build-species-data.py` (AVONET + IUCN via Wikidata P141) and `scripts/build-wiki-blurbs.py`.
+- **Species data recovery** (`68848d6`, `2af1a43`): genus-synonym/split recovery for the AVONET/IUCN joins against IOC v15.2, plus an audit CSV listing every recovered and still-missing species.
+- **Bird names on sighting cards** (`94580c4`): name shown on each card, tapping links through to the species guide.
+- **Photo-first Add flow + photo-location autofill** (`7a978ca`, `ab0f2f0`, `a2f74f8`): the Add screen leads with the photo; adding one reads its GPS to reverse-geocode the location label and rank the bird-name suggestions by likelihood. Android needed an original-asset lookup (`expo-media-library` + `patches/expo-image-picker+16.1.4.patch`) because the system photo picker zero-fills GPS EXIF; DMS-rational EXIF parsing added.
+- **State/province range ranking** (`b59d87f`): `constants/birdRanges.ts` (GBIF admin-1 occurrence, CC0/CC-BY, 9,931 species, DOI 10.15468/dl.5kx2c9) refines the "most likely near you" bucket below realm level; `locationService.reverseGeocodeRegion` + `rangeStatusFor`, with realm fallback where there's no range data.
+- **Add-screen polish** (`b59d87f`): tap-away dismisses the location dropdown and blurs the field (cancelling the in-flight autocomplete); removed the photo helper subtext; bird placeholder "Who'd you see?".
+- **Field Journal loading splash + single-shot feed** (`962176c`): `friendsReady` gate holds a loading splash until the friend snapshot delivers, so the feed renders in one pass instead of reflowing; reveals immediately when offline/friendless, 3s ceiling for dead-but-connected networks. `LoadingSplash.tsx` is a Reanimated "looking for birds" splash (respects reduced-motion).
+- **Dex photo filter** (`0768326`): Region-style picker, Any / With a photo / Without a photo (seen-but-unphotographed), additive to the existing filters.
+
+### Known issues
+- About 12% of species have no fine (state/province) range data; their search ranking and Guide "where it lives" fall back to the coarser zoogeographic realm.
+- A bird common one state over but with no records in your exact state can rank lower than ideal (province-border case, `WORK_QUEUE.md` Q-16 follow-up).
+- Genuinely cloud-only photos (backed up then freed from the device, or taken elsewhere) can't yield GPS; the Add form falls back to phone location.
+- On a very slow connection the loading splash's 3s ceiling can reveal the feed just before friends load.
+- iOS push entitlement (`aps-environment`) still missing from the provisioning profile, so Android→iOS push remains broken (`WORK_QUEUE.md` Bug 6).
+
+### Post-ship steps
+- **iOS:** build 1.0.0 (15) built successfully (IPA ready), but the auto-submit to TestFlight FAILED: Apple reported "a required agreement is missing or has expired." Sign the pending agreement in App Store Connect (Business → Agreements, Tax, and Banking, or a Terms of Service prompt), then re-submit the existing build with `eas submit -p ios --latest` (no rebuild needed). Lands in the "Friends" external group; no new native capability, should skip Beta App Review.
+- **Android:** APK (not Play Store AAB). Distribute via Firebase App Distribution. Artifact: <https://expo.dev/artifacts/eas/wG1KADTIXJjS_UMiTGpYlp5oa5EHwTy3RtW4SLnUZwQ.apk>
+- Rolled `constants/release.ts` `CURRENT_RELEASE_NAME` Scrub-Tyrant → **Doradito**, and stamped the `release-names.csv` Scrub-Tyrant date (July 3, 2026). Next name after Doradito is by wingspan ascending.
+
+---
+
 ## Sunbird - June 22 2026
 **Builds:** iOS 1.0.0 (14) · Android 1.0.0 (versionCode 29, **APK** for Firebase App Distribution)
 **Headline:** A proper PocketBirds splash screen, live hoot & comment counts on your own sightings, and steadier syncing on weak connections.

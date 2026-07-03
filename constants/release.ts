@@ -1,1 +1,1 @@
-export const CURRENT_RELEASE_NAME = 'Scrub-Tyrant';
+export const CURRENT_RELEASE_NAME = 'Doradito';
