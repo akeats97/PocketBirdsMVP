@@ -58,10 +58,14 @@ near-zero sunk cost.
       gem against the clean committed pbxproj so the commit carries only the
       plist change, not pod-install noise.
 - [x] `pod install` passes with static frameworks; fmt/Xcode 26 patch survived
-- [ ] iOS simulator build (`npx expo run:ios`) compiles and the app runs
+- [x] iOS simulator build (`npx expo run:ios`) compiles and the app runs
+      (Jul 5: booted on iPhone 17 Pro sim, session persisted, Journal feed
+      loading live Firestore data; FirebaseApp.configure() clean)
 - [ ] Android debug build compiles and runs (google-services.json + gradle
-      plugin were already in place for both package ids)
-- [ ] App smoke-tested on both: login, feed, add sighting (JS SDK still active)
+      plugin were already in place for both package ids; first attempt hit a
+      corrupt empty NDK stub at ~/Library/Android/sdk/ndk/27.1.12297006 from
+      May 2025, deleted, gradle re-provisioned the NDK)
+- [ ] App smoke-tested on Android (JS SDK still active)
 
 Go/no-go gate: if static frameworks breaks the iOS build irrecoverably, delete
 the branch and reconsider.
