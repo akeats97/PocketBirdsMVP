@@ -47,7 +47,7 @@ Strava-style nav shipped; supersedes the "two feeds" layout (personal Log tab + 
 
 ## Release naming & builds
 
-- In-app title is `Pocket Birds {CURRENT_RELEASE_NAME}` from `constants/release.ts`. Release names come from `release-names.csv`, ordered by **wingspan ascending**. Current building: **Scrub-Tyrant** (Jun 22 2026); next after it is **Doradito**. The CSV `Release Date` column = the actual ship date; leave it blank when rolling the name forward, fill it only when a build actually shipped.
+- In-app title is `Pocket Birds {CURRENT_RELEASE_NAME}` from `constants/release.ts`. Release names come from `release-names.csv`, ordered by **wingspan ascending**. Current building: **Doradito** (Jul 3 2026); next after it is **Jery**. The CSV `Release Date` column = the actual ship date; leave it blank when rolling the name forward, fill it only when a build actually shipped.
 - `eas.json`: `appVersionSource: "remote"` + `autoIncrement`, so Android `versionCode` / iOS `buildNumber` bump automatically per build (not stored in `app.json`). Profiles: `production` (AAB + the mandatory `macos-sequoia-15.6-xcode-26.2` image), `production-aab`, and **`apk`** (`autoIncrement`, `buildType: apk` — for **Firebase App Distribution**, NOT the Play Store).
 
 ### "Start our builds" — the standard recipe (when Alex says to kick off builds)
@@ -62,7 +62,7 @@ This is the full sequence Alex means by "start our builds". Run it in order:
 4. **AFTER both builds succeed:** roll `constants/release.ts` `CURRENT_RELEASE_NAME` forward to the next CSV name, and stamp the **just-built** name's `release-names.csv` `Release Date` with today (we know it shipped). Do NOT roll before the builds upload — the build bakes in the current name, and a failed build should re-run under the same name. Then commit (release notes + roll + CSV).
 
 - EAS server builds cost ~$1 each (so ~$2 for the pair) and the iOS auto-submit is outward-facing — both are pre-authorized when Alex explicitly says to build.
-- **Snowcap (Jun 6 2026):** iOS build 8 / Android vc23. **Antwren (Jun 8 2026):** iOS build 9 / Android vc24. **Tyrannulet (Jun 9 2026):** iOS build 10 / Android vc25. **Tyrant (Jun 10 2026):** iOS build 11 / Android vc26. **Fairywren (Jun 14 2026):** iOS build 13 / Android vc28. **Sunbird (Jun 22 2026):** iOS build 14 / Android vc29.
+- **Snowcap (Jun 6 2026):** iOS build 8 / Android vc23. **Antwren (Jun 8 2026):** iOS build 9 / Android vc24. **Tyrannulet (Jun 9 2026):** iOS build 10 / Android vc25. **Tyrant (Jun 10 2026):** iOS build 11 / Android vc26. **Fairywren (Jun 14 2026):** iOS build 13 / Android vc28. **Sunbird (Jun 22 2026):** iOS build 14 / Android vc29. **Scrub-Tyrant (Jul 3 2026):** iOS build 15 / Android vc30.
 
 ---
 
