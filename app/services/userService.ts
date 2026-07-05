@@ -138,6 +138,7 @@ export async function getFollowing(): Promise<UserProfile[]> {
   try {
     const followingRef = collection(db, `following/${currentUser.uid}/following`);
     const followingSnapshot = await getDocs(followingRef);
+    console.log(`[getFollowing] edges=${followingSnapshot.size} fromCache=${followingSnapshot.metadata.fromCache}`);
     
     // Get the user details for each followed user
     const followedUsers = await Promise.all(

@@ -71,6 +71,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
       }));
 
       setFriends(friendsList);
+      console.log(`[friends] resolved ${friendsList.length} followed users`);
 
       // If we have friends, fetch their sightings (friendsReady flips when the
       // first snapshot delivers). No friends -> nothing to wait for, ready now.
@@ -117,6 +118,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
       const unsubscribe = onSnapshot(
         sightingsQuery,
         (snapshot) => {
+          console.log(`[friendSightings] snapshot size=${snapshot.size} fromCache=${snapshot.metadata.fromCache}`);
           const sightings: FriendSighting[] = [];
           
           snapshot.forEach(doc => {
