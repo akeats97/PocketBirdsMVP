@@ -13,6 +13,10 @@ install! 'cocoapods',
 
 prepare_react_native_project!
 
+# @react-native-firebase: the Firebase iOS SDK must be linked as static
+# frameworks under CocoaPods (see Podfile.properties.json ios.useFrameworks).
+$RNFirebaseAsStaticFramework = true
+
 target 'PocketBirds4' do
   use_expo_modules!
 
