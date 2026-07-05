@@ -129,6 +129,13 @@ updating. `getReactNativePersistence`/AsyncStorage auth plumbing goes away
 ### Phase 4: staged ship (Doradito)
 
 1. Firebase App Distribution APK to Alex's phone; daily-drive it several days.
+   **BUILT Jul 5 2026: Android vc31** (EAS build 5d1ce9e1, apk profile, from
+   this branch). Artifact:
+   https://expo.dev/artifacts/eas/gY2o9-KotePaA4zxbVrz5Z2qhEopddOtcjXtmwL1cXg.apk
+   Installing requires uninstalling the Play Store copy first (upload-key vs
+   Play-signing signature conflict). Soak checklist: writes + photo upload,
+   push from Victoria, instant Journal paint on bad signal, no own-only
+   flashes.
 2. iOS build uploaded to TestFlight but NOT released to the "Friends" external
    group; Alex soaks it as internal tester first. (Note: a major native SDK
    swap may re-trigger Beta App Review.)
