@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { signOut } from 'firebase/auth';
+import { signOut } from '@react-native-firebase/auth';
 import { useActivity } from '../app/context/ActivityContext';
 import { useSightings } from '../app/context/SightingsContext';
 import { auth } from '../config/firebaseConfig';

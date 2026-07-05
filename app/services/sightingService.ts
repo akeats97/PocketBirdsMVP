@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, getDocsFromServer, limit, orderBy, query, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, getDocsFromServer, limit, orderBy, query, setDoc, Timestamp, updateDoc, where } from '@react-native-firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { Sighting } from '../types';
 

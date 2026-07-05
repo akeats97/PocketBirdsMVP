@@ -11,7 +11,7 @@ import {
   Timestamp,
   Unsubscribe,
   where,
-} from 'firebase/firestore';
+} from '@react-native-firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 
 // A hoot lives at sightings/{sightingId}/hoots/{hooterUid}. The doc id IS the

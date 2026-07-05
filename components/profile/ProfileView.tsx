@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { signOut } from 'firebase/auth';
+import { signOut } from '@react-native-firebase/auth';
 import CompareCard from '../compare/CompareCard';
 import FriendSightingCard from '../FriendSightingCard';
 import { DayHeader } from '../journal/DayHeader';

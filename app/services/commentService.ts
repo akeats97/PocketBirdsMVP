@@ -10,7 +10,7 @@ import {
   setDoc,
   Timestamp,
   Unsubscribe,
-} from 'firebase/firestore';
+} from '@react-native-firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { getCurrentUserProfile } from './userService';
 

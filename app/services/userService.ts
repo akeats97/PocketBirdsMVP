@@ -1,4 +1,4 @@
-import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, setDoc } from '@react-native-firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { NEW_FOLLOW_MODE, setPref } from './notificationPrefsService';
 

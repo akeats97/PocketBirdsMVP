@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { onAuthStateChanged } from '@react-native-firebase/auth';
 import { auth } from '../../config/firebaseConfig';
 import { removeHoot, setHoot, subscribeToMyHoots } from '../services/hootService';
 import { removeProposalHoot, setProposalHoot } from '../services/proposalService';
@@ -33,7 +34,7 @@ function HootsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let unsubscribeHoots: (() => void) | undefined;
 
-    const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       // Tear down any previous user's listener.
       unsubscribeHoots?.();
       unsubscribeHoots = undefined;

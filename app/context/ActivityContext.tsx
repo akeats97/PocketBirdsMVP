@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { onAuthStateChanged } from '@react-native-firebase/auth';
 import { auth } from '../../config/firebaseConfig';
 import {
   ActivityItem,
@@ -32,7 +33,7 @@ function ActivityProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let unsubscribeActivity: (() => void) | undefined;
 
-    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       unsubscribeActivity?.();
       unsubscribeActivity = undefined;
 

@@ -5,7 +5,7 @@ import {
   onSnapshot,
   serverTimestamp,
   setDoc,
-} from 'firebase/firestore';
+} from '@react-native-firebase/firestore';
 import { db } from '../../config/firebaseConfig';
 
 export type NotificationMode = 'all' | 'highlights' | 'none';

@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import { Platform } from 'react-native';
-import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
+import { getDownloadURL, getStorage, putFile, ref } from '@react-native-firebase/storage';
 import { gpsFromJpegFile } from '../utils/exifGps';
 import { Coordinates } from '../types';
 
@@ -279,12 +279,9 @@ export async function uploadPhoto(uri: string, sightingId: string): Promise<stri
     const storage = getStorage();
     const storageRef = ref(storage, `sightings/${filename}`);
 
-    // Convert URI to blob
-    const response = await fetch(uri);
-    const blob = await response.blob();
-
-    // Upload the file
-    await uploadBytes(storageRef, blob);
+    // Native upload straight from the local file URI (no fetch->blob dance;
+    // the native SDK streams the file off disk).
+    await putFile(storageRef, uri);
 
     // Get the download URL
     const downloadUrl = await getDownloadURL(storageRef);

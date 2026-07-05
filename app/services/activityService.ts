@@ -7,7 +7,7 @@ import {
   query,
   where,
   writeBatch,
-} from 'firebase/firestore';
+} from '@react-native-firebase/firestore';
 import { db } from '../../config/firebaseConfig';
 
 export type ActivityType =

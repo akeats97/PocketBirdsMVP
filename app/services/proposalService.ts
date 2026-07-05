@@ -14,7 +14,7 @@ import {
   Unsubscribe,
   where,
   writeBatch,
-} from 'firebase/firestore';
+} from '@react-native-firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { isMysteryBird } from '../../constants/unknownBird';
 import { Proposal } from '../types';

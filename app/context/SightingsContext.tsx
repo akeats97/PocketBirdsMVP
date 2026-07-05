@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
-import { User } from 'firebase/auth';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { onAuthStateChanged, type User } from '@react-native-firebase/auth';
+import { collection, onSnapshot, query, where } from '@react-native-firebase/firestore';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { auth, db } from '../../config/firebaseConfig';
 import { addSightingToFirebase, deleteSightingFromFirebase, getUserSightingsFromFirebase, newSightingId, setSightingGlobalFirstVerified, updateSightingInFirebase } from '../services/sightingService';
@@ -300,7 +300,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
 
   // Listen for auth state changes and load Firebase data on login
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user: User | null) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user: User | null) => {
       if (user) {
         // Wait for AsyncStorage loading to complete before loading Firebase data
         if (!isLoading) {
@@ -325,7 +325,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let unsubSnap: (() => void) | undefined;
 
-    const unsubAuth = auth.onAuthStateChanged((user) => {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
       unsubSnap?.();
       unsubSnap = undefined;
       if (!user) return;

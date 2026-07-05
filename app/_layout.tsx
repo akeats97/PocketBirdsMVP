@@ -18,7 +18,7 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { User } from 'firebase/auth';
+import { onAuthStateChanged, type User } from '@react-native-firebase/auth';
 import React, { useEffect, useState } from 'react';
 import { Alert, StatusBar, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -188,7 +188,7 @@ export default function RootLayout() {
 
   // Listen for auth state changes at the top level
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((authUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (authUser) => {
       setUser(authUser);
       setIsAuthLoading(false);
     });

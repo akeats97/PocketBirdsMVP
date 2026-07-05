@@ -1,5 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { onAuthStateChanged } from '@react-native-firebase/auth';
+import { collection, onSnapshot, query, where } from '@react-native-firebase/firestore';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { auth, db } from '../../config/firebaseConfig';
@@ -188,7 +189,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
   
   // Listen for auth state changes
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(user => {
+    const unsubscribe = onAuthStateChanged(auth, user => {
       if (user) {
         fetchFollowing();
       } else {
