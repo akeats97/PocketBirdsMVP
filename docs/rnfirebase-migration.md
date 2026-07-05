@@ -166,6 +166,16 @@ Semantics to watch after the swap:
 
 ## Gotchas / notes discovered along the way
 
+- **The iOS API key (GoogleService-Info.plist, ...lspDg) was blocked from the
+  Identity Toolkit API** (`API_KEY_SERVICE_BLOCKED`), so the FIRST native-SDK
+  login attempt failed with the misleading `[auth/internal-error]` even with a
+  correct password. The JS SDK never tripped this because it used the WEB key.
+  The Android key (google-services.json) was fine. Fix: GCP console →
+  credentials → iOS key → API restrictions. If restricting rather than
+  unrestricting, the allowlist needs at least: Identity Toolkit API, Token
+  Service API (else sessions die at the 1h token refresh), Firebase
+  Installations API, Cloud Firestore API, Cloud Storage for Firebase API.
+
 - The xcodeproj gem lives in brew CocoaPods' vendored gems; run scripts with
   `GEM_HOME=/opt/homebrew/Cellar/cocoapods/<ver>/libexec ruby script.rb`.
 - pod install warns `Can't merge pod_target_xcconfig ... DEFINES_MODULE` for
