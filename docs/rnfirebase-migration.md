@@ -61,11 +61,20 @@ near-zero sunk cost.
 - [x] iOS simulator build (`npx expo run:ios`) compiles and the app runs
       (Jul 5: booted on iPhone 17 Pro sim, session persisted, Journal feed
       loading live Firestore data; FirebaseApp.configure() clean)
-- [ ] Android debug build compiles and runs (google-services.json + gradle
+- [x] Android debug build compiles and runs (google-services.json + gradle
       plugin were already in place for both package ids; first attempt hit a
       corrupt empty NDK stub at ~/Library/Android/sdk/ndk/27.1.12297006 from
       May 2025, deleted, gradle re-provisioned the NDK)
-- [ ] App smoke-tested on Android (JS SDK still active)
+- [x] App smoke-tested on Android (Jul 5, Medium_Phone_API_36.0 emulator:
+      logcat shows "FirebaseInitProvider: FirebaseApp initialization
+      successful" + "ReactNativeFirebaseApp: received application context";
+      login screen renders; JS SDK still active). Android deep-link scheme is
+      `pocketbirds4://` (not the bundle id). NOTE: this emulator image's Play
+      services is outdated (needs 261200000, has 251833035) — update or use a
+      newer image before Phase 2/3 native-Firestore testing; real devices fine.
+
+**Phase 0 gate: PASSED (Jul 5 2026). Both platforms compile and run with the
+native SDK initialized and idle. Go for Phase 1.**
 
 Go/no-go gate: if static frameworks breaks the iOS build irrecoverably, delete
 the branch and reconsider.
