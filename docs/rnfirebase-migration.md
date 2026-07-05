@@ -98,17 +98,28 @@ updating. `getReactNativePersistence`/AsyncStorage auth plumbing goes away
 
 ### Phase 3: verification (dev clients, both platforms)
 
-- [ ] Login / signup / logout (incl. listener teardown: no permission errors
-      at logout under the strict rules)
-- [ ] Journal feed: own + friends, day grouping, pull-to-refresh
-- [ ] NEW WIN: cold start in airplane mode paints the full merged feed from
-      the native disk cache
+- [x] Login (iOS sim, Alex's real account, Jul 5 — after the API key fix)
+- [ ] Signup / logout (incl. listener teardown: no permission errors at
+      logout under the strict rules)
+- [x] Journal feed: own + friends, day grouping (iOS sim; pull-to-refresh
+      still untested)
+- [x] NEW WIN (iOS sim, Jul 5): cold start with wifi OFF paints the full
+      merged feed from the native disk cache. Log evidence:
+      `[getFollowing] edges=20 fromCache=true`, `[friendSightings] snapshot
+      size=393 fromCache=true`. Online cold starts also deliver the first
+      snapshot fromCache=true (the instant-paint fix). CAVEAT: the FIRST
+      offline run showed own-sightings-only at 13s (friend data hadn't
+      resolved yet — suspected slow first server-timeout fallback in
+      getFollowing's per-user getDoc chain); subsequent runs are correct and
+      fast. Watch for own-only flashes while daily driving.
 - [ ] Add sighting online; add offline then reconnect and sync (idempotent-id
       path); edit; delete; offline edit/delete queues
 - [ ] Photo attach + upload; photo GPS read flow (unrelated code, but rebuilt
       native app must retain the expo-image-picker patch behavior)
 - [ ] Hoots, comments, Mystery Bird proposals (live snapshots)
-- [ ] Profiles, compare screen, Dex, Species Guide
+- [x] Dex (146 species, milestone bar, holo 1ST tile) + You profile
+      (stats, feed, photos from Storage) — iOS sim, Jul 5
+- [ ] Profiles (friend/public), compare screen, Species Guide
 - [ ] Push end-to-end BOTH directions (Android <-> iOS); token registration
       writes to Firestore via the new SDK
 - [ ] New-species haptic + milestone + global-first detection
