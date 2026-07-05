@@ -113,6 +113,44 @@ updating. `getReactNativePersistence`/AsyncStorage auth plumbing goes away
 4. Only after Doradito ships cleanly: roll release name forward per the
    standard recipe.
 
+## Call-site audit (Jul 5 2026, against installed v25.1.0)
+
+Every Firebase symbol the app imports was checked against the RNFirebase
+modular API actually installed in node_modules. **All of them exist** except
+the init/persistence plumbing (no longer needed) and one storage function:
+
+| JS SDK | RNFirebase v25 | Notes |
+|---|---|---|
+| `initializeApp` / `initializeAuth` / `initializeFirestore` / `getReactNativePersistence` | (delete) | Native SDK auto-initializes from GoogleService-Info.plist / google-services.json. `firebaseConfig.js` shrinks to `getAuth()` + `getFirestore()`, still exporting `auth` and `db` so call sites keep their shape. The web config block and `experimentalAutoDetectLongPolling` go away. |
+| `uploadBytes(ref, blob)` | `putFile(ref, localPath)` | photoService.ts:282-287 currently does fetch(uri) -> blob -> uploadBytes; putFile takes the file URI directly, simpler. |
+| `import { User } from 'firebase/auth'` | `FirebaseAuthTypes.User` | Type-only change in `_layout.tsx` + `SightingsContext.tsx`. |
+| everything else (`collection`, `collectionGroup`, `query`, `where`, `orderBy`, `limit`, `startAfter`, `onSnapshot`, `getDoc(s)`, `getDocsFromServer`, `addDoc`, `setDoc`, `updateDoc`, `deleteDoc`, `writeBatch`, `serverTimestamp`, `Timestamp`, `Unsubscribe`, auth + storage functions) | same name | Import path changes from `firebase/x` to `@react-native-firebase/x`. |
+
+Per-file worklist:
+
+- Phase 1 (auth): `config/firebaseConfig.js`, `components/LoginScreen.tsx`,
+  `components/AppHeader.tsx`, `components/profile/ProfileView.tsx`,
+  `app/_layout.tsx` (User type), plus `auth.currentUser` consumers compile
+  unchanged once `auth` is the native instance.
+- Phase 2 (firestore): `SightingsContext.tsx`, `FriendSightingsContext.tsx`,
+  `sightingService.ts`, `userService.ts`, `commentService.ts`,
+  `hootService.ts`, `proposalService.ts`, `activityService.ts`,
+  `notificationPrefsService.ts`, `LoginScreen.tsx` (username doc).
+- Phase 2 (storage): `photoService.ts` only.
+
+Semantics to watch after the swap:
+
+- **`getDocsFromServer` stays `getDocsFromServer`** in `sightingService`
+  (global-first detection). This matters MORE under the native SDK: with disk
+  persistence on, plain `getDocs` can satisfy from cache and would make
+  global-first detection go stale.
+- **`onSnapshot` now fires cache-first on cold start.** For
+  `FriendSightingsContext.friendsReady` this is the whole point (instant paint
+  from disk), but it means the first snapshot can be stale by minutes; the
+  server reconcile follows automatically.
+- Firestore `Timestamp.toDate()` and `where('userId','in',[...])` (30-value
+  cap) behave the same.
+
 ## Gotchas / notes discovered along the way
 
 - The xcodeproj gem lives in brew CocoaPods' vendored gems; run scripts with
