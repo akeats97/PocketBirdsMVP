@@ -17,7 +17,10 @@ type Props = {
 // an unverified claim (e.g. a joke "boba" log) is premature. Flip back to true
 // once verification ships and the celebration is wired to fire on verify.
 // See WORK_QUEUE Q-4 / CLAUDE.md global-first notes.
-const GLOBAL_FIRST_CELEBRATION_ENABLED = false;
+// Exported so add.tsx only takes the global-first early return when this
+// takeover will actually render (WORK_QUEUE Bug 8: the disabled component
+// otherwise swallowed every fallback celebration).
+export const GLOBAL_FIRST_CELEBRATION_ENABLED = false;
 
 // The rarest celebration: the user was the FIRST birder on all of PocketBirds
 // to log this species. A clean white card with a holographic outline (the

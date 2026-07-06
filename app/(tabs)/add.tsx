@@ -6,7 +6,7 @@ import { HardShadow } from '../../components/SightingCard';
 import { border, font, palette, radius, space } from '../../constants/Colors';
 import { isCustomSpecies } from '../../constants/customSpecies';
 import { isReportEntry } from '../../constants/reportTypes';
-import GlobalFirstCelebration from '../../components/GlobalFirstCelebration';
+import GlobalFirstCelebration, { GLOBAL_FIRST_CELEBRATION_ENABLED } from '../../components/GlobalFirstCelebration';
 import MilestoneCelebration, { ConfettiPiece, PIECE_COUNT } from '../../components/MilestoneCelebration';
 import { useSightings } from '../context/SightingsContext';
 import { useWishlist } from '../context/WishlistContext';
@@ -90,13 +90,18 @@ export default function AddSightingScreen() {
     // Global first: a brand-new species for the user that NO ONE on PocketBirds
     // has ever logged. Custom easter-egg species are excluded. Best effort —
     // needs the network; on failure we fall through to the normal celebration.
+    // Only take the takeover's early return while it actually renders; with the
+    // celebration flag off, a global-first must still get the normal milestone /
+    // new-species celebration below (WORK_QUEUE Bug 8: silent submit).
     if (newSpeciesDetected && !isCustomSpecies(birdName)) {
       try {
         const isFirst = await isGlobalFirstSpecies(birdName);
         if (isFirst) {
           markGlobalFirst(birdName);
-          setGlobalFirstBird(birdName);
-          return;
+          if (GLOBAL_FIRST_CELEBRATION_ENABLED) {
+            setGlobalFirstBird(birdName);
+            return;
+          }
         }
       } catch {
         // offline / query failed — fall through to the normal celebration

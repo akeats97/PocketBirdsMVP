@@ -899,6 +899,25 @@ Commit as a single small commit since the three changes are atomically one logic
 
 ---
 
+### Bug 8 - Global-first sightings get NO celebration at all on submit (silent success) ✅ DONE Jul 6 2026 (interim fix)
+
+**Found:** July 6 2026, reported by Victoria. She logged a Least Sandpiper (her first ever, and the app-wide first). She later saw the gold 1ST badge on the sighting, but at submit time she got no celebration of any kind: no gold takeover, no success banner, no confetti, no haptic buzz.
+
+**Root cause (confirmed in code):** `app/(tabs)/add.tsx` `handleSubmit` (~lines 93-104). When a new-for-the-user species is also detected as an app-wide first (`isGlobalFirstSpecies` returns true), the handler calls `markGlobalFirst` + `setGlobalFirstBird(birdName)` and then **returns early**, skipping the milestone banner, the success banner, the wishlist cross-off, the new-species confetti, and the haptic pattern. The early return assumes `GlobalFirstCelebration` will take over the screen, but that component was deliberately deactivated on Jun 12 2026 (`GLOBAL_FIRST_CELEBRATION_ENABLED = false` in `components/GlobalFirstCelebration.tsx:20`, pending the verify-time rework, see Q-4). With the flag off the component renders `null`, so a global-first submit produces literally nothing on screen. Every build since Fairywren (Jun 14 2026) behaves this way, so this hits any user who logs a genuine app-first species.
+
+**Why she still saw the 1ST badge:** the gold decoration is render-gated on `globalFirst && verified` (SightingCard / FriendSightingCard / Dex). Her sighting got verified afterward (admin long-press), which lit the badge. The badge appearing later is working as designed; the silent submit is the bug.
+
+**Ironic side effect:** the global-first path is *worse* than a plain new species. A non-first new species gets confetti + haptics + the success banner; the rarest possible log gets silence. If the app-first species would also have crossed a milestone (1, 5, 10, 25, 50...), that milestone celebration is swallowed too, and it never re-fires.
+
+**Fix (interim, applied Jul 6 2026):** `GLOBAL_FIRST_CELEBRATION_ENABLED` is now exported from `components/GlobalFirstCelebration.tsx`, and `add.tsx` only takes the takeover's early return when the flag is on. With the flag off, a global-first still calls `markGlobalFirst` but falls through to the normal milestone / new-species / wishlist celebration chain, so the submit is never silent.
+- Endgame (per the Jun 12 2026 decision, still open under Q-4): the gold takeover fires at verify-time, not log-time. When re-enabling the flag, the log-time early return comes back automatically; rewire it to verify-time instead.
+
+**Where to look:**
+- `app/(tabs)/add.tsx` handleSubmit, the `isGlobalFirstSpecies` branch and its early return.
+- `components/GlobalFirstCelebration.tsx` line 20 (the flag).
+
+---
+
 ## Operations / Security
 
 ### Lock down the Google Places API key (HIGH PRIORITY)
