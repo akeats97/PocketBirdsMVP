@@ -182,6 +182,37 @@ Semantics to watch after the swap:
 - Firestore `Timestamp.toDate()` and `where('userId','in',[...])` (30-value
   cap) behave the same.
 
+## SESSION HANDOFF STATUS (as of Jul 6 2026)
+
+Where things stand for the next session:
+
+- Phases 0-2 DONE: full cutover to @react-native-firebase committed and
+  verified on the iOS simulator (login, feed, Dex, profile, offline disk-cache
+  paint with fromCache log evidence).
+- Phase 4 step 1: Alex is daily-driving **vc31** on his Pixel. Soak verdict so
+  far: instant feed after first open confirmed; first-ever open still chunky
+  (expected: cold cache + unbounded 393-doc friend query).
+- Photo work (below) is DONE server-side; the client half (expo-image) is on
+  the branch but NOT in vc31. Alex confirmed backfill improved photos on vc31;
+  remaining deep-scroll greys are expected until vc32.
+- NEXT STEPS, in order:
+  1. Build **vc32** APK (same `eas build -p android --profile apk` recipe) so
+     the soak includes expo-image + two-copy uploads + the Bug 8 fix. Alex
+     re-verifies deep-scroll greys are gone and tests a photo save (exercises
+     two-copy upload + storage rules path).
+  2. Remaining phase 3 verification: writes (add/edit/delete), photo upload,
+     push both directions, signup/logout teardown, profiles/compare, Android
+     login, coexistence with Victoria's build.
+  3. PRE-SHIP: bound + paginate the friend query (orderBy date desc, limit ~50,
+     startAfter pagination; needs composite index) so the FIRST launch after
+     install isn't chunky and the query stops scaling with total history.
+     This was Alex's main soak complaint.
+  4. iOS TestFlight build held to internal testers; then ship Doradito per the
+     staged plan (release notes must mention the one-time re-login).
+  5. Post-ship: consider "view full resolution" in the photo viewer
+     (photoUrlOriginal), key-restriction hardening for the new iOS API key,
+     SightingsContext offline-machinery simplification.
+
 ## Photo work bundled into Doradito (Jul 6 2026)
 
 Soak feedback: grey never-loading feed photos (worst on deep scrolls; two
