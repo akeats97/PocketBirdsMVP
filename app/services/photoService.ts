@@ -306,25 +306,36 @@ async function compressForUpload(uri: string): Promise<string> {
   }
 }
 
-export async function uploadPhoto(uri: string, sightingId: string): Promise<string> {
+export interface UploadedPhoto {
+  photoUrl: string;          // compressed display copy — what the app renders
+  photoUrlOriginal?: string; // untouched original (archive; absent if that upload failed)
+}
+
+// Two-copy upload: the compressed display copy is the primary photo (fast to
+// load everywhere, including old app builds, which read `photoUrl`); the
+// original is archived untouched at the legacy `sightings/{id}` path so no
+// quality is ever lost. Display copy first — it's the one the save depends on.
+export async function uploadPhoto(uri: string, sightingId: string): Promise<UploadedPhoto> {
   try {
-    const toUpload = await compressForUpload(uri);
-
-    // Get the file extension
-    const extension = toUpload.split('.').pop();
-    const filename = `${sightingId}.${extension}`;
-
-    // Create a reference to the file location in Firebase Storage
     const storage = getStorage();
-    const storageRef = ref(storage, `sightings/${filename}`);
 
-    // Native upload straight from the local file URI (no fetch->blob dance;
-    // the native SDK streams the file off disk).
-    await putFile(storageRef, toUpload);
+    const toUpload = await compressForUpload(uri);
+    const displayRef = ref(storage, `sightings/display/${sightingId}.jpg`);
+    await putFile(displayRef, toUpload);
+    const photoUrl = await getDownloadURL(displayRef);
 
-    // Get the download URL
-    const downloadUrl = await getDownloadURL(storageRef);
-    return downloadUrl;
+    // Original archive is best-effort: a failure here never blocks the save.
+    let photoUrlOriginal: string | undefined;
+    try {
+      const extension = uri.split('.').pop();
+      const originalRef = ref(storage, `sightings/${sightingId}.${extension}`);
+      await putFile(originalRef, uri);
+      photoUrlOriginal = await getDownloadURL(originalRef);
+    } catch (err) {
+      console.log('[photoService] original archive upload failed (non-fatal):', err);
+    }
+
+    return { photoUrl, photoUrlOriginal };
   } catch (error) {
     console.error('Error uploading photo:', error);
     throw error;

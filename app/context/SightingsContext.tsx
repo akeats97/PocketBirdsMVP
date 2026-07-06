@@ -442,10 +442,10 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
       try {
         let toSync = sighting;
         if (sighting.photoPath && !sighting.photoUrl) {
-          const photoUrl = await uploadPhoto(sighting.photoPath, sighting.id);
-          toSync = { ...sighting, photoUrl };
+          const uploaded = await uploadPhoto(sighting.photoPath, sighting.id);
+          toSync = { ...sighting, ...uploaded };
           setSightings(prev =>
-            prev.map(s => (s.id === id ? { ...s, photoUrl } : s))
+            prev.map(s => (s.id === id ? { ...s, ...uploaded } : s))
           );
         }
         await updateSightingInFirebase(toSync);
@@ -629,9 +629,9 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
           }
           let toSync = merged;
           if (merged.photoPath && !merged.photoUrl) {
-            const photoUrl = await uploadPhoto(merged.photoPath, merged.id);
-            toSync = { ...merged, photoUrl };
-            setSightings(prev => prev.map(s => (s.id === sightingId ? { ...s, photoUrl } : s)));
+            const uploaded = await uploadPhoto(merged.photoPath, merged.id);
+            toSync = { ...merged, ...uploaded };
+            setSightings(prev => prev.map(s => (s.id === sightingId ? { ...s, ...uploaded } : s)));
           }
           await updateSightingInFirebase(toSync);
         } catch (error) {
@@ -671,8 +671,8 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
           // Firestore doc.
           let toSync = sighting;
           if (sighting.photoPath && !sighting.photoUrl) {
-            const photoUrl = await uploadPhoto(sighting.photoPath, sighting.id);
-            toSync = { ...sighting, photoUrl };
+            const uploaded = await uploadPhoto(sighting.photoPath, sighting.id);
+            toSync = { ...sighting, ...uploaded };
           }
 
           const firebaseId = await addSightingToFirebase(toSync);
@@ -682,7 +682,7 @@ export function SightingsProvider({ children }: { children: React.ReactNode }) {
           setSightings(prev =>
             prev.map(s =>
               s.id === sighting.id
-                ? { ...s, id: firebaseId, photoUrl: toSync.photoUrl, syncStatus: 'synced' }
+                ? { ...s, id: firebaseId, photoUrl: toSync.photoUrl, photoUrlOriginal: toSync.photoUrlOriginal, syncStatus: 'synced' }
                 : s
             )
           );

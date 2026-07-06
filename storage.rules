@@ -32,5 +32,14 @@ service firebase.storage {
                    && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
     }
+
+    // Compressed display copies (two-copy scheme, Jul 2026): the app renders
+    // these; untouched originals stay at sightings/{file} above. Same posture.
+    match /sightings/display/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
   }
 }

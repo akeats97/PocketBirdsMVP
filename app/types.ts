@@ -17,7 +17,8 @@ export interface Sighting {
   // the user picks. Drives within-day feed ordering (most recently posted on
   // top). Falls back to `date` for older docs that predate the field.
   createdAt?: Date;
-  photoUrl?: string;  // URL to the photo in Firebase Storage
+  photoUrl?: string;  // URL to the photo in Firebase Storage (compressed display copy)
+  photoUrlOriginal?: string;  // URL of the untouched original (archived; absent on legacy/failed uploads)
   photoPath?: string; // Local path to the photo before upload
   coordinates?: Coordinates;
   // Set to the user's unique-species count if THIS sighting crossed a
