@@ -182,6 +182,30 @@ Semantics to watch after the swap:
 - Firestore `Timestamp.toDate()` and `where('userId','in',[...])` (30-value
   cap) behave the same.
 
+## Photo work bundled into Doradito (Jul 6 2026)
+
+Soak feedback: grey never-loading feed photos (worst on deep scrolls; two
+top-of-feed repeat offenders were the 2-3MB outliers). Root cause: full
+4032px camera originals rendered via cache-less RN Image; big downloads lose
+the race on phone connections. Predates the migration. Fixes (all on this
+branch, in vc32+):
+
+- expo-image at every remote-photo render site (disk cache, visible-first
+  priority, off-screen cancellation).
+- Two-copy uploads: compressed 2048px/q85 display copy at
+  sightings/display/{id}.jpg becomes photoUrl (what ALL builds render, old
+  ones included); the untouched original stays at sightings/{id} as
+  photoUrlOriginal. Originals are never lost.
+- Backfill RAN Jul 6 2026 (functions/backfillDisplayPhotos.js +
+  fixOversizedDisplayCopies.js): of 229 photos, 158 repointed to display
+  copies, 71 kept on their already-small originals (q85 re-encode would have
+  inflated them; their display copies were deleted). All originals intact.
+  Alex verifying the speedup on Scrub-Tyrant (old build benefits via the same
+  photoUrl field).
+- storage.rules deployed Jul 6 2026 with the sightings/display/ path.
+- Picker note: pickImage already re-encodes at quality 0.7, so "originals"
+  are the picker output, the best copy the app ever has.
+
 ## Gotchas / notes discovered along the way
 
 - **The iOS API key (GoogleService-Info.plist, ...lspDg) was blocked from the
