@@ -196,22 +196,39 @@ Where things stand for the next session:
   the branch but NOT in vc31. Alex confirmed backfill improved photos on vc31;
   remaining deep-scroll greys are expected until vc32.
 - NEXT STEPS, in order:
-  1. Build **vc32** APK (same `eas build -p android --profile apk` recipe) so
-     the soak includes expo-image + two-copy uploads + the Bug 8 fix. Alex
-     re-verifies deep-scroll greys are gone and tests a photo save (exercises
-     two-copy upload + storage rules path).
+  1. **vc32 BUILT Jul 6 2026** (versionCode 32, apk profile). Artifact:
+     https://expo.dev/artifacts/eas/f7RGUlTcYNPajBmlRVmrlmrTwMGuMm0X7y_iyDIrZEA.apk
+     Alex installs it and re-verifies deep-scroll greys are gone and tests a
+     photo save (exercises two-copy upload + storage rules path). NOTE: vc32
+     does NOT include the bounded bootstrap listener (next item); that lands
+     in the next build.
   2. Remaining phase 3 verification: writes (add/edit/delete), photo upload,
      push both directions, signup/logout teardown, profiles/compare, Android
      login, coexistence with Victoria's build.
-  3. PRE-SHIP: bound + paginate the friend query (orderBy date desc, limit ~50,
-     startAfter pagination; needs composite index) so the FIRST launch after
-     install isn't chunky and the query stops scaling with total history.
-     This was Alex's main soak complaint.
+  3. PRE-SHIP friend-query fix: DONE Jul 6 2026, but as a **bounded bootstrap
+     listener, not startAfter pagination**. The literal plan (cap the feed at
+     50 + paginate) would have broken three consumers that need FULL history:
+     the Friends-tab per-friend stats (species/sightings/photos, all-time),
+     the Journal friend "1ST" badges (earliest-of-species math), and Hep
+     (old reports). And after the first launch the full listener already
+     paints instantly from disk cache, so the only real gap was the cold
+     first install. What shipped (FriendSightingsContext): a second listener
+     on the same `userId in` filter with `orderBy date desc, limit 50` (the
+     needed (userId ASC, date DESC) composite index already existed in prod,
+     no deploy) paints the top of the feed fast on a cold cache; the full
+     listener stays authoritative and replaces it when it delivers, at which
+     point the bootstrap listener is unsubscribed. Metro log line:
+     `[friendSightings] bootstrap snapshot size=... fromCache=...`.
+     FOLLOW-UP (post-ship, not blocking): true feed pagination requires first
+     moving the stats to denormalized per-user counters (Cloud Function +
+     backfill) and persisting first-of-species flags; until then the full
+     query still scales with total history (server cost only on cold cache).
   4. iOS TestFlight build held to internal testers; then ship Doradito per the
      staged plan (release notes must mention the one-time re-login).
   5. Post-ship: consider "view full resolution" in the photo viewer
      (photoUrlOriginal), key-restriction hardening for the new iOS API key,
-     SightingsContext offline-machinery simplification.
+     SightingsContext offline-machinery simplification, denormalized stat
+     counters + real feed pagination (see item 3).
 
 ## Photo work bundled into Doradito (Jul 6 2026)
 

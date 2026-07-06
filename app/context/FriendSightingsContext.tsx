@@ -1,6 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import { onAuthStateChanged } from '@react-native-firebase/auth';
-import { collection, onSnapshot, query, where } from '@react-native-firebase/firestore';
+import { collection, limit, onSnapshot, orderBy, query, where } from '@react-native-firebase/firestore';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { auth, db } from '../../config/firebaseConfig';
@@ -110,21 +110,31 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
         collection(db, 'sightings'),
         where('userId', 'in', userIds)
       );
-      
-      // Tear down any previous sightings listener before creating a new one.
+      // Bootstrap query: newest 50 only. On a cold cache (first-ever launch /
+      // reinstall) the full query above must download every friend sighting
+      // before its first snapshot delivers, which is the "chunky first open"
+      // from the vc31 soak. This bounded query returns fast and paints the top
+      // of the feed; the full snapshot replaces it when it lands. The full
+      // list stays authoritative because the Friends-tab stats, the 1ST
+      // badges, and Hep all need complete history. Uses the existing
+      // (userId ASC, date DESC) composite index.
+      const bootstrapQuery = query(
+        collection(db, 'sightings'),
+        where('userId', 'in', userIds),
+        orderBy('date', 'desc'),
+        limit(50)
+      );
+
+      // Tear down any previous sightings listeners before creating new ones.
       sightingsUnsubRef.current?.();
 
-      // Set up a real-time listener for sightings
-      const unsubscribe = onSnapshot(
-        sightingsQuery,
-        (snapshot) => {
-          console.log(`[friendSightings] snapshot size=${snapshot.size} fromCache=${snapshot.metadata.fromCache}`);
-          const sightings: FriendSighting[] = [];
-          
-          snapshot.forEach(doc => {
+      const buildSightings = (snapshot: { forEach: (cb: (doc: any) => void) => void }) => {
+        const sightings: FriendSighting[] = [];
+
+        snapshot.forEach(doc => {
             const data = doc.data();
             const userId = data.userId;
-            
+
             if (usernameMap[userId]) {
               const friendSighting: FriendSighting = {
                 id: doc.id,
@@ -158,19 +168,41 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
               }
               sightings.push(friendSighting);
             }
-          });
-          
-          // Sort sightings by date, newest first
-          sightings.sort((a, b) => b.date.getTime() - a.date.getTime());
-          
-          // If no friend sightings found yet but we have friends, use empty array
-          // instead of mock data
-          if (sightings.length === 0 && followingUsers.length > 0) {
-            setFriendSightings([]);
-          } else {
-            setFriendSightings(sightings);
-          }
-          // First feed data is in — the Journal can drop its loader now.
+        });
+
+        // Sort sightings by date, newest first
+        sightings.sort((a, b) => b.date.getTime() - a.date.getTime());
+        return sightings;
+      };
+
+      // Once the full snapshot has delivered, the bootstrap listener is
+      // redundant (and must never overwrite the full list with 50 docs).
+      let fullDelivered = false;
+
+      const bootstrapUnsubscribe = onSnapshot(
+        bootstrapQuery,
+        (snapshot) => {
+          if (fullDelivered) return;
+          console.log(`[friendSightings] bootstrap snapshot size=${snapshot.size} fromCache=${snapshot.metadata.fromCache}`);
+          setFriendSightings(buildSightings(snapshot));
+          // First feed data is in: the Journal can drop its loader now.
+          setFriendsReady(true);
+        },
+        (error) => {
+          // Non-fatal: the full listener below still covers the feed.
+          console.error('Error fetching bootstrap sightings:', error);
+        }
+      );
+
+      // Set up the real-time listener for the full history
+      const unsubscribe = onSnapshot(
+        sightingsQuery,
+        (snapshot) => {
+          console.log(`[friendSightings] snapshot size=${snapshot.size} fromCache=${snapshot.metadata.fromCache}`);
+          fullDelivered = true;
+          bootstrapUnsubscribe();
+          setFriendSightings(buildSightings(snapshot));
+          // First feed data is in: the Journal can drop its loader now.
           setFriendsReady(true);
         },
         (error) => {
@@ -179,9 +211,12 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
           setFriendsReady(true);
         }
       );
-      
-      // Remember it so logout / re-fetch / unmount can tear it down.
-      sightingsUnsubRef.current = unsubscribe;
+
+      // Remember both so logout / re-fetch / unmount can tear them down.
+      sightingsUnsubRef.current = () => {
+        bootstrapUnsubscribe();
+        unsubscribe();
+      };
     } catch (error) {
       console.error('Error setting up sightings listener:', error);
       // Listener never got established — don't leave the Journal loader hanging.
