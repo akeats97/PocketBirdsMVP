@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -193,7 +193,7 @@ export function ProposeSheet({
             <View style={styles.header}>
               <View style={styles.thumb}>
                 {photoUrl ? (
-                  <Image source={{ uri: photoUrl }} style={styles.thumbImg} resizeMode="cover" />
+                  <Image source={{ uri: photoUrl }} style={styles.thumbImg} contentFit="cover" />
                 ) : (
                   <MysteryPhoto height={44} discSize={22} />
                 )}

@@ -2,6 +2,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import { Platform } from 'react-native';
 import { getDownloadURL, getStorage, putFile, ref } from '@react-native-firebase/storage';
+import { SaveFormat, manipulateAsync } from 'expo-image-manipulator';
+import { Image as RNImage } from 'react-native';
 import { gpsFromJpegFile } from '../utils/exifGps';
 import { Coordinates } from '../types';
 
@@ -269,19 +271,56 @@ export async function readPhotoCoordinates(
   return null;
 }
 
+// Cap uploads at this longest edge / JPEG quality. Full camera originals
+// (4032px, 2-3MB+) are what made feed photos fail to load on phone
+// connections; ~2048px @ 0.85 lands around 300-600KB and still looks sharp
+// in the pinch-zoom viewer. EXIF is stripped by the re-encode, which is fine:
+// photo GPS is read from the library asset at pick time, never from the
+// uploaded file (see readPhotoCoordinates).
+const MAX_UPLOAD_EDGE = 2048;
+const UPLOAD_JPEG_QUALITY = 0.85;
+
+// Resize + re-encode a local photo for upload. Any failure falls back to the
+// original file — a compression hiccup must never block saving a sighting.
+async function compressForUpload(uri: string): Promise<string> {
+  try {
+    const { width, height } = await new Promise<{ width: number; height: number }>(
+      (resolve, reject) =>
+        RNImage.getSize(uri, (w, h) => resolve({ width: w, height: h }), reject)
+    );
+    const longest = Math.max(width, height);
+    // Never upscale; small images just get re-encoded at upload quality.
+    const actions =
+      longest > MAX_UPLOAD_EDGE
+        ? [width >= height ? { resize: { width: MAX_UPLOAD_EDGE } } : { resize: { height: MAX_UPLOAD_EDGE } }]
+        : [];
+    const result = await manipulateAsync(uri, actions, {
+      compress: UPLOAD_JPEG_QUALITY,
+      format: SaveFormat.JPEG,
+    });
+    console.log(`[photoService] compressed upload ${width}x${height} -> ${result.width}x${result.height}`);
+    return result.uri;
+  } catch (err) {
+    console.log('[photoService] compression failed, uploading original:', err);
+    return uri;
+  }
+}
+
 export async function uploadPhoto(uri: string, sightingId: string): Promise<string> {
   try {
+    const toUpload = await compressForUpload(uri);
+
     // Get the file extension
-    const extension = uri.split('.').pop();
+    const extension = toUpload.split('.').pop();
     const filename = `${sightingId}.${extension}`;
-    
+
     // Create a reference to the file location in Firebase Storage
     const storage = getStorage();
     const storageRef = ref(storage, `sightings/${filename}`);
 
     // Native upload straight from the local file URI (no fetch->blob dance;
     // the native SDK streams the file off disk).
-    await putFile(storageRef, uri);
+    await putFile(storageRef, toUpload);
 
     // Get the download URL
     const downloadUrl = await getDownloadURL(storageRef);

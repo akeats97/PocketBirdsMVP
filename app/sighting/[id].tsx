@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Image } from 'expo-image';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -362,7 +362,7 @@ export default function SightingDetailScreen() {
       <ScrollView ref={scrollRef} style={styles.body} keyboardShouldPersistTaps="handled">
         {sighting.photoUrl ? (
           <Pressable onPress={() => { setPhotoUri(sighting.photoUrl!); router.push('/photo'); }}>
-            <Image source={{ uri: sighting.photoUrl }} style={styles.photo} resizeMode="cover" />
+            <Image source={{ uri: sighting.photoUrl }} style={styles.photo} contentFit="cover" />
           </Pressable>
         ) : mysteryBird ? (
           <MysteryPhoto height={190} />

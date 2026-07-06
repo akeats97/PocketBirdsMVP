@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth } from '../config/firebaseConfig';
 import { isAdminUid } from '../constants/admin';
@@ -88,7 +89,7 @@ function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardP
             <Image
               source={{ uri: photoSource }}
               style={styles.photo}
-              resizeMode="cover"
+              contentFit="cover"
             />
           </Pressable>
         )}

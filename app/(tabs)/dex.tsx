@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import ClearableInput from '../../components/ClearableInput';
 import { HardShadow } from '../../components/SightingCard';
 import { HoloFill, HoloRing } from '../../components/Holo';
@@ -652,7 +653,7 @@ const ACCard = React.memo(function ACCard({
     <Image
       source={{ uri: photoUrl }}
       style={[styles.art, styles.artPhoto, { height: artHeight }]}
-      resizeMode="cover"
+      contentFit="cover"
     />
   ) : (
     <View style={[styles.art, { height: artHeight, backgroundColor: palette.leafSoft }]}>

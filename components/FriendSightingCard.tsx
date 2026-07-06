@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHoots } from '../app/context/HootsContext';
 import { setPhotoUri } from '../app/utils/photoViewer';
@@ -82,7 +83,7 @@ function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSighti
             <Image
               source={{ uri: sighting.photoUrl }}
               style={styles.photo}
-              resizeMode="cover"
+              contentFit="cover"
             />
           </Pressable>
         )}

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SightingCard, { HardShadow } from '../../components/SightingCard';
 import { Avatar } from '../../components/social/Avatar';
@@ -243,7 +244,7 @@ function CommunityTile({ photo, height, onOpen }: {
 }) {
   return (
     <Pressable onPress={() => onOpen(photo)} style={styles.tile}>
-      <Image source={{ uri: photo.photoUrl }} style={[styles.tileImage, { height }]} resizeMode="cover" />
+      <Image source={{ uri: photo.photoUrl }} style={[styles.tileImage, { height }]} contentFit="cover" />
       <View style={styles.creditPill}>
         <Avatar name={photo.username} seed={photo.uid} size={18} round />
         <Text style={styles.creditName} numberOfLines={1}>{firstName(photo.username)}</Text>
@@ -314,7 +315,7 @@ function Lightbox({ photo, onClose, onViewProfile }: {
 
       <View style={styles.lightboxColumn} pointerEvents="box-none">
         <View style={styles.lightboxPhotoWrap}>
-          <Image source={{ uri: photo.photoUrl }} style={styles.lightboxPhoto} resizeMode="cover" />
+          <Image source={{ uri: photo.photoUrl }} style={styles.lightboxPhoto} contentFit="cover" />
         </View>
 
         <View style={styles.lightboxCreditWrap}>

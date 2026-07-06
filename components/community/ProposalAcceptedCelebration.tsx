@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { font, palette, radius, space } from '../../constants/Colors';
 import { HardShadow } from '../SightingCard';
 import { Avatar } from '../social/Avatar';
@@ -39,7 +40,7 @@ export function ProposalAcceptedCelebration({
               {/* Resolved photo (or the mystery placeholder) + IDENTIFIED badge */}
               <View>
                 {photoUrl ? (
-                  <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="cover" />
+                  <Image source={{ uri: photoUrl }} style={styles.photo} contentFit="cover" />
                 ) : (
                   <MysteryPhoto height={150} />
                 )}

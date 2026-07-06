@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
+import { Image } from 'expo-image';
 import {
-  Image,
   Pressable,
   StyleSheet,
   View,
@@ -52,8 +52,7 @@ export default function PhotoViewerScreen() {
           <Image
             source={{ uri: photoUri }}
             style={size}
-            resizeMethod="scale"
-            resizeMode="contain"
+            contentFit="contain"
           />
         </ResumableZoom>
       )}
