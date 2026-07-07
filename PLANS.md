@@ -160,7 +160,7 @@ wrinkles resolved). `recomputeSpeciesGlobalFirst` already moved server-side
 **Effort.** L (the largest single item; 1-2 focused days including tests).
 **Order.** First among PL items; PL-2 rides its rules pass.
 
-### PL-2: Block / report / guidelines (P0, store-required for strangers)
+### PL-2: Block / report / guidelines (P0, store-required for strangers) - BUILT Jul 7 2026 (9a31f64; NEEDS rules + functions deploy + Pages copy)
 
 **Current state (verified).** Zero moderation primitives in code or rules. Admin
 allowlist exists in rules (isAdmin, two uids). GitHub Pages already hosts PRIVACY +
@@ -292,7 +292,7 @@ downloads the usernames collection and filters client-side (userService.ts:13-28
 
 **Effort.** S-M. **Order.** Before opening signup; after PL-1/2.
 
-### PL-7 / Q-6: Push reliability: silent drops + receipts (P0 bug)
+### PL-7 / Q-6: Push reliability: silent drops + receipts (P0 bug) - BUILT Jul 7 2026 (b1f0065; NEEDS FUNCTIONS DEPLOY)
 
 **Current state (verified).** functions/index.js sends via expo-server-sdk and logs
 ticket chunks (line ~177) but **never polls receipts**; delivery failures
@@ -689,7 +689,7 @@ predicate `isNonBirdEntry` + Dex "Other" path once decided. Park until asked.
 
 Found while reviewing the app with fresh eyes. Ordered by how strongly I'd push.
 
-### N-1: In-app account deletion (STORE BLOCKER, belongs in the PL series)
+### N-1: In-app account deletion (STORE BLOCKER, belongs in the PL series) - BUILT Jul 7 2026 (3185ce5; NEEDS FUNCTIONS DEPLOY)
 
 Apple Guideline 5.1.1(v) REQUIRES apps that offer account creation to offer in-app
 account DELETION. We have a deletion web page (GitHub Pages) but no in-app path;
@@ -907,7 +907,7 @@ comments lack the field -> fall back to today's @name-only rendering. No rules
 change (same doc, additive field); no CF change. Optional polish: tap the quote to
 scroll to the parent. **Effort.** S.
 
-### HEP-8: Pull the sighting date from the photo (alex)
+### HEP-8: Pull the sighting date from the photo (alex) - BUILT Jul 7 2026 (9a118c2; on-device EXIF check pending)
 
 **Current state.** photoService already parses EXIF `DateTimeOriginal` (used to
 corroborate the library-asset probe) but nothing reaches the form's DATE field.
@@ -921,7 +921,7 @@ only location is privacy-scrubbed - but this area has burned us; the [photoServi
 logs make it a 5-minute check). **Effort.** S-M. **Order.** Natural companion to
 the existing photo-first flow; any photo batch.
 
-### HEP-9: Explain the badges (alex)
+### HEP-9: Explain the badges (alex) - BUILT Jul 7 2026 (c34fd47)
 
 **Current state.** 1ST lifer badge, global-first holo 1ST pill, verified state,
 Mystery Bird tag, "ID'd by", green location pin - none explained anywhere.
@@ -955,7 +955,7 @@ ClearableInput with a live char count; ProfileView renders it under the username
 (one muted line, both self and public). Placeholder in PRD voice ("say something
 about your flock"). **Effort.** S.
 
-### HEP-12: Date wheel exits after every column pick - iOS (gary, bug)
+### HEP-12: Date wheel exits after every column pick - iOS (gary, bug) - BUILT Jul 7 2026 (4a8a312)
 
 **Current state (root cause found).** SightingForm's DateTimePicker `onChange`
 calls `setShowDatePicker(false)` unconditionally. Correct on Android (the dialog
@@ -968,7 +968,7 @@ spinner open, updates `date` live on change, and dismisses via an explicit small
 **Effort.** S. **Order.** With HEP-13, one date-picker pass; TestFlight-visible
 fix, good Doradito-follow-up.
 
-### HEP-13: Can't scroll to future months mid-entry (gary, product call)
+### HEP-13: Can't scroll to future months mid-entry (gary, product call) - BUILT Jul 7 2026 (4a8a312, took the recommended validate-at-save option)
 
 **Current state.** `maximumDate={new Date()}` clamps the wheel the moment any
 column would exceed today - so month-first entry (Dec, intending an earlier year)

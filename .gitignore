@@ -44,3 +44,4 @@ app-example
 
 # Wikipedia blurb fetch cache (build artifact, resumable)
 scripts/.wiki-cache.json
+firestore-debug.log
