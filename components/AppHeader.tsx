@@ -11,6 +11,7 @@ import { font, palette, radius, space, type } from '../constants/Colors';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
 import { openBadgeGuide } from './BadgeGuideSheet';
 import { BottomSheet } from './BottomSheet';
+import { DeleteAccountSheet } from './DeleteAccountSheet';
 
 // App-wide top bar for the tab screens.
 //
@@ -54,6 +55,7 @@ export function AppHeader({ youActions }: { youActions?: boolean }) {
   const { unreadCount } = useActivity();
   const { clearLocalData } = useSightings();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Mirrors the old profile logout pill: clear local cache, then sign out —
   // the root auth listener swaps the UI to the login screen.
@@ -143,8 +145,24 @@ export function AppHeader({ youActions }: { youActions?: boolean }) {
                 handleLogout();
               }}
             />
+            <MenuRow
+              icon="trash-outline"
+              label="Delete account"
+              sub="Permanently removes you and your sightings"
+              danger
+              onPress={() => {
+                setMenuOpen(false);
+                // Let the menu's exit animation finish before the next sheet
+                // slides up (same stagger as the badge guide).
+                setTimeout(() => setDeleteOpen(true), 280);
+              }}
+            />
           </View>
         </BottomSheet>
+      )}
+
+      {youActions && (
+        <DeleteAccountSheet visible={deleteOpen} onClose={() => setDeleteOpen(false)} />
       )}
     </View>
   );

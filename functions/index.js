@@ -11,6 +11,7 @@ const {setGlobalOptions} = require("firebase-functions");
 const admin = require('firebase-admin');
 const { Expo } = require('expo-server-sdk');
 const {onDocumentCreated, onDocumentDeleted, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
+const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const { FieldValue } = require('firebase-admin/firestore');
 
@@ -907,5 +908,106 @@ exports.onUserCreatedAutoFollow = onDocumentCreated('users/{uid}', async (event)
       .set({ timestamp: FieldValue.serverTimestamp() });
   } catch (error) {
     console.error('Error in onUserCreatedAutoFollow:', error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// N-1: in-app account deletion (Apple Guideline 5.1.1(v) requires it).
+// Deletes everything the account owns: sightings (subcollections + Storage
+// photos), engagement left on other people's content (hoots, comments,
+// proposals), follow edges in both directions, notification prefs others hold
+// about them, the username claim, the user doc tree, and finally the Auth
+// user. Firestore first, Auth last, so a mid-way failure leaves an account
+// that can sign in and retry. Deliberately NOT scrubbed: activity items in
+// other users' inboxes that mention this account (historical records, same
+// posture as a deleted comment's denormalized username elsewhere).
+//
+// Client calls this via the callable HTTPS protocol with a fresh password
+// re-auth first (components/DeleteAccountSheet.tsx). Admin SDK deletes fire
+// the normal triggers, so denormalized counters (hootCount, proposalCount,
+// global-first holders) self-heal.
+// ---------------------------------------------------------------------------
+
+exports.deleteAccount = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to delete your account.');
+  }
+  const uid = request.auth.uid;
+  const db = admin.firestore();
+  const bucket = admin.storage().bucket();
+  const summary = { sightings: 0, hoots: 0, comments: 0, proposals: 0, followEdges: 0 };
+
+  try {
+    // 1. Own sightings: recursive delete (hoots/comments/proposals subtrees)
+    //    plus both Storage copies (display + original archive).
+    const sightings = await db.collection('sightings').where('userId', '==', uid).get();
+    for (const doc of sightings.docs) {
+      await db.recursiveDelete(doc.ref);
+      summary.sightings++;
+      for (const prefix of [`sightings/${doc.id}.`, `sightings/display/${doc.id}.`]) {
+        try {
+          await bucket.deleteFiles({ prefix });
+        } catch (error) {
+          console.error(`Storage cleanup failed for ${prefix}:`, error);
+        }
+      }
+    }
+
+    // 2. Engagement left on other people's content. All hoot docs (sighting,
+    //    proposal, and comment hoots share one collection group) carry a uid
+    //    field, as do comments and proposals.
+    const hoots = await db.collectionGroup('hoots').where('uid', '==', uid).get();
+    for (const doc of hoots.docs) {
+      await doc.ref.delete();
+      summary.hoots++;
+    }
+    const comments = await db.collectionGroup('comments').where('uid', '==', uid).get();
+    for (const doc of comments.docs) {
+      await db.recursiveDelete(doc.ref); // comments own a hoots subcollection
+      summary.comments++;
+    }
+    const proposals = await db.collectionGroup('proposals').where('uid', '==', uid).get();
+    for (const doc of proposals.docs) {
+      await db.recursiveDelete(doc.ref);
+      summary.proposals++;
+    }
+
+    // 3. Follow edges, both directions. Who-I-follow lives under
+    //    following/{uid}; who-follows-me is any following doc whose id is this
+    //    uid (same full-scan-then-filter the follower fanout uses; fine at our
+    //    scale). Deletes trip onFollowDeleted so counts stay right.
+    const followEdges = await db.collectionGroup('following').get();
+    for (const doc of followEdges.docs) {
+      if (doc.id === uid) {
+        await doc.ref.delete();
+        summary.followEdges++;
+      }
+    }
+    await db.recursiveDelete(db.doc(`following/${uid}`));
+
+    // 4. Notification prefs OTHER users keep about this account (doc id == the
+    //    muted/followed user's uid).
+    const prefs = await db.collectionGroup('notificationPrefs').get();
+    for (const doc of prefs.docs) {
+      if (doc.id === uid) await doc.ref.delete();
+    }
+
+    // 5. The username claim (docs are keyed by username, carry a uid field).
+    const usernames = await db.collection('usernames').where('uid', '==', uid).get();
+    for (const doc of usernames.docs) {
+      await doc.ref.delete();
+    }
+
+    // 6. The user doc tree (activity + own notificationPrefs subcollections).
+    await db.recursiveDelete(db.doc(`users/${uid}`));
+
+    // 7. The Auth user, last.
+    await admin.auth().deleteUser(uid);
+
+    console.log(`Account deleted: ${uid}`, JSON.stringify(summary));
+    return { ok: true, ...summary };
+  } catch (error) {
+    console.error(`Account deletion failed for ${uid}:`, error);
+    throw new HttpsError('internal', 'Deletion failed partway. Sign in and try again.');
   }
 });
