@@ -271,6 +271,36 @@ export async function readPhotoCoordinates(
   return null;
 }
 
+export interface PhotoMetadata {
+  coords: Coordinates | null;
+  capturedAt: Date | null;
+}
+
+// Where AND when the picked photo was taken. Coords go through the library-
+// asset maze above. Capture time is easier: EXIF DateTimeOriginal survives the
+// pickers' GPS redaction (only location is privacy-scrubbed), with the library
+// asset's creationTime as fallback when the picker handed us an asset id.
+export async function readPhotoMetadata(
+  asset: ImagePicker.ImagePickerAsset
+): Promise<PhotoMetadata> {
+  const coords = await readPhotoCoordinates(asset);
+  const exif = asset.exif as any;
+  let capturedAt = parseExifDate(
+    // iOS may nest the capture tags under "{Exif}"; Android flattens them.
+    exif?.DateTimeOriginal ?? exif?.['{Exif}']?.DateTimeOriginal ?? exif?.DateTime
+  );
+  if (!capturedAt && asset.assetId) {
+    try {
+      const info = await MediaLibrary.getAssetInfoAsync(asset.assetId);
+      if (info?.creationTime) capturedAt = new Date(info.creationTime);
+    } catch {
+      // No local asset behind the id; capture time just stays unknown.
+    }
+  }
+  console.log('[photoService] capture date =', capturedAt?.toISOString() ?? 'null');
+  return { coords, capturedAt };
+}
+
 // Cap uploads at this longest edge / JPEG quality. Full camera originals
 // (4032px, 2-3MB+) are what made feed photos fail to load on phone
 // connections; ~2048px @ 0.85 lands around 300-600KB and still looks sharp
@@ -346,6 +376,7 @@ const photoService = {
   pickImage,
   uploadPhoto,
   readPhotoCoordinates,
+  readPhotoMetadata,
   requestPhotoPermission
 };
 

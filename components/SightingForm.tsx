@@ -13,7 +13,7 @@ import { CUSTOM_SPECIES } from '../constants/customSpecies';
 import { REPORT_TYPES, isReportEntry } from '../constants/reportTypes';
 import { UNKNOWN_BIRD } from '../constants/unknownBird';
 import { useSightings } from '../app/context/SightingsContext';
-import { pickImage, readPhotoCoordinates, requestPhotoPermission } from '../app/services/photoService';
+import { pickImage, readPhotoMetadata, requestPhotoPermission } from '../app/services/photoService';
 import { getCurrentCoordinates, getCurrentLocationWithLabel, hasLocationPermission, requestLocationPermission, reverseGeocodeLabel, reverseGeocodeRegion } from '../app/services/locationService';
 import { getPlaceCoordinates, getPlacesAutocomplete, PlaceSuggestion } from '../app/services/placesService';
 import { buildRecentLocations, RecentLocation } from '../app/utils/recentLocations';
@@ -92,6 +92,11 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
   const [notes, setNotes] = useState(isEdit ? initial?.notes ?? '' : '');
   const [date, setDate] = useState(isEdit ? initial?.date ?? new Date() : new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  // Date provenance (add mode). A photo's capture date autofills DATE, but only
+  // while the field still holds its untouched default; a date the user picked
+  // is never overwritten. dateFromPhoto drives the small hint under the field.
+  const [dateEdited, setDateEdited] = useState(false);
+  const [dateFromPhoto, setDateFromPhoto] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(
     isEdit ? initial?.photoUrl ?? initial?.photoPath ?? null : null
   );
@@ -374,7 +379,21 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       // bird actually was, which beats "where I'm standing now" for both ranking
       // the bird list and filling in the location field.
       if (isEdit) return;
-      const coords = await readPhotoCoordinates(asset);
+      const { coords, capturedAt } = await readPhotoMetadata(asset);
+
+      // The photo also knows WHEN the bird was seen. Autofill the untouched
+      // default date (never a user-picked one); a replacement photo without a
+      // capture date must not leave the previous photo's date behind. Ignore
+      // future timestamps (bad camera clocks) so the save validation never
+      // trips on a date the user didn't choose.
+      if (capturedAt && capturedAt <= new Date() && !dateEdited) {
+        setDate(capturedAt);
+        setDateFromPhoto(true);
+      } else if (!capturedAt && dateFromPhoto) {
+        setDate(new Date());
+        setDateFromPhoto(false);
+      }
+
       if (!coords) {
         // A GPS-less replacement must not keep ranking by the previous photo.
         setPhotoCoords(undefined);
@@ -443,6 +462,8 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       setSearchQuery('');
       setNotes('');
       setDate(new Date());
+      setDateEdited(false);
+      setDateFromPhoto(false);
       setPhotoUri(null);
       setPhotoCoords(undefined);
     }
@@ -500,6 +521,11 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
             onPress={() => {
               setPhotoUri(null);
               setPhotoCoords(undefined);
+              // A date the removed photo supplied goes with it.
+              if (dateFromPhoto) {
+                setDate(new Date());
+                setDateFromPhoto(false);
+              }
             }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityLabel="Remove photo"
@@ -631,6 +657,8 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                     if (Platform.OS !== 'ios') setShowDatePicker(false);
                     if (selectedDate) {
                       setDate(selectedDate);
+                      setDateEdited(true);
+                      setDateFromPhoto(false);
                     }
                   }}
                 />
@@ -642,6 +670,12 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                 >
                   <Text style={styles.dateDoneText}>Done</Text>
                 </Pressable>
+              )}
+              {dateFromPhoto && (
+                <View style={styles.dateFromPhotoRow}>
+                  <Ionicons name="image-outline" size={12} color={palette.inkSoft} />
+                  <Text style={styles.dateFromPhotoText}>Date from your photo</Text>
+                </View>
               )}
             </View>
 
@@ -980,6 +1014,16 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
     ...border.thick,
+  },
+  dateFromPhotoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    marginTop: space.xs,
+  },
+  dateFromPhotoText: {
+    ...type.bodyS,
+    color: palette.inkSoft,
   },
   dateDoneButton: {
     alignSelf: 'flex-end',
