@@ -417,6 +417,14 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       Alert.alert('Error', 'Please enter a location');
       return;
     }
+    // The picker no longer clamps to today (clamping mid-entry punished
+    // month-first scrolling), so the honest constraint moves here.
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    if (date > endOfToday) {
+      Alert.alert('Nice try, time traveler', "That date hasn't happened yet. Pick one that has.");
+      return;
+    }
 
     onSubmit({
       birdName: selectedBird,
@@ -616,13 +624,24 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                   display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                   themeVariant="light"
                   onChange={(event, selectedDate) => {
-                    setShowDatePicker(false);
+                    // Android's dialog fires once, on OK/cancel, so closing
+                    // here is right. The iOS spinner fires on every wheel
+                    // settle (closing would eject the picker after a single
+                    // column pick), so it stays open until the Done row.
+                    if (Platform.OS !== 'ios') setShowDatePicker(false);
                     if (selectedDate) {
                       setDate(selectedDate);
                     }
                   }}
-                  maximumDate={new Date()}
                 />
+              )}
+              {showDatePicker && Platform.OS === 'ios' && (
+                <Pressable
+                  style={styles.dateDoneButton}
+                  onPress={() => setShowDatePicker(false)}
+                >
+                  <Text style={styles.dateDoneText}>Done</Text>
+                </Pressable>
               )}
             </View>
 
@@ -961,6 +980,20 @@ const styles = StyleSheet.create({
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
     ...border.thick,
+  },
+  dateDoneButton: {
+    alignSelf: 'flex-end',
+    marginTop: space.xs,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.lg,
+    backgroundColor: palette.card,
+    borderRadius: radius.input,
+    ...border.thick,
+  },
+  dateDoneText: {
+    ...type.body,
+    fontFamily: font.bodyBold,
+    color: palette.ink,
   },
   dateButtonText: {
     ...type.bodyL,
