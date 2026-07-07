@@ -839,15 +839,12 @@ the licensing constraint).
 **Effort.** M (callable + button + prefill). **Order.** Post-Doradito; pairs
 naturally with Q-11's ID queue.
 
-### HEP-2: Silkie Chicken (anastasia)
+### HEP-2: Silkie Chicken (anastasia) - DROPPED (Jul 7 2026)
 
-**Current state.** Alex said "can add" on the post; still only Kelsey in
-`constants/customSpecies.ts`.
-**Plan.** Add `'Silkie Chicken'` to `CUSTOM_SPECIES` - the whole pipeline (Dex tile
-under Other, celebration, excluded from species counts/milestones) is inherited.
-Optional sync: `functions/backfillGlobalFirst.js` hardcodes its own set, but it is
-a one-time script already run; skip unless re-run. Comment on the post when it
-ships. **Effort.** S (one line + typecheck).
+Alex's call: not doing it. Silkie isn't a species (all domestic chickens are one
+species, descended from Red Junglefowl, which IS in the IOC list). If it ever
+returns it's one line in `constants/customSpecies.ts`; recorded so it is not
+re-proposed. Worth a comment on anastasia's post explaining the taxonomy.
 
 ### HEP-3: Usernames clickable everywhere (victoria)
 
@@ -992,6 +989,19 @@ small payoff while the deep link works. **Park until asked**; recorded so it is
 not lost. **Effort.** S-M when picked up.
 
 ---
+
+## Alex's priority ratings (Jul 7 2026)
+
+Collected item by item. Anything not listed here is unrated so far (the PL/M
+ship-critical ordering still governs regardless of rating).
+
+- **HIGH:** HEP-12 + HEP-13 (date-picker pass), HEP-9 (badge explainer),
+  HEP-8 (photo date), HEP-10 (shareable posts, complex), HEP-6 (flock map,
+  complex), N-1 (account deletion), N-2 (Sentry), PL-7 (push reliability),
+  PL-2 (block/report).
+- **MED:** HEP-11 (bio), HEP-3 (username sweep).
+- **LOW:** HEP-7 (reply snippet), HEP-4 (bird calls), HEP-1 (suggest-an-ID).
+- **DROPPED:** HEP-2 (Silkie Chicken - not a species).
 
 ## Suggested attack order
 
