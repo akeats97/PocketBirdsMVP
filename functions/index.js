@@ -1011,3 +1011,67 @@ exports.deleteAccount = onCall(async (request) => {
     throw new HttpsError('internal', 'Deletion failed partway. Sign in and try again.');
   }
 });
+
+// ---------------------------------------------------------------------------
+// PL-2: moderation. blockUser tears down the relationship server-side (you
+// can only delete YOUR OWN follow edge under the rules, so the reverse edge
+// needs Admin SDK); onReportCreated pushes the admins so reports get acted on
+// without anyone watching a console (store policy expects action on reports).
+// ---------------------------------------------------------------------------
+
+// Keep in sync with constants/admin.ts and the isAdmin() allowlist in
+// firestore.rules. [0] Alex, [1] Victoria.
+const ADMIN_UIDS = [
+  'ZerkNpeAERSwmptlrPeboR5TASs2',
+  'bvorXp0fC1QmhiUQM4ssoQcsodr1',
+];
+
+exports.blockUser = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to block someone.');
+  }
+  const me = request.auth.uid;
+  const target = request.data && request.data.uid;
+  if (typeof target !== 'string' || target.length === 0) {
+    throw new HttpsError('invalid-argument', 'Pass the uid to block.');
+  }
+  if (target === me) {
+    throw new HttpsError('invalid-argument', "You can't block yourself.");
+  }
+
+  const db = admin.firestore();
+  try {
+    // Order matters for safety, not correctness: the block doc lands first so
+    // engagement is barred even if an edge delete fails and retries.
+    await db.doc(`users/${me}/blocked/${target}`).set({
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    // Drop the follow edges BOTH directions (deletes are no-ops if absent;
+    // they trip onFollowDeleted so denormalized counts stay right).
+    await db.doc(`following/${me}/following/${target}`).delete();
+    await db.doc(`following/${target}/following/${me}`).delete();
+    console.log(`User ${me} blocked ${target}`);
+    return { ok: true };
+  } catch (error) {
+    console.error(`blockUser failed (${me} -> ${target}):`, error);
+    throw new HttpsError('internal', 'Block failed. Please try again.');
+  }
+});
+
+exports.onReportCreated = onDocumentCreated('reports/{reportId}', async (event) => {
+  const report = event.data.data();
+  try {
+    const reporterDoc = await admin.firestore().doc(`users/${report.reporter}`).get();
+    const reporterName = (reporterDoc.exists && reporterDoc.data().username) || report.reporter;
+    for (const adminUid of ADMIN_UIDS) {
+      if (adminUid === report.reporter) continue; // admins don't need their own report pushed back
+      await pushSocial(adminUid, {
+        title: '🚩 New report',
+        body: `@${reporterName} reported a ${report.targetType}: ${String(report.reason).slice(0, 120)}`,
+        data: { type: 'report', reportId: event.params.reportId },
+      });
+    }
+  } catch (error) {
+    console.error('Error in onReportCreated:', error);
+  }
+});

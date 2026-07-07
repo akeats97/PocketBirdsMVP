@@ -33,6 +33,7 @@ import { ProposalAcceptedCelebration } from '../../components/community/Proposal
 import { ProposeSheet } from '../../components/community/ProposeSheet';
 import GlobalFirstCelebration from '../../components/GlobalFirstCelebration';
 import MilestoneCelebration from '../../components/MilestoneCelebration';
+import { ReportSheet } from '../../components/ReportSheet';
 import { font, palette, radius, space, type } from '../../constants/Colors';
 import { isMysteryBird, isUnknownEntry } from '../../constants/unknownBird';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -41,6 +42,7 @@ import { useActivity } from '../context/ActivityContext';
 import { useFriendSightings } from '../context/FriendSightingsContext';
 import { useHoots } from '../context/HootsContext';
 import { useSightings } from '../context/SightingsContext';
+import { blockUser } from '../services/moderationService';
 import { formatRelativeDate } from '../utils/formatSightingDate';
 import { useComments } from '../hooks/useComments';
 import { useProposals } from '../hooks/useProposals';
@@ -67,7 +69,7 @@ export default function SightingDetailScreen() {
   const bottomInset = insets.bottom;
   const bottomInsetIOS = Platform.OS === 'ios' ? insets.bottom : 0;
 
-  const { friendSightings } = useFriendSightings();
+  const { friendSightings, refreshFriends } = useFriendSightings();
   const { sightings, evaluateNewSpecies, applyCommunityId, markGlobalFirst, deleteSighting } = useSightings();
   const { markSightingRead } = useActivity();
 
@@ -275,6 +277,38 @@ export default function SightingDetailScreen() {
     router.push(`/sighting/${sightingId}/edit`);
   };
 
+  // Non-owner moderation actions (PL-2).
+  const [reportOpen, setReportOpen] = useState(false);
+  const onReportSighting = () => {
+    setMenuOpen(false);
+    setReportOpen(true);
+  };
+  const onBlockOwner = () => {
+    setMenuOpen(false);
+    if (!ownerUid) return;
+    const ownerName = (sighting as FriendSighting | undefined)?.friendName ?? 'this birder';
+    Alert.alert(
+      `Block ${ownerName}?`,
+      "They won't be able to hoot, comment, or propose on your sightings, and you'll stop following each other.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockUser(ownerUid);
+              refreshFriends();
+              router.back(); // their sightings are gone from the feed now
+            } catch {
+              Alert.alert('Error', "Couldn't block. Please try again.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const onDeleteSighting = () => {
     setMenuOpen(false);
     if (!sighting) return;
@@ -293,46 +327,68 @@ export default function SightingDetailScreen() {
       <Text style={styles.navTitle}>{mysteryBird ? 'Mystery Bird' : 'Sighting'}</Text>
       <View style={styles.navRight}>
         {mysteryBird && <NeedsIdPill />}
-        {isOwner && (
-          <Pressable
-            onPress={() => setMenuOpen(true)}
-            hitSlop={8}
-            style={[styles.menuButton, menuOpen && styles.menuButtonOpen]}
-            accessibilityLabel="Sighting options"
-          >
-            <Ionicons
-              name="ellipsis-vertical"
-              size={18}
-              color={menuOpen ? palette.cream : palette.ink}
-            />
-          </Pressable>
-        )}
+        {/* Owner: Edit / Delete. Everyone else: Report / Block (PL-2). */}
+        <Pressable
+          onPress={() => setMenuOpen(true)}
+          hitSlop={8}
+          style={[styles.menuButton, menuOpen && styles.menuButtonOpen]}
+          accessibilityLabel="Sighting options"
+        >
+          <Ionicons
+            name="ellipsis-vertical"
+            size={18}
+            color={menuOpen ? palette.cream : palette.ink}
+          />
+        </Pressable>
       </View>
     </View>
   );
 
-  // Owner-only ⋯ popover (Edit · Delete), anchored top-right over a light scrim.
+  // ⋯ popover anchored top-right over a light scrim. Owner: Edit · Delete.
+  // Non-owner: Report · Block (PL-2).
   const OverflowMenu = menuOpen ? (
     <>
       <Pressable style={styles.menuScrim} onPress={() => setMenuOpen(false)} />
       <View style={[styles.menuPopover, { top: topInset + 52 }]}>
         <HardShadow offset={4} borderRadius={radius.input}>
           <View style={styles.menuCard}>
-            <Pressable
-              style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: palette.leafSoft }]}
-              onPress={onEditSighting}
-            >
-              <Ionicons name="pencil" size={17} color={palette.ink} />
-              <Text style={styles.menuRowText}>Edit</Text>
-            </Pressable>
-            <View style={styles.menuDivider} />
-            <Pressable
-              style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: palette.coralSoft }]}
-              onPress={onDeleteSighting}
-            >
-              <Ionicons name="trash" size={17} color={palette.crimson} />
-              <Text style={[styles.menuRowText, { color: palette.crimson }]}>Delete</Text>
-            </Pressable>
+            {isOwner ? (
+              <>
+                <Pressable
+                  style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: palette.leafSoft }]}
+                  onPress={onEditSighting}
+                >
+                  <Ionicons name="pencil" size={17} color={palette.ink} />
+                  <Text style={styles.menuRowText}>Edit</Text>
+                </Pressable>
+                <View style={styles.menuDivider} />
+                <Pressable
+                  style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: palette.coralSoft }]}
+                  onPress={onDeleteSighting}
+                >
+                  <Ionicons name="trash" size={17} color={palette.crimson} />
+                  <Text style={[styles.menuRowText, { color: palette.crimson }]}>Delete</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: palette.leafSoft }]}
+                  onPress={onReportSighting}
+                >
+                  <Ionicons name="flag-outline" size={17} color={palette.ink} />
+                  <Text style={styles.menuRowText}>Report</Text>
+                </Pressable>
+                <View style={styles.menuDivider} />
+                <Pressable
+                  style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: palette.coralSoft }]}
+                  onPress={onBlockOwner}
+                >
+                  <Ionicons name="hand-left-outline" size={17} color={palette.crimson} />
+                  <Text style={[styles.menuRowText, { color: palette.crimson }]}>Block</Text>
+                </Pressable>
+              </>
+            )}
           </View>
         </HardShadow>
       </View>
@@ -590,6 +646,15 @@ export default function SightingDetailScreen() {
         visible={milestoneShown !== null}
         count={milestoneShown}
         onDismiss={() => setMilestoneShown(null)}
+      />
+
+      {/* Report flow (PL-2), non-owner only */}
+      <ReportSheet
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        targetType="sighting"
+        targetId={sightingId}
+        targetLabel="this sighting"
       />
 
       {OverflowMenu}

@@ -42,6 +42,11 @@ export interface Sighting {
   verifiedBy?: string;
   verifiedAt?: Date;
 
+  // Admin moderation soft-hide (PL-2): a reported post an admin pulled from
+  // everyone's feeds without deleting the owner's data. Admin-only writes,
+  // rule-enforced; the owner still sees their own copy.
+  hidden?: boolean;
+
   // Social engagement, denormalized onto the sighting doc and maintained
   // server-side by Cloud Functions (see Hoot & Comments data model). Missing
   // is treated as zero/empty on older sightings.

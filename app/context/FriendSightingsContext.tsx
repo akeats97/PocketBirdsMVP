@@ -1,14 +1,18 @@
 import NetInfo from '@react-native-community/netinfo';
 import { onAuthStateChanged } from '@react-native-firebase/auth';
 import { collection, limit, onSnapshot, orderBy, query, where } from '@react-native-firebase/firestore';
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { auth, db } from '../../config/firebaseConfig';
+import { subscribeBlockedUids } from '../services/moderationService';
 import { UserProfile, getFollowing } from '../services/userService';
 import { FriendSighting } from '../types';
 
 interface FriendSightingsContextType {
   friendSightings: FriendSighting[];
+  // Uids the current user has blocked (live). Exposed so detail screens can
+  // filter comments/proposals the same way the feed is filtered here.
+  blockedUids: Set<string>;
   friends: { id: string; name: string }[];
   isLoadingFriends: boolean;
   // True once the initial friend load has settled: the first sightings snapshot
@@ -27,6 +31,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
   // Starts empty — the merged home feed renders this directly, so it must
   // never contain placeholder data.
   const [friendSightings, setFriendSightings] = useState<FriendSighting[]>([]);
+  const [blockedUids, setBlockedUids] = useState<Set<string>>(new Set());
   const [friends, setFriends] = useState<{ id: string; name: string }[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(true);
   const [friendsReady, setFriendsReady] = useState(false);
@@ -157,6 +162,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
                 identifiedVia: data.identifiedVia ?? undefined,
                 identifiedBy: data.identifiedBy ?? undefined,
                 identifiedByUsername: data.identifiedByUsername ?? undefined,
+                hidden: data.hidden ?? false,
               };
               if (data.coordinates) {
                 friendSighting.coordinates = {
@@ -226,8 +232,12 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
   
   // Listen for auth state changes
   useEffect(() => {
+    let blockedUnsub: (() => void) | null = null;
     const unsubscribe = onAuthStateChanged(auth, user => {
+      blockedUnsub?.();
+      blockedUnsub = null;
       if (user) {
+        blockedUnsub = subscribeBlockedUids(setBlockedUids);
         fetchFollowing();
       } else {
         // Logged out: tear down the live sightings listener so it doesn't fire
@@ -236,6 +246,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
         sightingsUnsubRef.current = null;
         setFriends([]);
         setFriendSightings([]);
+        setBlockedUids(new Set());
         setIsLoadingFriends(false);
         setFriendsReady(true);
       }
@@ -243,6 +254,7 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubscribe();
+      blockedUnsub?.();
       sightingsUnsubRef.current?.();
       sightingsUnsubRef.current = null;
     };
@@ -253,10 +265,20 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
     await fetchFollowing();
   };
 
+  // What consumers see: the raw snapshots minus admin-hidden posts and anyone
+  // this user has blocked. Blocking also drops the follow edges server-side,
+  // so the block filter mostly covers the window until the next friends
+  // refresh; hidden covers moderation pulls that must vanish for everyone.
+  const visibleSightings = useMemo(
+    () => friendSightings.filter(s => !s.hidden && !blockedUids.has(s.friendId ?? '')),
+    [friendSightings, blockedUids]
+  );
+
   return (
     <FriendSightingsContext.Provider
       value={{
-        friendSightings,
+        friendSightings: visibleSightings,
+        blockedUids,
         friends,
         isLoadingFriends,
         friendsReady,

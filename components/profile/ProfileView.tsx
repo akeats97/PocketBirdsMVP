@@ -17,6 +17,9 @@ import { font, palette, radius, space, type } from '../../constants/Colors';
 import { isReportEntry } from '../../constants/reportTypes';
 import { useSightings } from '../../app/context/SightingsContext';
 import { useFriendSightings } from '../../app/context/FriendSightingsContext';
+import { blockUser, unblockUser } from '../../app/services/moderationService';
+import { BottomSheet } from '../BottomSheet';
+import { ReportSheet } from '../ReportSheet';
 import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../../app/services/notificationPrefsService';
 import { followUser, getFollowCounts, getPublicProfile, isFollowing, PublicProfile, unfollowUser } from '../../app/services/userService';
 import { getSightingsByUid } from '../../app/services/sightingService';
@@ -62,7 +65,7 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
   const { sightings: mySightings, clearLocalData } = useSightings();
   // Following someone here must rebuild the flock/feed so the Friends tab and
   // Journal update without a manual pull-to-refresh.
-  const { refreshFriends } = useFriendSightings();
+  const { refreshFriends, blockedUids } = useFriendSightings();
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [theirSightings, setTheirSightings] = useState<Sighting[]>([]);
@@ -73,6 +76,10 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
   const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
   const [notifPrefs, setNotifPrefs] = useState<Record<string, NotificationMode>>({});
   const [notifSheetOpen, setNotifSheetOpen] = useState(false);
+  // Moderation (PL-2): the ⋯ next to the Follow pill on someone else's profile.
+  const [modSheetOpen, setModSheetOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const isBlocked = !!uid && blockedUids.has(uid);
 
   // The list this profile renders: my own (live context) when self, else the
   // fetched list.
@@ -228,6 +235,38 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
     }
   };
 
+  // Block / unblock (PL-2). Blocking runs server-side (the callable also drops
+  // the follow edges both directions); unblock is just deleting your own
+  // blocked doc. Neither restores anything on unblock, deliberately.
+  const handleBlockToggle = () => {
+    if (!uid) return;
+    setModSheetOpen(false);
+    if (isBlocked) {
+      unblockUser(uid).catch(() => Alert.alert('Error', "Couldn't unblock. Please try again."));
+      return;
+    }
+    Alert.alert(
+      `Block ${name || 'this birder'}?`,
+      "They won't be able to hoot, comment, or propose on your sightings, and you'll stop following each other.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockUser(uid);
+              setFollowing(false);
+              refreshFriends();
+            } catch {
+              Alert.alert('Error', "Couldn't block. Please try again.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // Log out now lives on your own profile (the app header shows your avatar in
   // its place). Mirrors the old header logout: clear local cache, then sign out
   // — the root auth listener swaps the UI to the login screen.
@@ -294,6 +333,19 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
             // surface-level control, not an inline list chip.
             <HardShadow offset={2} borderRadius={17} style={styles.pillShadow}>
               <NotifBell mode={notifMode} onPress={() => setNotifSheetOpen(true)} />
+            </HardShadow>
+          )}
+          {!isSelf && (
+            // Moderation ⋯ (report / block). Raised to match its row neighbors.
+            <HardShadow offset={2} borderRadius={17} style={styles.pillShadow}>
+              <Pressable
+                style={styles.modChip}
+                onPress={() => setModSheetOpen(true)}
+                hitSlop={6}
+                accessibilityLabel="More options"
+              >
+                <Ionicons name="ellipsis-horizontal" size={16} color={palette.ink} />
+              </Pressable>
             </HardShadow>
           )}
         </View>
@@ -434,6 +486,46 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
         onPick={handleSelectNotifMode}
         onClose={() => setNotifSheetOpen(false)}
       />
+
+      {/* Moderation sheet (PL-2): report / block, non-self profiles only. */}
+      <BottomSheet visible={modSheetOpen} onClose={() => setModSheetOpen(false)}>
+        <View style={[styles.modSheet, { paddingBottom: insets.bottom + space.xl }]}>
+          <Pressable
+            style={({ pressed }) => [styles.modRow, pressed && { backgroundColor: palette.card }]}
+            onPress={() => {
+              setModSheetOpen(false);
+              // Stagger so the two sheets don't cross mid-animation.
+              setTimeout(() => setReportOpen(true), 280);
+            }}
+          >
+            <Ionicons name="flag-outline" size={20} color={palette.ink} />
+            <Text style={styles.modRowText}>Report {name || 'this birder'}</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.modRow, pressed && { backgroundColor: palette.card }]}
+            onPress={handleBlockToggle}
+          >
+            <Ionicons
+              name={isBlocked ? 'lock-open-outline' : 'hand-left-outline'}
+              size={20}
+              color={isBlocked ? palette.ink : palette.crimson}
+            />
+            <Text style={[styles.modRowText, !isBlocked && { color: palette.crimson }]}>
+              {isBlocked ? `Unblock ${name || 'this birder'}` : `Block ${name || 'this birder'}`}
+            </Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
+
+      {uid && (
+        <ReportSheet
+          visible={reportOpen}
+          onClose={() => setReportOpen(false)}
+          targetType="user"
+          targetId={uid}
+          targetLabel={name ? `@${name}` : 'this birder'}
+        />
+      )}
     </View>
   );
 }
@@ -579,6 +671,39 @@ const styles = StyleSheet.create({
 
   // Action pill
   pillShadow: { flexShrink: 0 },
+  // Moderation ⋯ chip + sheet (PL-2)
+  modChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: palette.ink,
+    backgroundColor: palette.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modSheet: {
+    backgroundColor: palette.cream,
+    borderTopWidth: 2,
+    borderColor: palette.ink,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
+    paddingHorizontal: space.xl,
+    paddingTop: space.lg,
+  },
+  modRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.input,
+  },
+  modRowText: {
+    ...type.bodyL,
+    color: palette.ink,
+    fontWeight: '700',
+  },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',

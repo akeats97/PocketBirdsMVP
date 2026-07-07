@@ -57,6 +57,15 @@ service cloud.firestore {
         allow read, write: if isSignedIn() && uid == myUid();
       }
 
+      // Block list (PL-2), owned by the {uid} user. The blocked doc's
+      // existence is what canEngage() checks on the sightings tree; the
+      // both-direction follow-edge teardown happens in the blockUser callable
+      // (Admin SDK), since you can't delete the other user's edge yourself.
+      // Unblock = the owner deletes the doc.
+      match /blocked/{blockedUid} {
+        allow read, write: if isSignedIn() && uid == myUid();
+      }
+
       // Activity inbox (Phase 2.5): written by Cloud Functions (Admin SDK).
       // The owner may read it and flip the read flag; clients never create.
       match /activity/{activityId} {
@@ -93,14 +102,16 @@ service cloud.firestore {
       // the verification + globalFirst fields — never the species, photo, or
       // anything else. (globalFirst is admin-writable because verifying a
       // sighting recomputes the species' global-first holder, which can reassign
-      // the gold across users.)
+      // the gold across users.) `hidden` is the PL-2 moderation soft-hide:
+      // admin-only both ways, so a reported post can be pulled from feeds
+      // without deleting the owner's data, and the owner can't unhide it.
       allow update: if isSignedIn() && (
         (resource.data.userId == myUid()
           && !request.resource.data.diff(resource.data).affectedKeys()
-                .hasAny(['verified', 'verifiedBy', 'verifiedAt']))
+                .hasAny(['verified', 'verifiedBy', 'verifiedAt', 'hidden']))
         || (isAdmin()
             && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['verified', 'verifiedBy', 'verifiedAt', 'globalFirst']))
+                 .hasOnly(['verified', 'verifiedBy', 'verifiedAt', 'globalFirst', 'hidden']))
       );
       allow delete: if isSignedIn() && resource.data.userId == myUid();
 
@@ -110,10 +121,18 @@ service cloud.firestore {
       function followsOwner(ownerUid) {
         return exists(/databases/$(database)/documents/following/$(myUid())/following/$(ownerUid));
       }
-      // You may engage (hoot / comment) on your own sighting or one by someone
-      // you follow.
+      // PL-2: an owner's block bars the blocked user from engaging on their
+      // sightings, no matter what the follow graph says.
+      function blockedByOwner(ownerUid) {
+        return exists(/databases/$(database)/documents/users/$(ownerUid)/blocked/$(myUid()));
+      }
+      // You may engage (hoot / comment / propose) on your own sighting or one
+      // by someone you follow who hasn't blocked you.
       function canEngage() {
-        return isSignedIn() && (sightingOwner() == myUid() || followsOwner(sightingOwner()));
+        return isSignedIn() && (
+          sightingOwner() == myUid()
+          || (followsOwner(sightingOwner()) && !blockedByOwner(sightingOwner()))
+        );
       }
 
       // Hoots: doc id == hooter's uid (one hoot per user, structurally).
@@ -186,6 +205,23 @@ service cloud.firestore {
           allow delete: if hooterUid == myUid();
         }
       }
+    }
+
+    // Moderation reports (PL-2). Any signed-in user may file one about a user
+    // or a piece of content; only admins can read or clear them (action is
+    // manual and human, per the PRD's side-project sustainability rule). The
+    // onReportCreated function pushes admins so nothing sits unseen.
+    match /reports/{reportId} {
+      allow create: if isSignedIn()
+                    && request.resource.data.reporter == myUid()
+                    && request.resource.data.targetType in ['user', 'sighting', 'comment', 'proposal']
+                    && request.resource.data.targetId is string
+                    && request.resource.data.targetId.size() > 0
+                    && request.resource.data.reason is string
+                    && request.resource.data.reason.size() > 0
+                    && request.resource.data.reason.size() <= 1000;
+      allow read, delete: if isAdmin();
+      allow update: if false;
     }
   }
 }

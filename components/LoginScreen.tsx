@@ -2,10 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithEmailAndPassword } from '@react-native-firebase/auth';
 import { doc, getDoc, setDoc } from '@react-native-firebase/firestore';
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { auth, db } from '../config/firebaseConfig';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
+import { GUIDELINES_URL } from '../constants/links';
 import { HardShadow } from './SightingCard';
 
 export default function LoginScreen() {
@@ -243,6 +244,20 @@ export default function LoginScreen() {
             </Text>
           </Pressable>
         )}
+
+        {!isLoginMode && (
+          // Store policy (PL-2): signup must present the community agreement.
+          <Pressable
+            style={styles.linkButton}
+            onPress={() => Linking.openURL(GUIDELINES_URL)}
+            disabled={isLoading}
+          >
+            <Text style={[styles.linkTextSubtle, isLoading && { opacity: 0.7 }]}>
+              By creating an account you agree to the{' '}
+              <Text style={styles.linkTextUnderline}>Community Guidelines</Text>
+            </Text>
+          </Pressable>
+        )}
       </View>
     </KeyboardAwareScrollView>
   );
@@ -332,5 +347,8 @@ const styles = StyleSheet.create({
     fontFamily: font.body,
     fontSize: 13,
     color: palette.inkSoft,
+  },
+  linkTextUnderline: {
+    textDecorationLine: 'underline',
   },
 });

@@ -6,6 +6,14 @@
   "storage": {
     "rules": "storage.rules"
   },
+  "emulators": {
+    "firestore": {
+      "port": 8089
+    },
+    "ui": {
+      "enabled": false
+    }
+  },
   "functions": [
     {
       "source": "functions",

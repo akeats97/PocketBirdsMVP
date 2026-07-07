@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut } from '@react-native-firebase/auth';
 import { useActivity } from '../app/context/ActivityContext';
 import { useSightings } from '../app/context/SightingsContext';
 import { auth } from '../config/firebaseConfig';
 import { font, palette, radius, space, type } from '../constants/Colors';
+import { GUIDELINES_URL } from '../constants/links';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
 import { openBadgeGuide } from './BadgeGuideSheet';
 import { BottomSheet } from './BottomSheet';
@@ -134,6 +135,14 @@ export function AppHeader({ youActions }: { youActions?: boolean }) {
                 // Let the menu sheet's exit animation finish before the guide
                 // slides up, so the two sheets don't cross mid-air.
                 setTimeout(openBadgeGuide, 280);
+              }}
+            />
+            <MenuRow
+              icon="shield-checkmark-outline"
+              label="Community guidelines"
+              onPress={() => {
+                setMenuOpen(false);
+                Linking.openURL(GUIDELINES_URL);
               }}
             />
             <MenuRow
