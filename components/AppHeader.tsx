@@ -9,6 +9,7 @@ import { useSightings } from '../app/context/SightingsContext';
 import { auth } from '../config/firebaseConfig';
 import { font, palette, radius, space, type } from '../constants/Colors';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
+import { openBadgeGuide } from './BadgeGuideSheet';
 import { BottomSheet } from './BottomSheet';
 
 // App-wide top bar for the tab screens.
@@ -120,6 +121,17 @@ export function AppHeader({ youActions }: { youActions?: boolean }) {
               onPress={() => {
                 setMenuOpen(false);
                 router.push('/hep');
+              }}
+            />
+            <MenuRow
+              icon="ribbon-outline"
+              label="What do the badges mean?"
+              sub="1ST, Mystery Bird, pins and pills"
+              onPress={() => {
+                setMenuOpen(false);
+                // Let the menu sheet's exit animation finish before the guide
+                // slides up, so the two sheets don't cross mid-air.
+                setTimeout(openBadgeGuide, 280);
               }}
             />
             <MenuRow

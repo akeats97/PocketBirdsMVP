@@ -31,6 +31,7 @@ import FriendSightingsProvider from './context/FriendSightingsContext';
 import HootsProvider from './context/HootsContext';
 import { SightingsProvider } from './context/SightingsContext';
 import { WishlistProvider } from './context/WishlistContext';
+import { BadgeGuideHost } from '../components/BadgeGuideSheet';
 import LoginScreen from '../components/LoginScreen';
 import { notificationService } from './services/notificationService';
 import { savePushToken } from './services/userService';
@@ -164,6 +165,9 @@ function AuthenticatedApp() {
           <Stack.Screen name="profile/[uid]/compare" options={{ headerShown: false }} />
           <Stack.Screen name="profile/[uid]/connections" options={{ headerShown: false }} />
         </Stack>
+        {/* Single host for the badge legend sheet; badges anywhere open it
+            via openBadgeGuide() instead of each list row owning a Modal. */}
+        <BadgeGuideHost />
       </SafeAreaView>
     </ThemeProvider>
   );

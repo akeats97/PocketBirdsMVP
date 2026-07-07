@@ -13,6 +13,7 @@ import { isAdminUid } from '../constants/admin';
 import { setSightingGlobalFirstVerified } from '../app/services/sightingService';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
 import { isMysteryBird } from '../constants/unknownBird';
+import { openBadgeGuide } from './BadgeGuideSheet';
 import { BottomSheet } from './BottomSheet';
 import { HardShadow } from './SightingCard';
 import { SpeciesNameLink } from './SpeciesNameLink';
@@ -119,13 +120,18 @@ function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSighti
             {/* A verified global-first wears the holo "1ST" globe pill (same as
                 the Dex), which supersedes the coral lifer badge — a global-first
                 is always a personal first too. See WORK_QUEUE Q-3. */}
+            {/* Tapping a badge opens the legend (curiosity is the entry point). */}
             {sighting.globalFirst && sighting.verified ? (
-              <GlobalFirstBadge />
+              <Pressable onPress={openBadgeGuide} hitSlop={6}>
+                <GlobalFirstBadge />
+              </Pressable>
             ) : isFirstSighting ? (
-              <View style={recipes.liferBadge}>
-                <Ionicons name="star" size={9} color="#fff" />
-                <Text style={recipes.liferBadgeText}>1ST</Text>
-              </View>
+              <Pressable onPress={openBadgeGuide} hitSlop={6}>
+                <View style={recipes.liferBadge}>
+                  <Ionicons name="star" size={9} color="#fff" />
+                  <Text style={recipes.liferBadgeText}>1ST</Text>
+                </View>
+              </Pressable>
             ) : null}
           </View>
 

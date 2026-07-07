@@ -10,6 +10,7 @@ import { useSightings } from '../app/context/SightingsContext';
 import { confirmDeleteSighting } from '../app/utils/confirmDeleteSighting';
 import { formatRelativeDate } from '../app/utils/formatSightingDate';
 import { setPhotoUri } from '../app/utils/photoViewer';
+import { openBadgeGuide } from './BadgeGuideSheet';
 import { BottomSheet } from './BottomSheet';
 import { Sighting } from '../app/types';
 import { border, font, palette, radius, recipes, space, type } from '../constants/Colors';
@@ -103,13 +104,18 @@ function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardP
             {/* A verified global-first wears the holo "1ST" globe pill (same as
                 the Dex), which supersedes the coral lifer badge — a global-first
                 is always your personal first too. See WORK_QUEUE Q-3. */}
+            {/* Tapping a badge opens the legend (curiosity is the entry point). */}
             {sighting.globalFirst && sighting.verified ? (
-              <GlobalFirstBadge />
+              <Pressable onPress={openBadgeGuide} hitSlop={6}>
+                <GlobalFirstBadge />
+              </Pressable>
             ) : isNewSpecies ? (
-              <View style={recipes.liferBadge}>
-                <Ionicons name="star" size={9} color="#fff" />
-                <Text style={recipes.liferBadgeText}>1ST</Text>
-              </View>
+              <Pressable onPress={openBadgeGuide} hitSlop={6}>
+                <View style={recipes.liferBadge}>
+                  <Ionicons name="star" size={9} color="#fff" />
+                  <Text style={recipes.liferBadgeText}>1ST</Text>
+                </View>
+              </Pressable>
             ) : null}
           </View>
 
