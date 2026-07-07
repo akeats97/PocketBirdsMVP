@@ -777,6 +777,222 @@ device builds in CI (EAS costs money); just the cheap static gates. **Effort.** 
 
 ---
 
+## 11. Hep feedback triage (added Jul 7 2026)
+
+All 43 Bug Report / Feature Request sightings pulled from Firestore (with comment
+threads) and reconciled against the code. Two-thirds are DONE. The open ones get
+HEP-series plans below. Reports are cited by requester + first words.
+
+### Done (verified in code or confirmed in-thread)
+
+Shipped and already acknowledged in the thread: edit sightings, mystery birds,
+notes on the detail screen, ✕ clear buttons, grey/gray + dash/space search,
+following lists + bells, "following" label, photo zoom, clickable hooters (both
+asks), recent locations, mystery-bird stats, follow-notification deep link,
+keyboard-blocking comment composer (anastasia confirmed), reply context on
+comments.
+
+Shipped but **never announced on the post** - worth a comment from Alex to close
+the loop:
+
+- **alex "submit an unknown bird and have friends verify"** - Mystery Bird +
+  community proposals shipped the whole ask.
+- **victoria "react to friends sightings"** - hoots.
+- **victoria "group friends log by date"** - the merged day-grouped Journal.
+- **victoria "filter friends page for sightings vs bugs/features"** - superseded:
+  reports no longer appear in the Journal at all; Hep is the dedicated view.
+- **evaloon "swipe down to close keyboard / field moves up"** - Alex's last comment
+  says "didn't add this yet", but it landed since: SightingForm uses
+  KeyboardAwareScrollView + `keyboardDismissMode="interactive"`.
+- **anastasia "stars and confetti for each new bird"** - confetti rain on every new
+  species shipped in add.tsx.
+- **anastasia "pic not appearing on dex card"** - Dex tiles render the photo now.
+- **anastasia "nav panel not snapped to bottom"** - tab-bar chin fixed Jun 8
+  (39a0bff + a1f428c); Alex asked "is it better now?" and got no reply - worth a
+  re-ping.
+- **brad "date picker colour hard to see iOS"** - fixed same day (ab89cd6,
+  `themeVariant="light"`), never announced.
+- **alex's two Lions Head reports (false global-first + nothing loading /
+  duplicate post)** - root-caused and fixed Jun 22 (2148e20: long-polling
+  autodetect, idempotent client-minted ids, `getDocsFromServer` global-first
+  check), and structurally fixed by the RNFirebase migration. Final confirmation
+  rides the M-1 soak checklist.
+
+No action: victoria "please come home I miss you" (10 hoots was the correct
+resolution).
+
+### HEP-1: Suggest-an-ID from the photo (anastasia; the Merlin ask)
+
+**Current state.** Not built. Community ID (proposals) is the shipped "intermediary
+feature" Alex promised on the post.
+**Plan.** v1 is a **"Suggest an ID" button on a photographed Mystery Bird** (detail
+screen, owner + friends), calling a new callable CF that sends the display-copy
+photo to a multimodal model (Claude Haiku class is plenty; key stays server-side)
+with the sighting's coords/region as context, returning top-3 species + confidence.
+Render the suggestions as prefills for the EXISTING propose flow - the human still
+proposes, the owner still accepts, so verification ethics hold and a wrong model
+answer is just an unaccepted proposal. Never auto-accept, never auto-fill the Add
+form in v1. Rate-limit per user/day in the CF. On-device TFLite (iNat birds
+classifier, Apache-2.0, ~1k species) is the offline v2 if call costs annoy;
+**sound ID is out for now** (BirdNET models are CC BY-NC-SA - non-commercial, fails
+the licensing constraint).
+**Effort.** M (callable + button + prefill). **Order.** Post-Doradito; pairs
+naturally with Q-11's ID queue.
+
+### HEP-2: Silkie Chicken (anastasia)
+
+**Current state.** Alex said "can add" on the post; still only Kelsey in
+`constants/customSpecies.ts`.
+**Plan.** Add `'Silkie Chicken'` to `CUSTOM_SPECIES` - the whole pipeline (Dex tile
+under Other, celebration, excluded from species counts/milestones) is inherited.
+Optional sync: `functions/backfillGlobalFirst.js` hardcodes its own set, but it is
+a one-time script already run; skip unless re-run. Comment on the post when it
+ships. **Effort.** S (one line + typecheck).
+
+### HEP-3: Usernames clickable everywhere (victoria)
+
+**Current state.** Mostly done piecemeal (feed-card pill, hooters, flock rows,
+"ID'd by"). Known residue is already listed in §9 profile-link gaps: commenter
+avatar/name on the detail thread, "replying to @name", "Called by {name}".
+**Plan.** Absorb §9's item and finish it as one sweep: grep every `username`
+render, wrap the stragglers in a shared `UserLink` (Pressable -> `/profile/{uid}`;
+needs the uid alongside the name, which comment docs and proposals already carry).
+Comment on victoria's post when the sweep lands. **Effort.** S.
+
+### HEP-4: Bird call playback in the Species Guide (ooplena)
+
+**Current state.** Not built; Alex pointed at the Guide tab as the future home.
+**Plan.** Stream, don't bundle: query the **xeno-canto API** by Latin name
+(`constants/birdLatin.ts` has the lookup) for quality-A recordings **filtered to
+commercial-safe licenses only** (CC BY / BY-SA; exclude the large NC pool - this is
+the licensing gotcha), pick the top hit, play via expo-audio with a play/stop row
+in SpeciesGuide (between Description and Measurements). Mandatory attribution line:
+recordist + license, per xeno-canto terms. Cache the resolved URL per species in
+memory; hide the row entirely when offline or no licensed recording exists (honest
+degradation, same pattern as the realm map's unknowns). No native dep (expo-audio
+is already Expo-ecosystem). **Effort.** M. **Order.** Anytime post-Doradito; a
+lovely Guide upgrade.
+
+### HEP-5: Streaks (ooplena) - cross-ref §8
+
+Covered by the §8 streak-banner plan (weekly, not daily - Alex argued weekly in
+the thread and ooplena's Duolingo ask stays overruled; behind a Settings toggle,
+default off, blocked on the PL-1 Settings surface). Only addition: comment on
+ooplena's post when it ships.
+
+### HEP-6: Flock map - friends' sightings on a map (ooplena + victoria, loudest ask)
+
+**Current state.** Not built. Three users chanting "map" on one post; CLAUDE.md
+already earmarks the Friends hub for a future map.
+**Plan.** Native dep `react-native-maps` (dev-client + production rebuilds; land it
+in a build Alex is already making). Entry: a "Flock map" card on the **Friends
+tab** pushing a full-screen stack route `app/flock-map.tsx`. Data v1: the sightings
+already in memory (SightingsContext + FriendSightingsContext) filtered to
+`coordinates != null` - no new queries at current scale; revisit with SC-2
+pagination. Pins colored you-vs-friends, `react-native-maps` built-in clustering is
+weak so use a tiny grid-cluster util or render capped (<500 pins is fine). Callout:
+species + @username + date -> taps through to the sighting detail. Filters v1: All /
+Mine / a species search chip reusing the normalized index. **Ethics gate: ship
+with or after N-3** - sensitive-species pins must use the fuzzed public coords, and
+the "location generalized" note carries over. GPS-less sightings simply don't
+appear (the green-pin cue already trains this). **Effort.** L. **Order.**
+post-Doradito headline feature; sequence the rebuild with N-2's Sentry so one
+dev-client rebuild covers both.
+
+### HEP-7: Show the message you're replying to (skeats00)
+
+**Current state.** Composer banner + thread line show only `@username`
+(`replyTo: { commentId, uid, username }` is already on the comment doc).
+**Plan.** Denormalize `textSnippet` (first ~80 chars of the parent comment) into
+`replyTo` at send time in commentService; render it as a one-line quoted snippet
+(muted, truncated) in the composer banner and above the reply in the thread. Old
+comments lack the field -> fall back to today's @name-only rendering. No rules
+change (same doc, additive field); no CF change. Optional polish: tap the quote to
+scroll to the parent. **Effort.** S.
+
+### HEP-8: Pull the sighting date from the photo (alex)
+
+**Current state.** photoService already parses EXIF `DateTimeOriginal` (used to
+corroborate the library-asset probe) but nothing reaches the form's DATE field.
+**Plan.** Return `capturedAt` (parsed EXIF date, falling back to the matched
+library asset's creationTime) alongside coords from `readPhotoCoordinates` (or a
+renamed `readPhotoMetadata`). In SightingForm add mode: when a photo lands and the
+user hasn't touched DATE (same only-overwrite-defaults rule as the location
+autofill), set the date + show the quiet "from photo" hint style. Verify on-device
+that the picker's GPS redaction doesn't also strip DateTimeOriginal (it shouldn't -
+only location is privacy-scrubbed - but this area has burned us; the [photoService]
+logs make it a 5-minute check). **Effort.** S-M. **Order.** Natural companion to
+the existing photo-first flow; any photo batch.
+
+### HEP-9: Explain the badges (alex)
+
+**Current state.** 1ST lifer badge, global-first holo 1ST pill, verified state,
+Mystery Bird tag, "ID'd by", green location pin - none explained anywhere.
+**Plan.** One `components/BadgeGuideSheet.tsx` (canonical BottomSheet): a short
+scrollable legend, each row = the actual badge component + one PRD-voice sentence.
+Entry points: tapping any badge/pill on a sighting card opens the sheet (cheap,
+discoverable exactly when curious), plus a "What do the badges mean?" row in the
+You ⋯ menu. Keep copy cheeky about the app, respectful about the birds.
+**Effort.** S.
+
+### HEP-10: Shareable posts (alex)
+
+**Current state.** Plain-text `Share.share` exists on the sighting detail; no
+visual share card.
+**Plan.** `react-native-view-shot` renders an off-screen branded card (photo,
+species, Latin name, date, @username, wordmark; location label optional-off by
+default, never coords) -> `expo-sharing` share sheet, from a Share action on the
+sighting detail (own sightings first; friends' shares need a privacy think).
+Deliberately build as the reusable card renderer N-7 (Wrapped) wants, and leave a
+slot for the PL-5 invite link - this is the organic-growth surface. view-shot is a
+native dep: ride the same rebuild as HEP-6/N-2. **Effort.** M. **Order.** after
+PL-5 exists the card gets its link; building card-first is fine.
+
+### HEP-11: Profile bio (alex, ~50 chars)
+
+**Current state.** No bio field anywhere (user doc, ProfileView, edit sheet).
+**Plan.** `bio?: string` on the user doc, hard cap 80 chars client + rules
+(`request.resource.data.bio.size() <= 80` in the users write block - rides the
+next rules deploy, which is gated on Alex's go). Edit-profile sheet gains a
+ClearableInput with a live char count; ProfileView renders it under the username
+(one muted line, both self and public). Placeholder in PRD voice ("say something
+about your flock"). **Effort.** S.
+
+### HEP-12: Date wheel exits after every column pick - iOS (gary, bug)
+
+**Current state (root cause found).** SightingForm's DateTimePicker `onChange`
+calls `setShowDatePicker(false)` unconditionally. Correct on Android (the dialog
+fires once, on OK/cancel) but wrong for the iOS spinner, which fires per wheel
+settle - so picking just the month dismisses the whole picker. Exactly gary's
+report.
+**Plan.** Platform-split: Android keeps close-on-change; iOS keeps the inline
+spinner open, updates `date` live on change, and dismisses via an explicit small
+"Done" row under the spinner (matches the flat-control conventions) or tap-outside.
+**Effort.** S. **Order.** With HEP-13, one date-picker pass; TestFlight-visible
+fix, good Doradito-follow-up.
+
+### HEP-13: Can't scroll to future months mid-entry (gary, product call)
+
+**Current state.** `maximumDate={new Date()}` clamps the wheel the moment any
+column would exceed today - so month-first entry (Dec, intending an earlier year)
+snap-backs annoyingly. Future sightings should stay impossible (you have not seen
+the bird yet), but the clamp punishes a legitimate entry order.
+**Recommendation.** Drop `maximumDate` and validate at save instead: a future date
+blocks save with PRD-voice copy ("unless you're a time traveler, pick a past
+date"). Keeps the constraint honest without fighting the wheel. Alternative (keep
+the clamp, live with it) costs nothing but leaves gary's papercut. Decide with
+Alex, then it's **S** either way, same pass as HEP-12.
+
+### HEP-14: Follow-back button inside the push (evaloon's bonus, parked)
+
+The core ask (notification -> their profile) shipped. The bonus - a "Follow back"
+action button on the new-follower push - needs expo-notifications categories plus
+a headless background handler doing an authed follow write; fiddly on Android for
+small payoff while the deep link works. **Park until asked**; recorded so it is
+not lost. **Effort.** S-M when picked up.
+
+---
+
 ## Suggested attack order
 
 **Now (while soaking vc32/33, nothing risky on the branch):**
@@ -801,3 +1017,10 @@ device builds in CI (EAS costs money); just the cheap static gates. **Effort.** 
 13. RD-1 IUCN chips, RD-2 Latin names, F-1 activity grid, N-6 export
 14. F-2 levels (after SC-1), F-6 tag-along, RD-3/RD-4 (one sourcing pass)
 15. Color tokens -> dark mode; F-5 audit; UX-2 cropping; UX-3 propose route
+
+**Hep quick wins (all S, user-visible, safe anytime):**
+16. HEP-12/13 date picker pass, HEP-2 Silkie, HEP-7 reply snippet, HEP-9 badge
+    guide, HEP-11 bio, HEP-3 username sweep; plus the "never announced" comment
+    pass on done posts (free goodwill)
+17. Headliners when their build windows open: HEP-6 flock map (+N-2/HEP-10 in one
+    rebuild), HEP-4 bird calls, HEP-1 suggest-an-ID, HEP-8 photo date
