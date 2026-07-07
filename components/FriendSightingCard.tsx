@@ -120,13 +120,13 @@ function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSighti
             {/* A verified global-first wears the holo "1ST" globe pill (same as
                 the Dex), which supersedes the coral lifer badge — a global-first
                 is always a personal first too. See WORK_QUEUE Q-3. */}
-            {/* Tapping a badge opens the legend (curiosity is the entry point). */}
+            {/* Tapping a badge explains it (curiosity is the entry point). */}
             {sighting.globalFirst && sighting.verified ? (
-              <Pressable onPress={openBadgeGuide} hitSlop={6}>
+              <Pressable onPress={() => openBadgeGuide('globalFirst')} hitSlop={6}>
                 <GlobalFirstBadge />
               </Pressable>
             ) : isFirstSighting ? (
-              <Pressable onPress={openBadgeGuide} hitSlop={6}>
+              <Pressable onPress={() => openBadgeGuide('lifer')} hitSlop={6}>
                 <View style={recipes.liferBadge}>
                   <Ionicons name="star" size={9} color="#fff" />
                   <Text style={recipes.liferBadgeText}>1ST</Text>
