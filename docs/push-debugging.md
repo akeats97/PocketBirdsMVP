@@ -28,6 +28,25 @@ curl -s -H "Content-Type: application/json" -X POST https://exp.host/--/api/v2/p
 ```
 Expected: `{"data":{"<ticket>":{"status":"ok"}}}`. If receipt has an error (e.g. `DeviceNotRegistered`), the user's token is stale: they need to reopen the app to re-register.
 
+## Automated receipt checking (PL-7, added Jul 7 2026)
+
+Layer 4 is now watched automatically. Every send in `functions/index.js` goes
+through `sendExpoPush`, which persists ticket ids to the server-only
+`pushTickets` collection; the scheduled `checkPushReceipts` function (every 15
+minutes) polls Expo for receipts and:
+
+- logs `Push receipt ERROR (...)` with the context (friend_sighting, hoot,
+  comment, ...) and the recipient uid for every failed delivery;
+- **clears the user's `expoPushToken`** on `DeviceNotRegistered` (only if the
+  stored token still matches the dead one), so dead tokens stop eating sends;
+- logs `Push receipts NEVER ARRIVED` if a ticket has no receipt after 26h,
+  which is the smoking-gun signature of a silent drop.
+
+So the first stop for "user X didn't get a push" is now:
+`firebase functions:log --only checkPushReceipts -n 50`.
+Send-time rejections (invalid token shape, immediate DeviceNotRegistered) are
+logged by the sending function itself as `Push send REJECTED`.
+
 ## Other commands
 
 Query Firestore with admin:

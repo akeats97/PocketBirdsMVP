@@ -11,6 +11,7 @@ const {setGlobalOptions} = require("firebase-functions");
 const admin = require('firebase-admin');
 const { Expo } = require('expo-server-sdk');
 const {onDocumentCreated, onDocumentDeleted, onDocumentUpdated, onDocumentWritten} = require("firebase-functions/v2/firestore");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
 const { FieldValue } = require('firebase-admin/firestore');
 
 // For cost control, you can set the maximum number of containers that can be
@@ -36,6 +37,129 @@ setGlobalOptions({ maxInstances: 10 });
 admin.initializeApp();
 
 const expo = new Expo();
+
+// ---------------------------------------------------------------------------
+// PL-7 push reliability. Expo acks a send with TICKETS ("accepted for
+// processing"); real delivery failures (dead token, FCM rejection) only
+// surface later in RECEIPTS. We previously never read receipts, so a dead
+// token failed invisibly forever (the Q-6 silent drops). Every send now goes
+// through sendExpoPush, which (a) acts on send-time ticket errors, and
+// (b) persists ticket ids to `pushTickets` for the scheduled receipt check.
+// `pushTickets` is server-only: no client code or rules path touches it.
+// ---------------------------------------------------------------------------
+
+// Remove a user's push token once Expo says the device is gone, so we stop
+// sending into the void and the log noise points at real problems. Guarded:
+// only clears if the stored token is still the dead one, so a fresh token from
+// a reinstall is never collateral damage.
+async function clearDeadPushToken(uid, token, source) {
+  if (!uid || !token) return;
+  try {
+    const userRef = admin.firestore().collection('users').doc(uid);
+    const snap = await userRef.get();
+    if (snap.exists && snap.data().expoPushToken === token) {
+      await userRef.update({ expoPushToken: FieldValue.delete() });
+      console.log(`Cleared dead push token for ${uid} (${source})`);
+    }
+  } catch (error) {
+    console.error(`Failed clearing dead token for ${uid}:`, error);
+  }
+}
+
+// Send push messages and persist the resulting ticket ids for receipt
+// checking. `targets` is parallel to `messages`: [{ token, uid }]; the uid is
+// what lets a DeviceNotRegistered verdict clear the right user's token.
+async function sendExpoPush(messages, targets, context) {
+  const ticketRecords = [];
+  let cursor = 0;
+  for (const chunk of expo.chunkPushNotifications(messages)) {
+    try {
+      const tickets = await expo.sendPushNotificationsAsync(chunk);
+      console.log(`Push tickets (${context}):`, JSON.stringify(tickets));
+      tickets.forEach((ticket, i) => {
+        const target = targets[cursor + i] || {};
+        if (ticket.status === 'error') {
+          console.error(
+            `Push send REJECTED (${context}) uid=${target.uid}:`,
+            ticket.message, ticket.details && ticket.details.error
+          );
+          if (ticket.details && ticket.details.error === 'DeviceNotRegistered') {
+            clearDeadPushToken(target.uid, target.token, `send ticket, ${context}`);
+          }
+        } else if (ticket.id) {
+          ticketRecords.push({ id: ticket.id, uid: target.uid || null, token: target.token || null });
+        }
+      });
+    } catch (error) {
+      console.error(`Error sending push chunk (${context}):`, error);
+    }
+    cursor += chunk.length;
+  }
+  if (ticketRecords.length === 0) return;
+  try {
+    await admin.firestore().collection('pushTickets').add({
+      context,
+      tickets: ticketRecords,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Failed to persist push tickets (receipts will go unchecked):', error);
+  }
+}
+
+// Poll Expo for receipts on recent tickets. Receipts appear within ~15 minutes
+// and are retained about a day, so: skip docs younger than 10 minutes, retry
+// docs whose receipts haven't all arrived, and give up (loudly) at 26 hours:
+// a ticket that never got a receipt is itself the smoking gun for a drop.
+exports.checkPushReceipts = onSchedule('every 15 minutes', async () => {
+  const snap = await admin.firestore()
+    .collection('pushTickets')
+    .orderBy('createdAt', 'asc')
+    .limit(50)
+    .get();
+  if (snap.empty) return;
+
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    const createdAt = data.createdAt && data.createdAt.toDate ? data.createdAt.toDate().getTime() : 0;
+    const ageMs = Date.now() - createdAt;
+    if (ageMs < 10 * 60 * 1000) continue;
+
+    const byId = new Map((data.tickets || []).map(t => [t.id, t]));
+    let received = 0;
+    try {
+      for (const chunk of expo.chunkPushNotificationReceiptIds([...byId.keys()])) {
+        const receipts = await expo.getPushNotificationReceiptsAsync(chunk);
+        for (const [id, receipt] of Object.entries(receipts)) {
+          received++;
+          if (receipt.status === 'ok') continue;
+          const target = byId.get(id) || {};
+          console.error(
+            `Push receipt ERROR (${data.context}) uid=${target.uid}:`,
+            receipt.message, receipt.details && receipt.details.error
+          );
+          if (receipt.details && receipt.details.error === 'DeviceNotRegistered') {
+            await clearDeadPushToken(target.uid, target.token, `receipt, ${data.context}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Receipt fetch failed for', doc.id, error);
+      continue; // transient; retry on the next run until the 26h cutoff below
+    }
+
+    if (received >= byId.size) {
+      await doc.ref.delete();
+    } else if (ageMs > 26 * 60 * 60 * 1000) {
+      console.error(
+        `Push receipts NEVER ARRIVED (${data.context}): ${byId.size - received} of ${byId.size} ` +
+        `tickets unresolved after 26h; these sends were silently dropped.`
+      );
+      await doc.ref.delete();
+    }
+    // else: some receipts still pending; keep the doc for the next run.
+  }
+});
 
 function ordinalSuffix(n) {
   const s = ['th', 'st', 'nd', 'rd'];
@@ -124,7 +248,8 @@ async function notifyFollowersOfSighting(sightingId, sighting, isNewSpecies, mil
     if (followerDoc.exists) {
       const followerData = followerDoc.data();
       if (followerData.expoPushToken) {
-        pushTokens.push(followerData.expoPushToken);
+        // Token + uid together, so a dead-token verdict knows whose to clear.
+        pushTokens.push({ token: followerData.expoPushToken, uid: followerId });
         console.log(`Eligible follower ${followerId} (mode: ${mode})`);
       } else {
         console.log(`No push token for follower: ${followerId}`);
@@ -148,42 +273,34 @@ async function notifyFollowersOfSighting(sightingId, sighting, isNewSpecies, mil
     ? `Just logged their ${milestone}${ordinalSuffix(milestone)} species: ${sighting.birdName}`
     : null;
 
-  const messages = pushTokens.map(pushToken => {
-    if (!Expo.isExpoPushToken(pushToken)) {
-      console.log(`Invalid push token: ${pushToken}`);
-      return null;
+  const targets = pushTokens.filter(({ token, uid }) => {
+    if (!Expo.isExpoPushToken(token)) {
+      console.log(`Invalid push token for ${uid}: ${token}`);
+      return false;
     }
+    return true;
+  });
 
-    return {
-      to: pushToken,
-      sound: 'default',
-      priority: 'high',
-      channelId: 'default',
-      title: milestoneTitle || baseTitle,
-      body: milestoneBody || baseBody,
-      data: {
-        type: milestone ? 'friend_milestone' : 'friend_sighting',
-        sightingId: sightingId,
-        friendName: username,
-        birdName: sighting.birdName,
-        location: sighting.location,
-        ...(milestone ? { milestone } : {}),
-      },
-    };
-  }).filter(message => message !== null);
+  const messages = targets.map(({ token }) => ({
+    to: token,
+    sound: 'default',
+    priority: 'high',
+    channelId: 'default',
+    title: milestoneTitle || baseTitle,
+    body: milestoneBody || baseBody,
+    data: {
+      type: milestone ? 'friend_milestone' : 'friend_sighting',
+      sightingId: sightingId,
+      friendName: username,
+      birdName: sighting.birdName,
+      location: sighting.location,
+      ...(milestone ? { milestone } : {}),
+    },
+  }));
 
-  const chunks = expo.chunkPushNotifications(messages);
+  await sendExpoPush(messages, targets, milestone ? 'friend_milestone' : 'friend_sighting');
 
-  for (const chunk of chunks) {
-    try {
-      const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-      console.log('Notification tickets:', ticketChunk);
-    } catch (error) {
-      console.error('Error sending notifications:', error);
-    }
-  }
-
-  console.log(`Successfully sent ${messages.length} notifications for sighting ${sightingId}`);
+  console.log(`Sent ${messages.length} notifications for sighting ${sightingId} (receipts pending)`);
 }
 
 // Is `birdName` now this user's only record of that species? (size === 1 means
@@ -387,14 +504,11 @@ async function pushSocial(ownerUid, msg) {
       body: msg.body,
       data: msg.data,
     }];
-    for (const chunk of expo.chunkPushNotifications(messages)) {
-      try {
-        const tickets = await expo.sendPushNotificationsAsync(chunk);
-        console.log('Social push tickets:', tickets);
-      } catch (error) {
-        console.error('Error sending social push:', error);
-      }
-    }
+    await sendExpoPush(
+      messages,
+      [{ token, uid: ownerUid }],
+      (msg.data && msg.data.type) || 'social'
+    );
   } catch (error) {
     console.error('Error in pushSocial:', error);
   }
