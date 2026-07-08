@@ -95,6 +95,15 @@ function AuthenticatedApp() {
           } else if (data.type === 'follow' && data.actorUid) {
             // Open the new follower's profile so you can follow them back.
             router.push(`/profile/${data.actorUid}`);
+          } else if (data.type === 'report') {
+            // Admin report push → jump to what was reported so it can be acted
+            // on. A reported user opens their profile; a reported sighting opens
+            // the sighting. Other target types have no standalone route.
+            if (data.targetType === 'user' && data.targetId) {
+              router.push(`/profile/${data.targetId}`);
+            } else if (data.targetType === 'sighting' && data.targetId) {
+              router.push(`/sighting/${data.targetId}`);
+            }
           }
         });
 
@@ -116,6 +125,12 @@ function AuthenticatedApp() {
           } else if (data.type === 'follow' && data.actorUid) {
             // Open the new follower's profile so you can follow them back.
             router.push(`/profile/${data.actorUid}`);
+          } else if (data.type === 'report') {
+            if (data.targetType === 'user' && data.targetId) {
+              router.push(`/profile/${data.targetId}`);
+            } else if (data.targetType === 'sighting' && data.targetId) {
+              router.push(`/sighting/${data.targetId}`);
+            }
           }
         }
 

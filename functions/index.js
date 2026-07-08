@@ -1068,7 +1068,12 @@ exports.onReportCreated = onDocumentCreated('reports/{reportId}', async (event) 
       await pushSocial(adminUid, {
         title: '🚩 New report',
         body: `@${reporterName} reported a ${report.targetType}: ${String(report.reason).slice(0, 120)}`,
-        data: { type: 'report', reportId: event.params.reportId },
+        data: {
+          type: 'report',
+          reportId: event.params.reportId,
+          targetType: report.targetType,
+          targetId: report.targetId,
+        },
       });
     }
   } catch (error) {
