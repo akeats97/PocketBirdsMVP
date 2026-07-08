@@ -344,6 +344,17 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     return () => clearTimeout(handle);
   }, [searchQuery, selectedBird, activeRealm, activeRegion]);
 
+  // Typing in the BIRD field must invalidate a prior selection the moment the
+  // text diverges from it. Otherwise selectedBird (what Save submits, and what
+  // drives the "validated" bold styling) stays pinned to the old pick while the
+  // box shows new text — so editing "Tufted Titmouse" to something else and
+  // hitting Save silently logs the titmouse. Mirrors handleLocationChange,
+  // which clears locationCoords on every keystroke for the same reason.
+  const handleBirdQueryChange = (text: string) => {
+    setSearchQuery(text);
+    if (selectedBird && text !== selectedBird) setSelectedBird('');
+  };
+
   const handleBirdSelect = (bird: string) => {
     setSelectedBird(bird);
     setSearchQuery(bird);
@@ -567,7 +578,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                   containerStyle={{ flex: 1 }}
                   style={[styles.input, selectedBird ? styles.inputDisplay : null]}
                   value={searchQuery}
-                  onChangeText={setSearchQuery}
+                  onChangeText={handleBirdQueryChange}
                   onClear={() => {
                     setSelectedBird('');
                     setSearchQuery('');
