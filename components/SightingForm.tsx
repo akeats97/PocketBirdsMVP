@@ -104,6 +104,9 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
   // priority signal for ranking the bird list, and stays put even if the user
   // later edits the location text.
   const [photoCoords, setPhotoCoords] = useState<Coordinates | undefined>(undefined);
+  // Whether the LOCATION label was autofilled from the picked photo's GPS.
+  // Drives the small "Location from your photo" hint, mirroring dateFromPhoto.
+  const [locationFromPhoto, setLocationFromPhoto] = useState(false);
   const textInputRef = useRef<TextInput>(null);
   const notesInputRef = useRef<TextInput>(null);
   const locationInputRef = useRef<TextInput>(null);
@@ -116,6 +119,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     setLocationCoords(lastLocation.coordinates);
     setShouldAutocompleteLocation(false);
     setPlaceSuggestions([]);
+    setLocationFromPhoto(false);
   }, [lastLocation, isEdit]);
 
   // The user's most-recently-logged locations, shown when the location field
@@ -195,6 +199,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     setLocation(text);
     setLocationCoords(undefined);
     setShouldAutocompleteLocation(true);
+    setLocationFromPhoto(false);
   };
 
   const handleLocateTap = async () => {
@@ -220,6 +225,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     setShouldAutocompleteLocation(false);
     setPlaceSuggestions([]);
     setLocationCoords(result.coordinates);
+    setLocationFromPhoto(false);
     if (result.label) {
       setLocation(result.label);
       return;
@@ -236,12 +242,14 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     setPlaceSuggestions([]);
     setLocation(recent.label);
     setLocationCoords(recent.coordinates);
+    setLocationFromPhoto(false);
     Keyboard.dismiss();
   };
 
   const handlePlaceSuggestionSelect = async (suggestion: PlaceSuggestion) => {
     setShouldAutocompleteLocation(false);
     setPlaceSuggestions([]);
+    setLocationFromPhoto(false);
     Keyboard.dismiss();
     const result = await getPlaceCoordinates(suggestion.placeId);
     if (result) {
@@ -406,8 +414,10 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       }
 
       if (!coords) {
-        // A GPS-less replacement must not keep ranking by the previous photo.
+        // A GPS-less replacement must not keep ranking by the previous photo,
+        // nor claim the location still came from a photo.
         setPhotoCoords(undefined);
+        setLocationFromPhoto(false);
         return;
       }
       setPhotoCoords(coords);
@@ -430,7 +440,9 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       // name, clear the prefill too — leaving the PREVIOUS sighting's label
       // paired with THIS photo's coordinates would be wrong. Never clobber a
       // location the user typed or picked themselves.
+      const applied = !!label && (location.trim() === '' || location === lastLocation.label);
       setLocation(prev => (prev.trim() === '' || prev === lastLocation.label ? label : prev));
+      setLocationFromPhoto(applied);
     } catch (error) {
       Alert.alert('Error', 'Failed to select photo');
     }
@@ -477,6 +489,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       setDateFromPhoto(false);
       setPhotoUri(null);
       setPhotoCoords(undefined);
+      setLocationFromPhoto(false);
     }
   };
 
@@ -532,6 +545,10 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
             onPress={() => {
               setPhotoUri(null);
               setPhotoCoords(undefined);
+              // A "from photo" location hint goes with the removed photo (the
+              // label stays put — it's still a valid place, just no longer
+              // attributable to the photo).
+              setLocationFromPhoto(false);
               // A date the removed photo supplied goes with it.
               if (dateFromPhoto) {
                 setDate(new Date());
@@ -778,6 +795,12 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                   </ScrollView>
                 </View>
               ) : null}
+              {locationFromPhoto && (
+                <View style={styles.dateFromPhotoRow}>
+                  <Ionicons name="image-outline" size={12} color={palette.inkSoft} />
+                  <Text style={styles.dateFromPhotoText}>Location from your photo</Text>
+                </View>
+              )}
             </View>
 
             {/* Photo — original position in edit mode. */}
