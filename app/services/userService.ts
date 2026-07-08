@@ -1,4 +1,4 @@
-import { collection, collectionGroup, deleteDoc, deleteField, doc, getDoc, getDocs, setDoc, updateDoc } from '@react-native-firebase/firestore';
+import { collection, collectionGroup, deleteDoc, deleteField, doc, documentId, getDoc, getDocs, query, setDoc, updateDoc, where } from '@react-native-firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { NEW_FOLLOW_MODE, setPref } from './notificationPrefsService';
 
@@ -139,24 +139,30 @@ export async function getFollowing(): Promise<UserProfile[]> {
     const followingRef = collection(db, `following/${currentUser.uid}/following`);
     const followingSnapshot = await getDocs(followingRef);
     console.log(`[getFollowing] edges=${followingSnapshot.size} fromCache=${followingSnapshot.metadata.fromCache}`);
-    
-    // Get the user details for each followed user
-    const followedUsers = await Promise.all(
-      followingSnapshot.docs.map(async (followDoc) => {
-        const userId = followDoc.id;
-        const userDoc = await getDoc(doc(db, 'users', userId));
-        
-        if (userDoc.exists()) {
-          return {
-            uid: userId,
-            ...userDoc.data(),
-          } as UserProfile;
-        }
-        return null;
+
+    const ids = followingSnapshot.docs.map((d) => d.id);
+    if (ids.length === 0) return [];
+
+    // Load the followed users' profiles in batched `in` queries (30 per query,
+    // Firestore's cap) instead of one getDoc per user. On a cold start that
+    // per-user fan-out was 20+ server round-trips gating the whole feed — it's
+    // what overran the Journal's 3s loader ceiling and made friends pop in as a
+    // second chunk. This is one round-trip per 30 follows.
+    const usersRef = collection(db, 'users');
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+
+    const profiles: UserProfile[] = [];
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        const snap = await getDocs(query(usersRef, where(documentId(), 'in', chunk)));
+        snap.forEach((userDoc) => {
+          profiles.push({ uid: userDoc.id, ...userDoc.data() } as UserProfile);
+        });
       })
     );
-    
-    return followedUsers.filter(user => user !== null) as UserProfile[];
+
+    return profiles;
   } catch (error) {
     console.error('Error getting following list:', error);
     return [];
