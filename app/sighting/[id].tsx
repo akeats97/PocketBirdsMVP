@@ -525,9 +525,11 @@ export default function SightingDetailScreen() {
                     <Text style={styles.commentTime}>{timeAgo(c.createdAt?.toDate?.() ?? null)}</Text>
                   </View>
                   {c.replyTo && (
-                    <Text style={styles.commentReplyTo} numberOfLines={1}>
-                      ↳ replying to @{c.replyTo.username}
-                    </Text>
+                    <Pressable onPress={() => router.push(`/profile/${c.replyTo!.uid}`)} hitSlop={4}>
+                      <Text style={styles.commentReplyTo} numberOfLines={1}>
+                        ↳ replying to @{c.replyTo.username}
+                      </Text>
+                    </Pressable>
                   )}
                   <Text style={styles.commentText}>{c.text}</Text>
                   <View style={styles.commentActions}>

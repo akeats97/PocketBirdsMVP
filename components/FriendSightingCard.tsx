@@ -197,9 +197,18 @@ function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSighti
                 <Text style={styles.viewAll}>View all {commentCount} comments</Text>
               )}
               <View style={styles.previewRow}>
-                <Avatar name={topComment.username} seed={topComment.uid} size={24} />
+                {/* The row opens the detail; the commenter's face goes to
+                    their profile (HEP-3 username sweep). */}
+                <Pressable onPress={() => router.push(`/profile/${topComment.uid}`)} hitSlop={4}>
+                  <Avatar name={topComment.username} seed={topComment.uid} size={24} />
+                </Pressable>
                 <Text style={styles.previewText} numberOfLines={2}>
-                  <Text style={styles.previewName}>{topComment.username} </Text>
+                  <Text
+                    style={styles.previewName}
+                    onPress={() => router.push(`/profile/${topComment.uid}`)}
+                  >
+                    {topComment.username}{' '}
+                  </Text>
                   {topComment.text}
                 </Text>
               </View>
