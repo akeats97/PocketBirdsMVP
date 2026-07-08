@@ -160,7 +160,7 @@ wrinkles resolved). `recomputeSpeciesGlobalFirst` already moved server-side
 **Effort.** L (the largest single item; 1-2 focused days including tests).
 **Order.** First among PL items; PL-2 rides its rules pass.
 
-### PL-2: Block / report / guidelines (P0, store-required for strangers) - BUILT Jul 7 2026 (9a31f64; NEEDS rules + functions deploy + Pages copy)
+### PL-2: Block / report / guidelines (P0, store-required for strangers) - LIVE Jul 7 2026 (9a31f64; rules + functions deployed by Alex, GUIDELINES page live on Pages; on-device verification pending)
 
 **Current state (verified).** Zero moderation primitives in code or rules. Admin
 allowlist exists in rules (isAdmin, two uids). GitHub Pages already hosts PRIVACY +
@@ -292,7 +292,7 @@ downloads the usernames collection and filters client-side (userService.ts:13-28
 
 **Effort.** S-M. **Order.** Before opening signup; after PL-1/2.
 
-### PL-7 / Q-6: Push reliability: silent drops + receipts (P0 bug) - BUILT Jul 7 2026 (b1f0065; NEEDS FUNCTIONS DEPLOY)
+### PL-7 / Q-6: Push reliability: silent drops + receipts (P0 bug) - LIVE Jul 7 2026 (b1f0065, functions deployed by Alex)
 
 **Current state (verified).** functions/index.js sends via expo-server-sdk and logs
 ticket chunks (line ~177) but **never polls receipts**; delivery failures
@@ -689,7 +689,7 @@ predicate `isNonBirdEntry` + Dex "Other" path once decided. Park until asked.
 
 Found while reviewing the app with fresh eyes. Ordered by how strongly I'd push.
 
-### N-1: In-app account deletion (STORE BLOCKER, belongs in the PL series) - BUILT Jul 7 2026 (3185ce5; NEEDS FUNCTIONS DEPLOY)
+### N-1: In-app account deletion (STORE BLOCKER, belongs in the PL series) - LIVE Jul 7 2026 (3185ce5, functions deployed by Alex; junk-account test pending)
 
 Apple Guideline 5.1.1(v) REQUIRES apps that offer account creation to offer in-app
 account DELETION. We have a deletion web page (GitHub Pages) but no in-app path;
