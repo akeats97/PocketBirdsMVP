@@ -218,7 +218,7 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
   const dexFamilies = useMemo(() => buildUserDex(sightings), [sightings]);
 
   const handleFollowToggle = async () => {
-    if (followBusy || !uid) return;
+    if (followBusy || !uid || isBlocked) return;
     const next = !following;
     setFollowing(next); // optimistic
     setFollowBusy(true);
@@ -259,6 +259,10 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
               await blockUser(uid);
               setFollowing(false);
               refreshFriends();
+              Alert.alert(
+                'Blocked',
+                `You blocked ${name || 'this birder'}. They can no longer hoot, comment, or propose on your sightings, and you've stopped following each other.`
+              );
             } catch {
               Alert.alert('Error', "Couldn't block. Please try again.");
             }
@@ -326,9 +330,15 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
       {!embedded && (
         <View style={styles.actionsRow}>
           <ActionPill
-            variant={isSelf ? 'edit' : following ? 'following' : 'follow'}
+            variant={isSelf ? 'edit' : isBlocked ? 'blocked' : following ? 'following' : 'follow'}
             busy={followBusy}
-            onPress={isSelf ? openEditProfile : handleFollowToggle}
+            onPress={
+              isSelf
+                ? openEditProfile
+                : isBlocked
+                ? () => setModSheetOpen(true)
+                : handleFollowToggle
+            }
           />
           {!isSelf && following && (
             // Raised like its pill neighbor — on this row the bell is a
@@ -545,7 +555,7 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
 
 // ── Action pill (Follow / Following / Edit) ──────────────────────────────────
 function ActionPill({ variant, busy, onPress }: {
-  variant: 'follow' | 'following' | 'edit';
+  variant: 'follow' | 'following' | 'edit' | 'blocked';
   busy?: boolean;
   onPress: () => void;
 }) {
@@ -562,12 +572,26 @@ function ActionPill({ variant, busy, onPress }: {
         ) : (
           <>
             <Ionicons
-              name={variant === 'edit' ? 'pencil' : variant === 'following' ? 'checkmark' : 'add'}
+              name={
+                variant === 'edit'
+                  ? 'pencil'
+                  : variant === 'following'
+                  ? 'checkmark'
+                  : variant === 'blocked'
+                  ? 'lock-closed'
+                  : 'add'
+              }
               size={variant === 'follow' ? 14 : 13}
               color={isFollow ? '#fff' : palette.ink}
             />
             <Text style={[styles.pillText, isFollow && styles.pillTextFollow]}>
-              {variant === 'edit' ? 'Edit' : variant === 'following' ? 'Following' : 'Follow'}
+              {variant === 'edit'
+                ? 'Edit'
+                : variant === 'following'
+                ? 'Following'
+                : variant === 'blocked'
+                ? 'Blocked'
+                : 'Follow'}
             </Text>
           </>
         )}
