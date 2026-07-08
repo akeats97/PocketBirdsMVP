@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Keyboard, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Reanimated, {
   useAnimatedStyle,
   useSharedValue,
@@ -40,8 +40,31 @@ export function BottomSheet({
 
   const ty = useSharedValue(screenH);
   const backdropOpacity = useSharedValue(0);
-  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: ty.value }] }));
+  // Lift the bottom-anchored content above the keyboard so text inputs inside a
+  // sheet (edit bio, report detail, delete password) aren't covered. RN Keyboard
+  // events are global, so they fire even though the sheet lives in a Modal — the
+  // reanimated KeyboardAvoidingView / keyboard-controller do not track reliably
+  // inside a Modal, hence the manual offset.
+  const keyboardOffset = useSharedValue(0);
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: ty.value + keyboardOffset.value }],
+  }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => {
+      keyboardOffset.value = withTiming(-e.endCoordinates.height, { duration: 220 });
+    });
+    const hideSub = Keyboard.addListener(hideEvt, () => {
+      keyboardOffset.value = withTiming(0, { duration: 180 });
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [keyboardOffset]);
 
   useEffect(() => {
     if (visible) {
