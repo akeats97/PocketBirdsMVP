@@ -37,7 +37,7 @@ export function ReportSheet({ visible, onClose, targetType, targetId, targetLabe
       await submitReport(targetType, targetId, detail.trim() ? `${reason}: ${detail}` : reason);
       setSending(false);
       close();
-      Alert.alert('Report sent', "Thanks for the hep. We'll take a look.");
+      Alert.alert('Report received', 'Thank you for flagging this. It will be reviewed.');
     } catch {
       setSending(false);
       Alert.alert('Error', "Couldn't send the report. Please try again.");

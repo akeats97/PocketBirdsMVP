@@ -69,8 +69,7 @@ export function DeleteAccountSheet({ visible, onClose }: {
         <Text style={styles.title}>Delete account</Text>
         <Text style={styles.body}>
           This permanently deletes your account: every sighting, photo, comment,
-          hoot, and follow. Your life list does not come back. If you just want a
-          break, log out instead.
+          hoot, and follow. No recovery available.
         </Text>
         <Text style={styles.label}>CONFIRM YOUR PASSWORD</Text>
         <TextInput
