@@ -27,9 +27,9 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
     >
       <View style={styles.center}>
         <Ionicons name="alert-circle-outline" size={48} color={palette.coral} />
-        <Text style={styles.title}>Well, that bird flew into a window.</Text>
+        <Text style={styles.title}>Hang on, our binos fogged up.</Text>
         <Text style={styles.body}>
-          Something in the app hit the glass. We've made a note of it. Give it another go.
+          Something went blurry on our end. We've made a note of it. Try that again.
         </Text>
       </View>
       <HardShadow style={styles.buttonShadow} borderRadius={radius.input}>
