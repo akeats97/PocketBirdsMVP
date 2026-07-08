@@ -162,6 +162,19 @@ wrinkles resolved). `recomputeSpeciesGlobalFirst` already moved server-side
 
 ### PL-2: Block / report / guidelines (P0, store-required for strangers) - LIVE Jul 7 2026 (9a31f64; rules + functions deployed by Alex, GUIDELINES page live on Pages; on-device verification pending)
 
+**FOLLOW-UP (Alex, Jul 8 2026): block needs real teeth.** Today's block only
+drops the follow edges, bars engagement (hoot/comment/propose), and filters the
+blocked uid out of your feed. It does NOT stop two blocked parties from seeing
+each other's sightings via search / profile / public feed — under public-by-
+default that's soft-hiding only (already flagged in point 2 below). Alex wants
+block to actually make you mutually invisible: a blocked user shouldn't be able
+to open your profile or see your sightings, and vice-versa. Real scope: a rules
+carve-out so `sightings` read fails when either party has blocked the other
+(needs the block relationship readable both directions, or a mirrored
+`blockedBy` doc), plus hiding blocked users from search results and profile
+routes client-side. Sequence with N-3 (sensitive-species fuzzing) since both
+touch read-visibility rules. Effort: M.
+
 **Current state (verified).** Zero moderation primitives in code or rules. Admin
 allowlist exists in rules (isAdmin, two uids). GitHub Pages already hosts PRIVACY +
 DELETION pages (pattern to copy for Guidelines/EULA).

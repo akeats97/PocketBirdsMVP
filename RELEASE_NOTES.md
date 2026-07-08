@@ -1,5 +1,100 @@
 # PocketBirds — Release Notes
 
+## Doradito - July 8 2026
+**Builds:** iOS 1.0.0 (16) · Android 1.0.0 (versionCode 33, **APK** for Firebase App Distribution)
+**Headline:** A big under-the-hood rebuild of how PocketBirds talks to its backend (faster, steadier, one-time re-sign-in), plus profile bios, in-app account tools, report & block, badge explainers, sighting dates pulled from your photos, and a smoother first open.
+
+### Play Store - "What's new" (plain text, copy below this line)
+
+🔐 One-time sign-in after this update
+• We rebuilt how PocketBirds connects to its backend for speed and reliability. You'll be signed out once, just sign back in and everything is exactly where you left it.
+
+📅 Sighting date from your photo
+• Add a photo and PocketBirds fills in the date it was taken
+
+🙋 More you on your profile
+• Add a bio, and edit your profile right from the You tab
+• Delete your account from inside the app if you ever need to
+
+🛡️ Report and block
+• Report or block anyone from their profile, plus a community guidelines page
+
+🏅 What's that badge?
+• Tap a 1ST badge to learn what it means
+
+🔗 Tappable usernames everywhere
+• Tap any @username to jump straight to their profile
+
+⚡ Faster and smoother
+• Your Field Journal opens faster and loads in one pass instead of popping in
+• Photos load quicker across the app
+• The keyboard no longer covers what you're typing in pop-up sheets
+• Blocking someone now confirms clearly and actually sticks
+
+### TestFlight - "What's new" (plain text, copy below this line)
+
+🔐 One-time sign-in after this update
+• We rebuilt how PocketBirds connects to its backend for speed and reliability. You'll be signed out once, just sign back in and everything is exactly where you left it.
+
+📅 Sighting date from your photo
+• Add a photo and PocketBirds fills in the date it was taken
+
+🙋 More you on your profile
+• Add a bio, and edit your profile right from the You tab
+• Delete your account from inside the app if you ever need to
+
+🛡️ Report and block
+• Report or block anyone from their profile, plus a community guidelines page
+
+🏅 What's that badge?
+• Tap a 1ST badge to learn what it means
+
+🔗 Tappable usernames everywhere
+• Tap any @username to jump straight to their profile
+
+📅 Date picker fixes (iOS)
+• The date wheel no longer jumps closed after each spin, and you can scroll to any month
+
+⚡ Faster and smoother
+• Your Field Journal opens faster and loads in one pass instead of popping in
+• Photos load quicker across the app
+• The keyboard no longer covers what you're typing in pop-up sheets
+• Edit profile now opens reliably from the You menu
+• Blocking someone now confirms clearly and actually sticks
+
+### What shipped (engineering)
+- **RNFirebase migration** (`5e1752b`, `fdf0792`, `0be6450`): cut Firebase from the JS SDK to `@react-native-firebase` (auth + firestore + storage) for native performance and steadier offline behavior. Native SDK auto-inits from `GoogleService-Info.plist` / `google-services.json`; iOS static frameworks + the fmt patch. Auth persistence store changed, so every user re-signs-in once. Plan + call-site audit in `docs/rnfirebase-migration.md`.
+- **Photo overhaul** (`5007c01`, `2d249d6`, `f5b0ca4`): `expo-image` everywhere, two-copy scheme (archived originals + compressed display copies), lighter uploads, faster loads.
+- **Crash reporting, N-2** (`634fab3`, `30e9739`): `@sentry/react-native`, inert under Metro, active in release once `EXPO_PUBLIC_SENTRY_DSN` is set (now set on EAS). PII-safe (uid-only, coordinate scrub in breadcrumbs). Branded ErrorBoundary ("our binos fogged up") replaces the white screen.
+- **Cold-start feed fix** (`d3312a0`, `98e5cbb`): `getFollowing` batched from one read per followed user into `where(documentId(), 'in', ...)` (30/query), removing the per-user fan-out that overran the 3s loader ceiling and made friends pop in as a second chunk.
+- **Block / report / guidelines, PL-2** (`9a31f64`, `ad8f1e6`, `361535a`): report sheet (4 reasons + detail), server-side `blockUser` callable dropping both follow edges, blocked-uid feed filter, GUIDELINES page. Block now confirms and can't be bypassed by the Follow pill; report push deep-links admins to the reported target.
+- **In-app account deletion, N-1** (`3185ce5`): reauth + delete callable (Apple 5.1.1(v) requirement).
+- **Push reliability, PL-7** (`b1f0065`): push-receipt checking + dead-token cleanup.
+- **Profile bio + Edit profile sheet, HEP-11** (`3f365ea`): bio field (80-char cap, client + rules), first real edit-profile sheet.
+- **Photo date autofill, HEP-8** (`9a118c2`): EXIF `DateTimeOriginal` fills the sighting date.
+- **Badge legend, HEP-9** (`c34fd47`, `79f15af`, `f01ccad`): contextual single-badge tip; "Your first time... Congrats!" on your own lifers.
+- **Username links, HEP-3** (`74242ca`): usernames tappable everywhere.
+- **iOS date picker, HEP-12/13** (`4a8a312`): wheel no longer closes per column pick; future dates blocked at save.
+- **Keyboard-aware bottom sheets** (`587866f`): sheet content lifts above the keyboard (edit bio, report detail, delete password).
+- **iOS edit-profile modal stagger** (`91109d6`): 400ms so the sheet isn't dropped while the menu dismisses.
+- **Wordmark + copy** (`f01ccad`, `b0cdb10`): "Pocket Birds" → "PocketBirds"; softened account-deletion + report acknowledgement wording.
+- **Global-first celebration fix, Bug 8** (`390d1c3`).
+
+### Known issues
+- The report-push deep-link needs the `onReportCreated` function deployed (`firebase deploy --only functions:onReportCreated`) to take effect.
+- Sentry reports minified JS stack traces until source-map upload is wired (needs `SENTRY_AUTH_TOKEN`).
+- Block is still soft-hiding for public accounts: a blocked user can still see your sightings via profile/search. Real mutual invisibility logged as a PL-2 follow-up.
+- The iOS "Edit profile" modal-timing fix (400ms stagger) needs on-device iOS confirmation.
+- iOS push entitlement (`aps-environment`) still missing from the provisioning profile, so Android→iOS push remains broken (Bug 6).
+
+### Post-ship steps
+- **iOS:** build 1.0.0 (16) built + auto-submitted to TestFlight "Friends". A major native SDK swap may re-trigger Beta App Review before external testers get it; Alex (internal) can test immediately.
+- **Android:** APK (Firebase App Distribution, not the Play Store). Artifact: <https://expo.dev/artifacts/eas/46xjOkirTQS5jZ8incuz8Et5t1uhTCumNgC5xO1pIrE.apk>. To reach Victoria on the Play Store, run a separate `eas build -p android --profile production --auto-submit` as its own release (mention the one-time sign-in in the store copy).
+- **Deploy the report deep-link:** `firebase deploy --only functions:onReportCreated`.
+- Roll `constants/release.ts` Doradito → Jery and stamp Doradito's `release-names.csv` date (July 8, 2026) once both builds succeed.
+
+---
+
 ## Scrub-Tyrant - July 3 2026
 **Builds:** iOS 1.0.0 (15) · Android 1.0.0 (versionCode 30, **APK** for Firebase App Distribution)
 **Headline:** A new Species Guide for every bird, photo-first logging that fills in where you were, bird search that ranks by what's actually near you, a playful new loading screen, and Dex filtering by photo.
