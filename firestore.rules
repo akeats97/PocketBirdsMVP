@@ -47,10 +47,17 @@ service cloud.firestore {
     }
 
     // User profiles. Readable by any signed-in user (friends read each other's
-    // username/profile). Writable only by the owner.
+    // username/profile). Writable only by the owner. The bio (HEP-11) is the
+    // one free-text field on the doc, so it gets a type + length cap here.
     match /users/{uid} {
+      function bioOk() {
+        return !('bio' in request.resource.data)
+               || (request.resource.data.bio is string
+                   && request.resource.data.bio.size() <= 80);
+      }
       allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && uid == myUid();
+      allow create, update: if isSignedIn() && uid == myUid() && bioOk();
+      allow delete: if isSignedIn() && uid == myUid();
 
       // Per-friend notification preferences, owned by the {uid} user.
       match /notificationPrefs/{followedUid} {

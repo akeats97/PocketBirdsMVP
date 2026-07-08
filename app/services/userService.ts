@@ -1,4 +1,4 @@
-import { collection, collectionGroup, deleteDoc, doc, getDoc, getDocs, setDoc } from '@react-native-firebase/firestore';
+import { collection, collectionGroup, deleteDoc, deleteField, doc, getDoc, getDocs, setDoc, updateDoc } from '@react-native-firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { NEW_FOLLOW_MODE, setPref } from './notificationPrefsService';
 
@@ -328,6 +328,8 @@ export interface PublicProfile {
   // same partial-cache race the header guards against). Never shown as text.
   email?: string;
   joinDate: Date | null;
+  // Short self-description, capped at 80 chars (client + rules). Optional.
+  bio?: string;
 }
 
 export async function getPublicProfile(
@@ -350,11 +352,25 @@ export async function getPublicProfile(
       username: data.username,
       email: data.email,
       joinDate: createdAt ?? fallbackJoinDate ?? null,
+      bio: typeof data.bio === 'string' && data.bio.trim() ? data.bio : undefined,
     };
   } catch (error) {
     console.error(`Error getting public profile for ${uid}:`, error);
     return null;
   }
+}
+
+export const BIO_MAX_LENGTH = 80;
+
+// Save the current user's bio (HEP-11). Empty clears the field entirely so
+// old docs and cleared bios look the same.
+export async function updateProfileBio(bio: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error('User must be logged in to edit their profile');
+  const trimmed = bio.trim().slice(0, BIO_MAX_LENGTH);
+  await updateDoc(doc(db, 'users', currentUser.uid), {
+    bio: trimmed.length > 0 ? trimmed : deleteField(),
+  });
 }
 
 // Add this function to save push token

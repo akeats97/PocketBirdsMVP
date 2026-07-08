@@ -96,6 +96,16 @@ await check('admin reads reports',
 await check('admin deletes reports',
   assertSucceeds(deleteDoc(doc(asAdmin, 'reports/r1'))));
 
+console.log('profile bio:');
+await check('owner sets a short bio',
+  assertSucceeds(setDoc(doc(asOwner, `users/${OWNER}`), { username: 'owner', bio: 'chasing a life list of 150' }, { merge: true })));
+await check('bio over 80 chars denied',
+  assertFails(setDoc(doc(asOwner, `users/${OWNER}`), { bio: 'x'.repeat(81) }, { merge: true })));
+await check('non-string bio denied',
+  assertFails(setDoc(doc(asOwner, `users/${OWNER}`), { bio: 42 }, { merge: true })));
+await check('cannot write someone else\'s bio',
+  assertFails(setDoc(doc(asFriend, `users/${OWNER}`), { bio: 'gotcha' }, { merge: true })));
+
 console.log('soft-hide + verify fields:');
 await check('admin sets hidden on any sighting',
   assertSucceeds(updateDoc(doc(asAdmin, 'sightings/s1'), { hidden: true })));

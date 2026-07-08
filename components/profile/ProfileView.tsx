@@ -20,6 +20,7 @@ import { useFriendSightings } from '../../app/context/FriendSightingsContext';
 import { blockUser, unblockUser } from '../../app/services/moderationService';
 import { BottomSheet } from '../BottomSheet';
 import { ReportSheet } from '../ReportSheet';
+import { EditProfileSheet, openEditProfile } from './EditProfileSheet';
 import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../../app/services/notificationPrefsService';
 import { followUser, getFollowCounts, getPublicProfile, isFollowing, PublicProfile, unfollowUser } from '../../app/services/userService';
 import { getSightingsByUid } from '../../app/services/sightingService';
@@ -317,6 +318,9 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
         </View>
       </View>
 
+      {/* Bio (HEP-11) — one quiet line under the identity block. */}
+      {profile?.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
+
       {/* Actions — follow/edit pill + bell. Embedded self profile: edit lives
           in the AppHeader's ⋯ menu, no row at all. */}
       {!embedded && (
@@ -324,9 +328,7 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
           <ActionPill
             variant={isSelf ? 'edit' : following ? 'following' : 'follow'}
             busy={followBusy}
-            onPress={isSelf
-              ? () => Alert.alert('Coming soon', 'Profile editing is on the way.')
-              : handleFollowToggle}
+            onPress={isSelf ? openEditProfile : handleFollowToggle}
           />
           {!isSelf && following && (
             // Raised like its pill neighbor — on this row the bell is a
@@ -526,6 +528,17 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
           targetLabel={name ? `@${name}` : 'this birder'}
         />
       )}
+
+      {/* Edit profile (self only) — also opened by the AppHeader ⋯ menu. */}
+      {isSelf && (
+        <EditProfileSheet
+          username={name || ''}
+          bio={profile?.bio ?? ''}
+          onSaved={(newBio) =>
+            setProfile(p => (p ? { ...p, bio: newBio || undefined } : p))
+          }
+        />
+      )}
     </View>
   );
 }
@@ -671,6 +684,13 @@ const styles = StyleSheet.create({
 
   // Action pill
   pillShadow: { flexShrink: 0 },
+  bio: {
+    ...type.body,
+    color: palette.inkSoft,
+    paddingHorizontal: space.xl,
+    marginTop: -space.xs,
+    marginBottom: space.sm,
+  },
   // Moderation ⋯ chip + sheet (PL-2)
   modChip: {
     width: 34,

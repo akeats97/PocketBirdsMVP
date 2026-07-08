@@ -12,6 +12,7 @@ import { GUIDELINES_URL } from '../constants/links';
 import { CURRENT_RELEASE_NAME } from '../constants/release';
 import { BottomSheet } from './BottomSheet';
 import { DeleteAccountSheet } from './DeleteAccountSheet';
+import { openEditProfile } from './profile/EditProfileSheet';
 
 // App-wide top bar for the tab screens.
 //
@@ -113,7 +114,9 @@ export function AppHeader({ youActions }: { youActions?: boolean }) {
               label="Edit profile"
               onPress={() => {
                 setMenuOpen(false);
-                Alert.alert('Coming soon', 'Profile editing is on the way.');
+                // The sheet is hosted by the You tab's ProfileView below;
+                // stagger past this menu's exit animation.
+                setTimeout(openEditProfile, 280);
               }}
             />
             <MenuRow
