@@ -82,7 +82,7 @@ export function AppHeader({ youActions }: { youActions?: boolean }) {
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + space.xs }]}>
       <Text style={styles.title} numberOfLines={1}>
-        Pocket Birds {CURRENT_RELEASE_NAME}
+        PocketBirds {CURRENT_RELEASE_NAME}
       </Text>
       <View style={styles.right}>
         <TouchableOpacity

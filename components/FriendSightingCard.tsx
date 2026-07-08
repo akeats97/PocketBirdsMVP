@@ -126,7 +126,7 @@ function FriendSightingCard({ sighting, isFirstSighting, hideTag }: FriendSighti
                 <GlobalFirstBadge />
               </Pressable>
             ) : isFirstSighting ? (
-              <Pressable onPress={() => openBadgeGuide('lifer')} hitSlop={6}>
+              <Pressable onPress={() => openBadgeGuide('lifer', auth.currentUser?.uid === sighting.friendId)} hitSlop={6}>
                 <View style={recipes.liferBadge}>
                   <Ionicons name="star" size={9} color="#fff" />
                   <Text style={recipes.liferBadgeText}>1ST</Text>

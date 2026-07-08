@@ -110,7 +110,7 @@ function SightingCard({ sighting, isNewSpecies, unreadCount = 0 }: SightingCardP
                 <GlobalFirstBadge />
               </Pressable>
             ) : isNewSpecies ? (
-              <Pressable onPress={() => openBadgeGuide('lifer')} hitSlop={6}>
+              <Pressable onPress={() => openBadgeGuide('lifer', true)} hitSlop={6}>
                 <View style={recipes.liferBadge}>
                   <Ionicons name="star" size={9} color="#fff" />
                   <Text style={recipes.liferBadgeText}>1ST</Text>

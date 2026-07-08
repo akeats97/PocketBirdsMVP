@@ -208,12 +208,12 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
   const journalSections = useMemo(() => {
     const tagged: FriendSighting[] = sightings
       .filter(s => !isReportEntry(s.birdName))
-      .map(s => ({ ...s, friendName: isSelf ? 'You' : (name || 'Birder') }));
+      .map(s => ({ ...s, friendId: uid, friendName: isSelf ? 'You' : (name || 'Birder') }));
     // Collapsed days keep their header (with counts) but render no rows.
     return groupSightingsByDay(tagged).map(s =>
       collapsedDays.has(s.key) ? { ...s, data: [] } : s
     );
-  }, [sightings, isSelf, name, collapsedDays]);
+  }, [sightings, isSelf, name, collapsedDays, uid]);
 
   const dexFamilies = useMemo(() => buildUserDex(sightings), [sightings]);
 

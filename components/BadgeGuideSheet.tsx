@@ -19,39 +19,45 @@ export type BadgeKey = 'lifer' | 'globalFirst';
 const TIPS: Record<BadgeKey, { title: string; blurb: string }> = {
   lifer: {
     title: 'Lifer',
-    blurb: 'Their first time ever logging this species. One more for the life list.',
+    blurb: 'Their first time ever logging this species!',
   },
   globalFirst: {
-    title: 'Pocket Birds first',
+    title: 'PocketBirds first',
     blurb:
-      'The first birder on all of Pocket Birds to log this species, verified. Rarer than the red one.',
+      'The first birder on all of PocketBirds to log this species, verified by community members!',
   },
 };
 
-let openListener: ((badge: BadgeKey) => void) | null = null;
+// The lifer blurb speaks in the second person when it's your own sighting.
+const OWN_LIFER_BLURB = 'Your first time ever logging this species! Congrats!';
 
-export function openBadgeGuide(badge: BadgeKey) {
-  openListener?.(badge);
+type OpenState = { badge: BadgeKey; own: boolean };
+
+let openListener: ((state: OpenState) => void) | null = null;
+
+export function openBadgeGuide(badge: BadgeKey, own = false) {
+  openListener?.({ badge, own });
 }
 
 export function BadgeGuideHost() {
-  const [badge, setBadge] = useState<BadgeKey | null>(null);
+  const [state, setState] = useState<OpenState | null>(null);
   useEffect(() => {
-    openListener = setBadge;
+    openListener = setState;
     return () => {
       openListener = null;
     };
   }, []);
   return (
-    <BottomSheet visible={badge !== null} onClose={() => setBadge(null)}>
-      {badge !== null && <BadgeTip badge={badge} />}
+    <BottomSheet visible={state !== null} onClose={() => setState(null)}>
+      {state !== null && <BadgeTip badge={state.badge} own={state.own} />}
     </BottomSheet>
   );
 }
 
-function BadgeTip({ badge }: { badge: BadgeKey }) {
+function BadgeTip({ badge, own }: { badge: BadgeKey; own: boolean }) {
   const insets = useSafeAreaInsets();
   const tip = TIPS[badge];
+  const blurb = badge === 'lifer' && own ? OWN_LIFER_BLURB : tip.blurb;
   return (
     <View style={[styles.sheet, { paddingBottom: insets.bottom + space.xl }]}>
       <View style={styles.row}>
@@ -67,7 +73,7 @@ function BadgeTip({ badge }: { badge: BadgeKey }) {
         </View>
         <View style={styles.textCell}>
           <Text style={styles.title}>{tip.title}</Text>
-          <Text style={styles.blurb}>{tip.blurb}</Text>
+          <Text style={styles.blurb}>{blurb}</Text>
         </View>
       </View>
     </View>
