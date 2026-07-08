@@ -114,9 +114,11 @@ export function AppHeader({ youActions }: { youActions?: boolean }) {
               label="Edit profile"
               onPress={() => {
                 setMenuOpen(false);
-                // The sheet is hosted by the You tab's ProfileView below;
-                // stagger past this menu's exit animation.
-                setTimeout(openEditProfile, 280);
+                // The sheet is hosted by the You tab's ProfileView below. Stagger
+                // past this menu's exit AND unmount (~260ms): iOS silently drops a
+                // modal presented while another is still dismissing, which is why
+                // Edit "did nothing" on iOS at the old 280ms.
+                setTimeout(openEditProfile, 400);
               }}
             />
             <MenuRow
