@@ -700,7 +700,29 @@ both directions, sightings + subcollections + photos, projections) with re-auth
 (password prompt) first per Firebase requirements. This is PL-2-grade priority and
 should be treated as **PL-10**. **Effort.** M.
 
-### N-2: Crash reporting + basic analytics before strangers
+### N-2: Crash reporting + basic analytics before strangers - BUILT Jul 8 2026 (uncommitted; dev-client rebuild + DSN setup pending)
+
+**Built Jul 8 2026.** `@sentry/react-native` ~6.14 (installed via `expo install`;
+config plugin auto-added to app.json but inert in our bare workflow, native
+module links via autolinking on EAS). All wiring centralized in
+`config/sentry.ts`: enable guard is `!__DEV__ && !!EXPO_PUBLIC_SENTRY_DSN`, so
+Sentry is COMPLETELY inert under Metro (no native call), which is why the
+existing dev clients don't crash on the missing native module and dev noise
+never reaches the project. It only activates in release builds (soak APK /
+TestFlight / production) once a DSN is set. PII scrub: `sendDefaultPii:false` +
+a `beforeBreadcrumb` that redacts coordinate-looking decimals out of console
+breadcrumbs (the [photoService] GPS logs); notes are never logged. User context
+is uid-only (set in `_layout.tsx` onAuthStateChanged), never email/username.
+Root wrapped via `wrapWithSentry(RootLayout)`. Branded ErrorBoundary
+(`components/AppErrorScreen.tsx`, "Well, that bird flew into a window.")
+exported from `app/_layout.tsx`, replacing expo-router's default; reports the
+caught error to Sentry.
+**Alex still owns (only he can):** create the Sentry project, then set
+`EXPO_PUBLIC_SENTRY_DSN` in `.env` AND on EAS (`eas env:create --scope project
+--visibility plaintext --name EXPO_PUBLIC_SENTRY_DSN --value '<dsn>'`).
+**Follow-up (deferred):** readable JS stack traces need source-map upload
+(SENTRY_AUTH_TOKEN + sentry gradle plugin / metro serializer) — not wired yet;
+crashes still capture without it, just minified.
 
 No crash/error reporting exists (verified: no sentry/crashlytics). With two users,
 bugs report themselves at dinner; with strangers, silent crashes are invisible

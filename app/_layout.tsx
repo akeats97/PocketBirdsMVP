@@ -35,11 +35,14 @@ import { BadgeGuideHost } from '../components/BadgeGuideSheet';
 import LoginScreen from '../components/LoginScreen';
 import { notificationService } from './services/notificationService';
 import { savePushToken } from './services/userService';
+import { initSentry, setSentryUser, wrapWithSentry } from '../config/sentry';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary
-} from 'expo-router';
+// Crash reporting. Inert under Metro; active in release builds with a DSN.
+initSentry();
+
+// Branded fallback for render errors that reach the root (replaces expo-router's
+// default error screen); also reports to Sentry.
+export { ErrorBoundary } from '../components/AppErrorScreen';
 
 export const unstable_settings = {
   // Ensure that reloading on `/modal` keeps a back button present.
@@ -173,7 +176,7 @@ function AuthenticatedApp() {
   );
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
@@ -195,6 +198,7 @@ export default function RootLayout() {
     const unsubscribe = onAuthStateChanged(auth, (authUser) => {
       setUser(authUser);
       setIsAuthLoading(false);
+      setSentryUser(authUser?.uid ?? null);
     });
 
     return () => unsubscribe();
@@ -249,3 +253,5 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default wrapWithSentry(RootLayout);
