@@ -846,7 +846,7 @@ species, descended from Red Junglefowl, which IS in the IOC list). If it ever
 returns it's one line in `constants/customSpecies.ts`; recorded so it is not
 re-proposed. Worth a comment on anastasia's post explaining the taxonomy.
 
-### HEP-3: Usernames clickable everywhere (victoria)
+### HEP-3: Usernames clickable everywhere (victoria) - DONE Jul 7 2026 (74242ca; celebration "Called by" deliberately left static)
 
 **Current state.** Mostly done piecemeal (feed-card pill, hooters, flock rows,
 "ID'd by"). Known residue is already listed in §9 profile-link gaps: commenter
@@ -921,7 +921,7 @@ only location is privacy-scrubbed - but this area has burned us; the [photoServi
 logs make it a 5-minute check). **Effort.** S-M. **Order.** Natural companion to
 the existing photo-first flow; any photo batch.
 
-### HEP-9: Explain the badges (alex) - BUILT Jul 7 2026 (c34fd47)
+### HEP-9: Explain the badges (alex) - BUILT Jul 7 2026 (c34fd47, revised 79f15af: contextual single-badge tip on the two 1ST badges only, no full legend, per Alex)
 
 **Current state.** 1ST lifer badge, global-first holo 1ST pill, verified state,
 Mystery Bird tag, "ID'd by", green location pin - none explained anywhere.
@@ -945,7 +945,7 @@ slot for the PL-5 invite link - this is the organic-growth surface. view-shot is
 native dep: ride the same rebuild as HEP-6/N-2. **Effort.** M. **Order.** after
 PL-5 exists the card gets its link; building card-first is fine.
 
-### HEP-11: Profile bio (alex, ~50 chars)
+### HEP-11: Profile bio (alex, ~50 chars) - BUILT Jul 7 2026 (3f365ea; rules cap rides the gated deploy, includes the first real Edit-profile sheet)
 
 **Current state.** No bio field anywhere (user doc, ProfileView, edit sheet).
 **Plan.** `bio?: string` on the user doc, hard cap 80 chars client + rules
