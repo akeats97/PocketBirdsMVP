@@ -13,15 +13,16 @@ interface ProposalCardProps {
   rank: number;
   leader: boolean;
   hooted: boolean;
+  /** Optimistic hoot count (raw proposal.hootCount lags the server denorm). */
+  count: number;
   onToggleHoot: () => void;
 }
 
 // One ranked proposal in the "What is it?" leaderboard. The #1 card wears the
 // sun-yellow FRONT-RUNNER ribbon and a deeper hard shadow. Species is the
 // COMMON NAME ONLY — no Latin line, ever.
-export function ProposalCard({ proposal, rank, leader, hooted, onToggleHoot }: ProposalCardProps) {
+export function ProposalCard({ proposal, rank, leader, hooted, count, onToggleHoot }: ProposalCardProps) {
   const router = useRouter();
-  const count = proposal.hootCount ?? 0;
   return (
     <View style={styles.wrap}>
       <HardShadow offset={leader ? 4 : 2} borderRadius={radius.card}>

@@ -14,6 +14,8 @@ interface CommunityIdSectionProps {
   onPropose: () => void;
   onShare: () => void;
   hasHootedProposal: (proposalId: string) => boolean;
+  /** Optimistic hoot count for a proposal (see HootsContext.displayHootCount). */
+  hootCountFor: (proposal: Proposal) => number;
   onToggleHoot: (proposalId: string) => void;
 }
 
@@ -28,10 +30,11 @@ export function CommunityIdSection({
   onPropose,
   onShare,
   hasHootedProposal,
+  hootCountFor,
   onToggleHoot,
 }: CommunityIdSectionProps) {
   const count = proposals.length;
-  const totalHoots = proposals.reduce((sum, p) => sum + (p.hootCount ?? 0), 0);
+  const totalHoots = proposals.reduce((sum, p) => sum + hootCountFor(p), 0);
 
   return (
     <View>
@@ -103,6 +106,7 @@ export function CommunityIdSection({
               rank={i + 1}
               leader={i === 0}
               hooted={hasHootedProposal(p.id)}
+              count={hootCountFor(p)}
               onToggleHoot={() => onToggleHoot(p.id)}
             />
           ))}

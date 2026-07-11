@@ -9,8 +9,13 @@ import { getCurrentUserProfile } from '../services/userService';
 interface HootsContextType {
   /** Has the current user hooted this sighting? */
   hasHooted: (sightingId: string) => boolean;
-  /** Denormalized count carried on the sighting doc (maintained server-side). */
-  hootCount: (sighting: { hootCount?: number }) => number;
+  /** Optimistic hoot count for a sighting (server count + local toggles). */
+  hootCount: (sighting: { id: string; hootCount?: number }) => number;
+  /**
+   * Optimistic hoot count for anything hootable (comment, proposal): the
+   * server-denormalized count with the user's own un-synced toggles applied.
+   */
+  displayHootCount: (id: string, serverCount: number) => number;
   /** Optimistically toggle the current user's hoot on a sighting. */
   toggleHoot: (sightingId: string) => Promise<void>;
   /** Has the current user hooted this community-ID proposal? */
@@ -64,12 +69,48 @@ function HootsProvider({ children }: { children: React.ReactNode }) {
 
   const hasHooted = (sightingId: string) => hootedIds.has(sightingId);
 
-  const hootCount = (sighting: { hootCount?: number }) => sighting.hootCount ?? 0;
+  // The hootCount fields on sighting/comment/proposal docs are denormalized by
+  // Cloud Functions, so after a tap the number doesn't move until the function
+  // runs and the doc round-trips (seconds). These refs overlay the user's own
+  // toggles on top: `countAdjustments` holds the pending delta keyed by the
+  // hooted thing's id, anchored to the server count it was applied against
+  // (`base`); once the server count moves off that base the function has
+  // caught up (or someone else hooted) and the overlay is dropped.
+  // `lastSeenCounts` records the server count each id last rendered with, so a
+  // toggle knows its base without callers having to pass the count in.
+  const lastSeenCountsRef = useRef<Map<string, number>>(new Map());
+  const countAdjustmentsRef = useRef<Map<string, { base: number; delta: number }>>(new Map());
+
+  // Refs, not state: every adjustment is immediately followed by a hootedIds
+  // flip, which re-renders the provider and its consumers anyway.
+  const adjustCount = (id: string, change: 1 | -1) => {
+    const existing = countAdjustmentsRef.current.get(id);
+    const base = existing?.base ?? lastSeenCountsRef.current.get(id) ?? 0;
+    const delta = (existing?.delta ?? 0) + change;
+    if (delta === 0) countAdjustmentsRef.current.delete(id);
+    else countAdjustmentsRef.current.set(id, { base, delta });
+  };
+
+  const displayHootCount = (id: string, serverCount: number) => {
+    lastSeenCountsRef.current.set(id, serverCount);
+    const adj = countAdjustmentsRef.current.get(id);
+    if (!adj) return serverCount;
+    if (serverCount !== adj.base) {
+      // Server caught up: the denormalized count absorbed the toggle.
+      countAdjustmentsRef.current.delete(id);
+      return serverCount;
+    }
+    return Math.max(0, adj.base + adj.delta);
+  };
+
+  const hootCount = (sighting: { id: string; hootCount?: number }) =>
+    displayHootCount(sighting.id, sighting.hootCount ?? 0);
 
   const toggleHoot = async (sightingId: string) => {
     const currentlyHooted = hootedIds.has(sightingId);
 
     // Optimistic flip — the collectionGroup listener will reconcile.
+    adjustCount(sightingId, currentlyHooted ? -1 : 1);
     setHootedIds((prev) => {
       const next = new Set(prev);
       if (currentlyHooted) next.delete(sightingId);
@@ -90,6 +131,7 @@ function HootsProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Error toggling hoot:', error);
       // Revert on failure.
+      adjustCount(sightingId, currentlyHooted ? 1 : -1);
       setHootedIds((prev) => {
         const next = new Set(prev);
         if (currentlyHooted) next.add(sightingId);
@@ -110,6 +152,7 @@ function HootsProvider({ children }: { children: React.ReactNode }) {
   const toggleProposalHoot = async (sightingId: string, proposalId: string) => {
     const currentlyHooted = hootedIds.has(proposalId);
 
+    adjustCount(proposalId, currentlyHooted ? -1 : 1);
     setHootedIds((prev) => {
       const next = new Set(prev);
       if (currentlyHooted) next.delete(proposalId);
@@ -128,6 +171,7 @@ function HootsProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Error toggling proposal hoot:', error);
+      adjustCount(proposalId, currentlyHooted ? 1 : -1);
       setHootedIds((prev) => {
         const next = new Set(prev);
         if (currentlyHooted) next.add(proposalId);
@@ -147,6 +191,7 @@ function HootsProvider({ children }: { children: React.ReactNode }) {
   const toggleCommentHoot = async (sightingId: string, commentId: string) => {
     const currentlyHooted = hootedIds.has(commentId);
 
+    adjustCount(commentId, currentlyHooted ? -1 : 1);
     setHootedIds((prev) => {
       const next = new Set(prev);
       if (currentlyHooted) next.delete(commentId);
@@ -165,6 +210,7 @@ function HootsProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Error toggling comment hoot:', error);
+      adjustCount(commentId, currentlyHooted ? 1 : -1);
       setHootedIds((prev) => {
         const next = new Set(prev);
         if (currentlyHooted) next.add(commentId);
@@ -179,6 +225,7 @@ function HootsProvider({ children }: { children: React.ReactNode }) {
       value={{
         hasHooted,
         hootCount,
+        displayHootCount,
         toggleHoot,
         hasHootedProposal,
         toggleProposalHoot,

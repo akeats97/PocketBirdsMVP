@@ -82,7 +82,7 @@ export default function SightingDetailScreen() {
     // One-shot on mount for this sighting id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sightingId]);
-  const { hasHooted, hootCount, toggleHoot, hasHootedProposal, toggleProposalHoot, hasHootedComment, toggleCommentHoot } = useHoots();
+  const { hasHooted, hootCount, displayHootCount, toggleHoot, hasHootedProposal, toggleProposalHoot, hasHootedComment, toggleCommentHoot } = useHoots();
   const { comments, loading, post } = useComments(sightingId);
   const { proposals, add, accept } = useProposals(sightingId);
 
@@ -491,6 +491,7 @@ export default function SightingDetailScreen() {
               onPropose={() => setShowPropose(true)}
               onShare={onShare}
               hasHootedProposal={hasHootedProposal}
+              hootCountFor={(p) => displayHootCount(p.id, p.hootCount ?? 0)}
               onToggleHoot={(proposalId) => toggleProposalHoot(sightingId, proposalId)}
             />
           </View>
@@ -512,6 +513,7 @@ export default function SightingDetailScreen() {
         ) : (
           comments.map((c) => {
             const cHooted = hasHootedComment(c.id);
+            const cHootCount = displayHootCount(c.id, c.hootCount);
             return (
               <View key={c.id} style={styles.commentRow}>
                 <Pressable onPress={() => router.push(`/profile/${c.uid}`)} hitSlop={4}>
@@ -546,9 +548,9 @@ export default function SightingDetailScreen() {
                   accessibilityState={{ selected: cHooted }}
                   accessibilityLabel={cHooted ? 'Remove hoot' : 'Hoot this comment'}
                 >
-                  {c.hootCount > 0 && (
+                  {cHootCount > 0 && (
                     <Text style={[styles.commentHootCount, cHooted && styles.commentHootCountActive]}>
-                      {c.hootCount}
+                      {cHootCount}
                     </Text>
                   )}
                   <Owl size={15} filled={cHooted} color={cHooted ? palette.coral : palette.muted} />
