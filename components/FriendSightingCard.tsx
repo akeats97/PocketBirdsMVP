@@ -325,6 +325,7 @@ const styles = StyleSheet.create({
   nameBlock: {
     flex: 1,
     minWidth: 0,
+    alignItems: 'flex-start',
   },
   birdName: {
     ...type.h3,
