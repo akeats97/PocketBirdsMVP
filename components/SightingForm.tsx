@@ -71,6 +71,28 @@ function NotifyCue({ isNew, birdName }: { isNew: boolean; birdName: string }) {
   );
 }
 
+// The dropdown escape hatch into Mystery Bird (Community ID's front door).
+// Rendered in two spots: as the body of the no-match dropdown (typed a guess,
+// got nothing back) and as a footer under a populated results list (typed
+// "gull", got twenty gulls, no idea which). Same row, different lead line.
+function MysteryCtaRow({ title, onPress }: { title: string; onPress: () => void }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.mysteryCtaRow, pressed && { backgroundColor: palette.sun }]}
+      onPress={onPress}
+    >
+      <View style={styles.mysteryCtaTile}>
+        <Text style={styles.mysteryCtaTileGlyph}>?</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.mysteryCtaTitle}>{title}</Text>
+        <Text style={styles.mysteryCtaSub}>Your friends can help identify it</Text>
+      </View>
+      <Ionicons name="arrow-forward" size={15} color={palette.leaf} />
+    </Pressable>
+  );
+}
+
 export default function SightingForm({ mode, initial, onSubmit, submitting }: SightingFormProps) {
   const { lastLocation, evaluateNewSpecies, sightings } = useSightings();
   const isEdit = mode === 'edit';
@@ -80,6 +102,9 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
   // How many of the leading `suggestions` are in the user's realm. Drives the
   // "Most likely near you" / "Everywhere else" section split. 0 = no split.
   const [likelyCount, setLikelyCount] = useState(0);
+  // True only after the debounced search actually ran and found nothing, so
+  // the "no matches" dropdown never flashes during the 100ms debounce window.
+  const [noMatch, setNoMatch] = useState(false);
   const [selectedBird, setSelectedBird] = useState(isEdit ? initial?.birdName ?? '' : '');
   const [location, setLocation] = useState(isEdit ? initial?.location ?? '' : lastLocation.label);
   const [locationCoords, setLocationCoords] = useState<Coordinates | undefined>(
@@ -269,6 +294,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     if (!searchQuery || searchQuery === selectedBird) {
       setSuggestions([]);
       setLikelyCount(0);
+      setNoMatch(false);
       return;
     }
     const handle = setTimeout(() => {
@@ -277,6 +303,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
       if (q.startsWith('?')) {
         setSuggestions([UNKNOWN_BIRD]);
         setLikelyCount(0);
+        setNoMatch(false);
         return;
       }
 
@@ -348,6 +375,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
         setSuggestions([...reportMatches, ...customMatches, ...birds].slice(0, CAP));
         setLikelyCount(0);
       }
+      setNoMatch(birds.length === 0 && !hasFixed);
     }, 100);
     return () => clearTimeout(handle);
   }, [searchQuery, selectedBird, activeRealm, activeRegion]);
@@ -367,6 +395,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
     setSelectedBird(bird);
     setSearchQuery(bird);
     setSuggestions([]);
+    setNoMatch(false);
     Keyboard.dismiss();
   };
 
@@ -375,15 +404,19 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
   // active state when editing an existing Mystery Bird sighting.
   const isMystery = selectedBird === UNKNOWN_BIRD;
 
+  // Shared by the ? button and the two dropdown escape hatches (the no-match
+  // CTA and the "not sure which one" footer under the results).
+  const selectMystery = () => handleBirdSelect(UNKNOWN_BIRD);
+
   const toggleMystery = () => {
-    Keyboard.dismiss();
-    setSuggestions([]);
     if (isMystery) {
+      Keyboard.dismiss();
+      setSuggestions([]);
+      setNoMatch(false);
       setSelectedBird('');
       setSearchQuery('');
     } else {
-      setSelectedBird(UNKNOWN_BIRD);
-      setSearchQuery(UNKNOWN_BIRD);
+      selectMystery();
     }
   };
 
@@ -495,6 +528,7 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
 
   const handleOutsidePress = () => {
     if (suggestions.length > 0) setSuggestions([]);
+    if (noMatch) setNoMatch(false);
     if (placeSuggestions.length > 0) setPlaceSuggestions([]);
     // Cancel any in-flight debounced Places fetch, otherwise it resolves right
     // after this and re-shows the dropdown (it renders on placeSuggestions, not
@@ -600,10 +634,14 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                     setSelectedBird('');
                     setSearchQuery('');
                     setSuggestions([]);
+                    setNoMatch(false);
                   }}
                   placeholder="Who'd you see?"
                   placeholderTextColor={palette.muted}
-                  onBlur={() => setSuggestions([])}
+                  onBlur={() => {
+                    setSuggestions([]);
+                    setNoMatch(false);
+                  }}
                 />
                 <Pressable
                   style={({ pressed }) => [
@@ -650,7 +688,38 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                         </Pressable>
                       </React.Fragment>
                     ))}
+                    {/* Footer escape hatch: matches, but none you can vouch
+                        for ("which of these gulls was it?"). */}
+                    <MysteryCtaRow
+                      title="Not sure which? Log a Mystery Bird"
+                      onPress={selectMystery}
+                    />
                   </ScrollView>
+                </View>
+              )}
+              {/* Dead-end catcher: the search came back empty, so the dropdown
+                  offers the intended path instead of silence. */}
+              {noMatch && (
+                <View style={styles.suggestionsContainer}>
+                  <Text style={styles.noMatchText}>
+                    {`No matches for "${searchQuery.trim()}"`}
+                  </Text>
+                  <MysteryCtaRow title="Log as Mystery Bird" onPress={selectMystery} />
+                </View>
+              )}
+              {/* Community-ID explainer, revealed the instant Mystery Bird is
+                  chosen (add mode; edit mode's cue row owns that slot). */}
+              {!isEdit && isMystery && (
+                <View style={styles.mysteryExplainer}>
+                  <View style={styles.mysteryExplainerHeader}>
+                    <Ionicons name="people" size={14} color={palette.coral} />
+                    <Text style={styles.mysteryExplainerLabel}>What happens next</Text>
+                  </View>
+                  <Text style={styles.mysteryExplainerBody}>
+                    It posts to your friends&apos; feeds so they can{' '}
+                    <Text style={styles.mysteryExplainerBold}>propose an ID</Text>. Accept one and
+                    the species drops into your Dex.
+                  </Text>
                 </View>
               )}
             </View>
@@ -832,8 +901,17 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                   onPress={handleSave}
                 >
                   <Text style={styles.saveButtonText}>
-                    {isEdit ? 'Save Changes' : 'Save Sighting'}
+                    {isEdit
+                      ? 'Save Changes'
+                      : isMystery
+                        ? 'Save & ask friends to ID'
+                        : 'Save Sighting'}
                   </Text>
+                  {/* The primary action names the outcome: saving a Mystery
+                      Bird is asking your flock for help. */}
+                  {!isEdit && isMystery && (
+                    <Text style={styles.saveButtonSub}>Posts to your friends&apos; feeds</Text>
+                  )}
                 </Pressable>
               </HardShadow>
             </View>
@@ -959,6 +1037,79 @@ const styles = StyleSheet.create({
   },
   mysteryGlyphActive: {
     color: palette.cream,
+  },
+
+  // Mystery CTA row inside the suggestions dropdown (footer + no-match).
+  mysteryCtaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm + 2,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    backgroundColor: palette.sunSoft,
+  },
+  mysteryCtaTile: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: palette.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mysteryCtaTileGlyph: {
+    fontFamily: font.display,
+    fontSize: 17,
+    fontWeight: '800',
+    color: palette.cream,
+  },
+  mysteryCtaTitle: {
+    fontFamily: font.display,
+    fontSize: 14,
+    fontWeight: '700',
+    color: palette.ink,
+    letterSpacing: -0.2,
+  },
+  mysteryCtaSub: {
+    ...type.bodyS,
+    color: palette.inkSoft,
+    marginTop: 1,
+  },
+  noMatchText: {
+    ...type.bodyS,
+    color: palette.muted,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.rule,
+  },
+
+  // "What happens next" explainer under the BIRD field while Mystery is set.
+  mysteryExplainer: {
+    marginTop: space.sm,
+    backgroundColor: palette.sunSoft,
+    borderRadius: radius.input,
+    borderWidth: 1.5,
+    borderColor: palette.ink,
+    paddingVertical: space.sm + 2,
+    paddingHorizontal: space.md,
+  },
+  mysteryExplainerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs + 2,
+    marginBottom: space.xs,
+  },
+  mysteryExplainerLabel: {
+    ...type.monoTag,
+    color: palette.ink,
+  },
+  mysteryExplainerBody: {
+    ...type.bodyS,
+    color: palette.ink,
+    lineHeight: 18,
+  },
+  mysteryExplainerBold: {
+    fontFamily: font.bodyBold,
   },
 
   locationRow: {
@@ -1089,6 +1240,14 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     ...recipes.buttonPrimaryText,
+  },
+  saveButtonSub: {
+    fontFamily: font.mono,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 3,
   },
 
   photoButtonEmpty: {

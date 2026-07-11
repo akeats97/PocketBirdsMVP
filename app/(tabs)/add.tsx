@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, Vibration, View } from 'react-native';
+import AddCoachSheet from '../../components/AddCoachSheet';
 import SightingForm, { SightingFormValues } from '../../components/SightingForm';
 import { HardShadow } from '../../components/SightingCard';
 import { border, font, palette, radius, space } from '../../constants/Colors';
@@ -184,6 +185,9 @@ export default function AddSightingScreen() {
       )}
 
       <SightingForm mode="add" onSubmit={handleSubmit} />
+
+      {/* One-time first-run primer (photo -> ? -> friends ID it). */}
+      <AddCoachSheet />
     </View>
   );
 }
