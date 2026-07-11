@@ -74,7 +74,7 @@ A React Native bird sighting logger for Alex and his wife. Users log bird sighti
 - **expo-notifications** — push notification registration and handling
 - **expo-image-picker** — photo support on sightings
 - **AsyncStorage** — offline cache for sightings
-- **EAS** — builds and Play Store submissions
+- **EAS** — builds (iOS TestFlight + Android APK via Firebase App Distribution)
 
 ---
 
@@ -117,23 +117,20 @@ A React Native bird sighting logger for Alex and his wife. Users log bird sighti
 ---
 
 ## Build & Deploy
-Builds go to the **Google Play internal testing track**.
+**Android updates ship as APKs via Firebase App Distribution — the Play Store is no longer used for updates (Alex, Jul 11 2026).** iOS ships via TestFlight. The full recipe (both platforms, release notes, name roll) lives in the `release-build` skill.
 
 ```bash
-# Build AAB
-eas build --platform android --profile production --non-interactive
-
-# Submit to Play Store
-eas submit --platform android --latest
+# Android APK (Firebase App Distribution)
+eas build --platform android --profile apk --non-interactive
 ```
 
-Run these from `/Users/alexkeats/Desktop/PocketBirds4/`.
+Run from `/Users/alexkeats/Desktop/PocketBirds4/`. The Play Store listing/keystore facts below are kept for history and in case the Play channel is ever revived.
 
 ---
 
 ## Workflow
 - Commit after every meaningful change
-- Build + submit to Play Store once a batch of changes is ready
+- Kick off builds (see `release-build` skill) once a batch of changes is ready
 - Current git branch: `master` (push_notifs merged Apr 19 2026)
 
 ---
