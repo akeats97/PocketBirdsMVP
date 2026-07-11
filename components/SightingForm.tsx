@@ -907,11 +907,6 @@ export default function SightingForm({ mode, initial, onSubmit, submitting }: Si
                         ? 'Save & ask friends to ID'
                         : 'Save Sighting'}
                   </Text>
-                  {/* The primary action names the outcome: saving a Mystery
-                      Bird is asking your flock for help. */}
-                  {!isEdit && isMystery && (
-                    <Text style={styles.saveButtonSub}>Posts to your friends&apos; feeds</Text>
-                  )}
                 </Pressable>
               </HardShadow>
             </View>
@@ -1240,14 +1235,6 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     ...recipes.buttonPrimaryText,
-  },
-  saveButtonSub: {
-    fontFamily: font.mono,
-    fontSize: 10,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 3,
   },
 
   photoButtonEmpty: {
