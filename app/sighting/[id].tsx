@@ -34,6 +34,8 @@ import { ProposeSheet } from '../../components/community/ProposeSheet';
 import GlobalFirstCelebration from '../../components/GlobalFirstCelebration';
 import MilestoneCelebration from '../../components/MilestoneCelebration';
 import { ReportSheet } from '../../components/ReportSheet';
+import { ShareSheet } from '../../components/share/ShareSheet';
+import { buildShareCardData, ShareCardData } from '../utils/shareCardData';
 import { font, palette, radius, space, type } from '../../constants/Colors';
 import { isMysteryBird, isUnknownEntry } from '../../constants/unknownBird';
 import { isReportEntry } from '../../constants/reportTypes';
@@ -47,7 +49,9 @@ import { formatRelativeDate } from '../utils/formatSightingDate';
 import { useComments } from '../hooks/useComments';
 import { useProposals } from '../hooks/useProposals';
 import { getCurrentUserProfile, isFollowing } from '../services/userService';
+import { getSightingsByUid } from '../services/sightingService';
 import { confirmDeleteSighting } from '../utils/confirmDeleteSighting';
+import { dexRankForSpecies } from '../utils/dexRank';
 import { setPhotoUri } from '../utils/photoViewer';
 import { FriendSighting } from '../types';
 import { timeAgo } from '../utils/timeAgo';
@@ -130,6 +134,8 @@ export default function SightingDetailScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showPropose, setShowPropose] = useState(false);
   const [showHootList, setShowHootList] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareData, setShareData] = useState<ShareCardData | null>(null);
   const [accepting, setAccepting] = useState(false);
   // Resolution celebration + chained new-species machinery.
   const [accepted, setAccepted] = useState<{
@@ -147,6 +153,47 @@ export default function SightingDetailScreen() {
   const scrollRef = useRef<ScrollView>(null);
 
   const mysteryBird = !!sighting && isMysteryBird(sighting);
+
+  // A sighting is shareable as a collectible card only for a real species —
+  // Mystery Birds, reports and custom entries have no Species Guide stats.
+  const shareable =
+    !!sighting &&
+    !mysteryBird &&
+    !isReportEntry(sighting.birdName) &&
+    !isUnknownEntry(sighting.birdName) &&
+    !isCustomSpecies(sighting.birdName);
+
+  const onOpenShare = async () => {
+    if (!sighting) return;
+    // The card always credits the LOGGER, not the viewer: your own sightings say
+    // you, a friend's says the friend.
+    const loggedBy = isOwner
+      ? me?.username ?? 'you'
+      : (sighting as FriendSighting).friendName ?? 'a birder';
+
+    // The "DEX" number + lifer frame are the logger's own life-list stats for
+    // this species. For your own sightings that's the local list; for a friend's
+    // we fetch their history, so the sheet opens immediately and the number
+    // fills in a beat later.
+    if (isOwner) {
+      const { rank, isLifer } = dexRankForSpecies(sightings, sighting.birdName, sightingId);
+      setShareData(buildShareCardData(sighting, { loggedBy, isLifer, dexNumber: rank }));
+      setShareOpen(true);
+      return;
+    }
+
+    setShareData(buildShareCardData(sighting, { loggedBy, isLifer: false, dexNumber: null }));
+    setShareOpen(true);
+    if (ownerUid) {
+      try {
+        const theirs = await getSightingsByUid(ownerUid);
+        const { rank, isLifer } = dexRankForSpecies(theirs, sighting.birdName, sightingId);
+        setShareData(buildShareCardData(sighting, { loggedBy, isLifer, dexNumber: rank }));
+      } catch {
+        // Leave the base card (no number) if their history can't be read.
+      }
+    }
+  };
 
   // The owner accepts the proposal THEY hooted ("hoot the one you agree with,
   // then lock it in"). If they've hooted more than one, the highest-ranked
@@ -327,6 +374,17 @@ export default function SightingDetailScreen() {
       <Text style={styles.navTitle}>{mysteryBird ? 'Mystery Bird' : 'Sighting'}</Text>
       <View style={styles.navRight}>
         {mysteryBird && <NeedsIdPill />}
+        {/* Share the sighting as a collectible card (real species only). */}
+        {shareable && (
+          <Pressable
+            onPress={onOpenShare}
+            hitSlop={8}
+            style={styles.menuButton}
+            accessibilityLabel="Share sighting"
+          >
+            <Ionicons name="share-social-outline" size={18} color={palette.ink} />
+          </Pressable>
+        )}
         {/* Owner: Edit / Delete. Everyone else: Report / Block (PL-2). */}
         <Pressable
           onPress={() => setMenuOpen(true)}
@@ -651,6 +709,9 @@ export default function SightingDetailScreen() {
         count={milestoneShown}
         onDismiss={() => setMilestoneShown(null)}
       />
+
+      {/* Share as a collectible card */}
+      <ShareSheet visible={shareOpen} onClose={() => setShareOpen(false)} data={shareData} />
 
       {/* Report flow (PL-2), non-owner only */}
       <ReportSheet
