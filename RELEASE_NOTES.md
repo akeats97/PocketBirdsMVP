@@ -1,5 +1,76 @@
 # PocketBirds — Release Notes
 
+## Jery - July 11 2026
+**Builds:** iOS 1.0.0 (17) · Android 1.0.0 (versionCode 34, **APK** for Firebase App Distribution)
+**Headline:** Share any sighting as a collectible card, and Mystery Bird finally introduces itself: dead-end searches offer it, the ? explains what happens next, and a one-time guide shows new birders how logging works. Plus hoots that update instantly.
+
+### Android (Firebase App Distribution) - "What's new" (plain text, copy below this line)
+
+🎴 Share your sightings
+• Turn any sighting into a collectible card and share the image anywhere
+
+❓ Stumped? Log a Mystery Bird
+• No matches for what you typed? The bird search now offers "Log as Mystery Bird" instead of a dead end
+• Twenty gulls and no idea which? A "Not sure which?" option now waits at the bottom of every results list
+• Pick Mystery Bird and the app tells you what happens next: friends propose an ID, you accept one, it lands in your Dex
+• The save button says what it really does: "Save & ask friends to ID"
+
+🐣 A ten-second intro to logging
+• The first time you open Add Sighting, a quick guide shows the loop: snap it, tap ? if unsure, friends help ID it (you'll see it once after this update)
+
+🦉 Hoots feel instant
+• Hoot a sighting and the owl and count update immediately
+
+✨ Small stuff
+• A "Location from your photo" hint shows when your photo fills in where you were
+• Fixed: editing a bird name after picking one could quietly save the old pick
+• Feed cards line their name block up neatly
+
+### TestFlight - "What's new" (plain text, copy below this line)
+
+🎴 Share your sightings
+• Turn any sighting into a collectible card and share the image anywhere
+
+❓ Stumped? Log a Mystery Bird
+• No matches for what you typed? The bird search now offers "Log as Mystery Bird" instead of a dead end
+• Twenty gulls and no idea which? A "Not sure which?" option now waits at the bottom of every results list
+• Pick Mystery Bird and the app tells you what happens next: friends propose an ID, you accept one, it lands in your Dex
+• The save button says what it really does: "Save & ask friends to ID"
+
+🐣 A ten-second intro to logging
+• The first time you open Add Sighting, a quick guide shows the loop: snap it, tap ? if unsure, friends help ID it (you'll see it once after this update)
+
+🦉 Hoots feel instant
+• Hoot a sighting and the owl and count update immediately
+
+✨ Small stuff
+• A "Location from your photo" hint shows when your photo fills in where you were
+• Fixed: editing a bird name after picking one could quietly save the old pick
+• Feed cards line their name block up neatly
+
+### What shipped (engineering)
+- **Shareable sighting card** (`a1e28c4`): v2 art-led collectible card, image share via `react-native-view-shot` + `expo-sharing` — both native modules, so this build is what actually puts the feature in users' hands. Link system + story mat deferred.
+- **Mystery Bird discoverability** (`6bc76ec`, `2253fcf`): design ideas 2/3/4/5 from the Mystery Bird exploration. Dropdown escape hatches (no-match CTA + footer row under populated results, gated on the debounced search so it never flashes), dynamic save button (subcaption cut in `2253fcf`), inline "What happens next" explainer, and the one-time `AddCoachSheet` (`add.coachSeen.v1`, flag written on dismiss so an interrupted first run replays). Ideas 1 (persistent helper line) and 6 (intent toggle) deliberately rejected.
+- **Optimistic hoot counts** (`7deb85e`): icon + counter update instantly, server reconciles.
+- **Photo-location hint** (`4573db9`): "Location from your photo" subtext, mirroring the DATE hint.
+- **Stale bird-selection fix** (`41e702b`): typing over a validated pick now invalidates it, so Save can't silently log the old species.
+- **Feed-card name block left-aligned** (`d108627`).
+- **Infra:** CocoaPods project integration + PrivacyInfo committed (`2c78c38`); dev-loop/release-build recipes moved into skills; Android distribution switched to Firebase App Distribution only (Play Store retired for updates, Jul 11).
+
+### Known issues
+- All shipped copy says "friends" ("ask friends to ID", explainer card). Revisit wording when public-by-default (PL-1) ships.
+- Sentry reports minified JS stack traces until source-map upload is wired (needs `SENTRY_AUTH_TOKEN`).
+- Block is still soft-hiding for public accounts: a blocked user can still see your sightings via profile/search (PL-2 follow-up).
+- iOS push entitlement (`aps-environment`) still missing from the provisioning profile, so Android→iOS push remains broken (Bug 6).
+- Existing users see the first-run coach sheet once after updating (intentional, one-time).
+
+### Post-ship steps
+- **iOS:** build 1.0.0 (17) auto-submitted to TestFlight "Friends". New native modules (view-shot, sharing) may re-trigger Beta App Review before external testers get it.
+- **Android:** APK artifact: <https://expo.dev/artifacts/eas/1_twLxtVVhBvdvSnkGcy2v6eUtXbdzvRrszD1ZKAtoY.apk>. Distribute via Firebase App Distribution.
+- Roll `constants/release.ts` Jery → Spatuletail and stamp Jery's `release-names.csv` date (July 11, 2026) once both builds succeed.
+
+---
+
 ## Doradito - July 8 2026
 **Builds:** iOS 1.0.0 (16) · Android 1.0.0 (versionCode 33, **APK** for Firebase App Distribution)
 **Headline:** A big under-the-hood rebuild of how PocketBirds talks to its backend (faster, steadier, one-time re-sign-in), plus profile bios, in-app account tools, report & block, badge explainers, sighting dates pulled from your photos, and a smoother first open.

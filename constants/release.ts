@@ -1,1 +1,1 @@
-export const CURRENT_RELEASE_NAME = 'Jery';
+export const CURRENT_RELEASE_NAME = 'Spatuletail';
