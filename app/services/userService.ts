@@ -336,6 +336,9 @@ export interface PublicProfile {
   joinDate: Date | null;
   // Short self-description, capped at 80 chars (client + rules). Optional.
   bio?: string;
+  // PL-1 visibility: false = private flock (sightings readable only by the
+  // owner + followers). Absent on the doc means public, normalized to true.
+  isPublic: boolean;
 }
 
 export async function getPublicProfile(
@@ -359,11 +362,22 @@ export async function getPublicProfile(
       email: data.email,
       joinDate: createdAt ?? fallbackJoinDate ?? null,
       bio: typeof data.bio === 'string' && data.bio.trim() ? data.bio : undefined,
+      isPublic: data.isPublic !== false,
     };
   } catch (error) {
     console.error(`Error getting public profile for ${uid}:`, error);
     return null;
   }
+}
+
+// Flip the current user's account visibility (PL-1). Written as an explicit
+// boolean (absent = public is only for docs that predate the flag). The rules
+// enforce it server-side the moment it lands; the communityPhotos projection
+// is rebuilt / cleared by the onUserWriteCommunityPhotos Cloud Function.
+export async function setAccountVisibility(isPublic: boolean): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error('User must be logged in to change visibility');
+  await updateDoc(doc(db, 'users', currentUser.uid), { isPublic });
 }
 
 export const BIO_MAX_LENGTH = 80;

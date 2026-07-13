@@ -9,7 +9,7 @@ import { font, palette, radius, space } from '../../../constants/Colors';
 import { useSightings } from '../../context/SightingsContext';
 import { useWishlist } from '../../context/WishlistContext';
 import { getPublicProfile } from '../../services/userService';
-import { getSightingsByUid } from '../../services/sightingService';
+import { getSightingsByUid, isPermissionDenied } from '../../services/sightingService';
 import { Sighting } from '../../types';
 import { compareLists, hintFor, latestBySpecies } from '../../utils/compareLists';
 
@@ -35,6 +35,10 @@ export default function CompareScreen() {
   const [myName, setMyName] = useState('You');
   const [theirSightings, setTheirSightings] = useState<Sighting[]>([]);
   const [loading, setLoading] = useState(true);
+  // PL-1: their list is unreadable (private account this user doesn't follow).
+  // Normally unreachable (the profile hides the CompareCard), but deep links
+  // and stale navigation can land here.
+  const [locked, setLocked] = useState(false);
   // Each bucket collapses on header tap; all expanded by default.
   const [collapsed, setCollapsed] = useState<Record<BucketKey, boolean>>({ them: false, you: false, both: false });
   const toggleBucket = (k: BucketKey) => setCollapsed(prev => ({ ...prev, [k]: !prev[k] }));
@@ -45,13 +49,20 @@ export default function CompareScreen() {
     (async () => {
       setLoading(true);
       try {
-        const [fetched, prof, myProf] = await Promise.all([
-          getSightingsByUid(uid),
+        const [fetchResult, prof, myProf] = await Promise.all([
+          getSightingsByUid(uid).then(
+            (s) => ({ sightings: s, denied: false }),
+            (err) => {
+              if (isPermissionDenied(err)) return { sightings: [] as Sighting[], denied: true };
+              throw err;
+            },
+          ),
           getPublicProfile(uid),
           myUid ? getPublicProfile(myUid) : Promise.resolve(null),
         ]);
         if (!cancelled) {
-          setTheirSightings(fetched);
+          setTheirSightings(fetchResult.sightings);
+          setLocked(fetchResult.denied);
           setName(prof?.username ?? '');
           if (myProf?.username) setMyName(myProf.username);
         }
@@ -85,6 +96,13 @@ export default function CompareScreen() {
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={palette.leaf} />
           <Text style={styles.loadingText}>Comparing lists…</Text>
+        </View>
+      ) : locked ? (
+        <View style={styles.loadingWrap}>
+          <Ionicons name="lock-closed-outline" size={28} color={palette.inkSoft} />
+          <Text style={styles.loadingText}>
+            {`${name || 'This birder'}'s flock is private. Follow them first, then come compare.`}
+          </Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

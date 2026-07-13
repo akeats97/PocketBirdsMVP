@@ -10,7 +10,7 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'node:fs';
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 
 const ALEX = 'ZerkNpeAERSwmptlrPeboR5TASs2'; // admin allowlist [0]
 const OWNER = 'owner-uid';
@@ -119,6 +119,103 @@ await check('admin verify still works',
   assertSucceeds(updateDoc(doc(asAdmin, 'sightings/s1'), { verified: true, verifiedBy: ALEX, verifiedAt: 1 })));
 await check('admin cannot edit species',
   assertFails(updateDoc(doc(asAdmin, 'sightings/s1'), { birdName: 'Kelsey' })));
+
+// ── PL-1: public-by-default visibility ──────────────────────────────────────
+// Fresh uids so the seeds don't interact with the assertions above.
+const PUB = 'pub-owner-uid'; // users doc, no isPublic field (the default)
+const PRIV = 'priv-owner-uid'; // users doc with isPublic: false
+const GHOST = 'ghost-owner-uid'; // sighting but NO users doc (half-deleted account)
+
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, `users/${PUB}`), { username: 'pub' });
+  await setDoc(doc(db, `users/${PRIV}`), { username: 'priv', isPublic: false });
+  await setDoc(doc(db, 'sightings/pub1'), { userId: PUB, birdName: 'Rock Dove' });
+  await setDoc(doc(db, 'sightings/priv1'), { userId: PRIV, birdName: 'Sand Martin' });
+  await setDoc(doc(db, 'sightings/ghost1'), { userId: GHOST, birdName: 'Rock Dove' });
+  // FRIEND follows PRIV and GHOST (but not PUB — public needs no follow).
+  await setDoc(doc(db, `following/${FRIEND}/following/${PRIV}`), { timestamp: 1 });
+  await setDoc(doc(db, `following/${FRIEND}/following/${GHOST}`), { timestamp: 1 });
+});
+
+console.log('PL-1 sighting visibility (get):');
+await check('stranger reads a PUBLIC owner\'s sighting (isPublic absent)',
+  assertSucceeds(getDoc(doc(asStranger, 'sightings/pub1'))));
+await check('stranger CANNOT read a PRIVATE owner\'s sighting',
+  assertFails(getDoc(doc(asStranger, 'sightings/priv1'))));
+await check('follower reads a PRIVATE owner\'s sighting',
+  assertSucceeds(getDoc(doc(asFriend, 'sightings/priv1'))));
+await check('private owner reads their own sighting',
+  assertSucceeds(getDoc(doc(env.authenticatedContext(PRIV).firestore(), 'sightings/priv1'))));
+await check('admin reads a PRIVATE owner\'s sighting',
+  assertSucceeds(getDoc(doc(asAdmin, 'sightings/priv1'))));
+await check('stranger CANNOT read a sighting whose owner doc is missing',
+  assertFails(getDoc(doc(asStranger, 'sightings/ghost1'))));
+await check('follower reads a sighting whose owner doc is missing',
+  assertSucceeds(getDoc(doc(asFriend, 'sightings/ghost1'))));
+
+console.log('PL-1 sighting visibility (queries):');
+await check('stranger queries a PUBLIC owner\'s sightings (profile view)',
+  assertSucceeds(getDocs(query(collection(asStranger, 'sightings'), where('userId', '==', PUB)))));
+await check('stranger CANNOT query a PRIVATE owner\'s sightings',
+  assertFails(getDocs(query(collection(asStranger, 'sightings'), where('userId', '==', PRIV)))));
+await check('follower queries a PRIVATE owner\'s sightings',
+  assertSucceeds(getDocs(query(collection(asFriend, 'sightings'), where('userId', '==', PRIV)))));
+await check('stranger CANNOT run an app-wide species query (old global-first path)',
+  assertFails(getDocs(query(collection(asStranger, 'sightings'), where('birdName', '==', 'Rock Dove')))));
+await check('admin still runs an app-wide species query (verify recompute)',
+  assertSucceeds(getDocs(query(collection(asAdmin, 'sightings'), where('birdName', '==', 'Rock Dove')))));
+
+// The friend feed is one `in` query over every followed uid (up to Firestore's
+// cap of 30). Rules get()/exists() budgets are per-request, so a wide `in`
+// against the per-owner lookups above is the riskiest read in the app — probe
+// it at full width before trusting it in production.
+console.log('PL-1 friend feed (in queries):');
+await check('follower feed: in [public, private-followed]',
+  assertSucceeds(getDocs(query(collection(asFriend, 'sightings'), where('userId', 'in', [PUB, PRIV])))));
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  for (let i = 0; i < 28; i++) {
+    await setDoc(doc(db, `users/wide-${i}`), { username: `wide${i}`, isPublic: i % 2 === 1 ? false : true });
+    await setDoc(doc(db, `sightings/wide-s-${i}`), { userId: `wide-${i}`, birdName: 'Rock Dove' });
+    await setDoc(doc(db, `following/${FRIEND}/following/wide-${i}`), { timestamp: 1 });
+  }
+});
+// Rules allow ~20 get/exists lookups per query and an `in` is evaluated per
+// uid, so a full-width 30-uid feed query blows the budget (probed Jul 12 2026:
+// max 20 all-followed, max 10 when disjuncts fall through to the isPublic
+// get). The feed therefore chunks at 10 (FEED_RULES_CHUNK) — safe even if
+// every uid in a chunk needed both lookups. These two assertions pin the
+// constraint so a rules change that shifts the budget fails loudly here.
+const wideUids = [PUB, PRIV, ...Array.from({ length: 28 }, (_, i) => `wide-${i}`)];
+await check('follower feed: 30-uid in query still exceeds the rules lookup budget',
+  assertFails(getDocs(query(collection(asFriend, 'sightings'), where('userId', 'in', wideUids)))));
+await check('follower feed: 10-uid in query (FEED_RULES_CHUNK) passes',
+  assertSucceeds(getDocs(query(collection(asFriend, 'sightings'), where('userId', 'in', wideUids.slice(0, 10))))));
+
+console.log('PL-1 isPublic flag writes:');
+await check('owner flips their own account private',
+  assertSucceeds(setDoc(doc(env.authenticatedContext(PUB).firestore(), `users/${PUB}`), { isPublic: false }, { merge: true })));
+await check('non-boolean isPublic denied',
+  assertFails(setDoc(doc(env.authenticatedContext(PUB).firestore(), `users/${PUB}`), { isPublic: 'yes' }, { merge: true })));
+await check('cannot flip someone else\'s visibility',
+  assertFails(setDoc(doc(asStranger, `users/${PUB}`), { isPublic: true }, { merge: true })));
+// PUB is private now — re-check the read flips with it.
+await check('stranger loses read access after the owner goes private',
+  assertFails(getDoc(doc(asStranger, 'sightings/pub1'))));
+
+console.log('PL-1 communityPhotos projection:');
+await env.withSecurityRulesDisabled(async (ctx) => {
+  await setDoc(doc(ctx.firestore(), 'communityPhotos/pub1'), {
+    species: 'Rock Dove', photoUrl: 'https://x/y.jpg', uid: PUB, username: 'pub',
+  });
+});
+await check('signed-in user reads the community gallery',
+  assertSucceeds(getDocs(query(collection(asStranger, 'communityPhotos'), where('species', '==', 'Rock Dove')))));
+await check('client cannot write a communityPhotos doc',
+  assertFails(setDoc(doc(asStranger, 'communityPhotos/forged'), { species: 'Kelsey', photoUrl: 'https://x/z.jpg', uid: STRANGER })));
+await check('client cannot delete a communityPhotos doc',
+  assertFails(deleteDoc(doc(asStranger, 'communityPhotos/pub1'))));
 
 await env.cleanup();
 console.log(`\n${passed} assertions passed${process.exitCode ? ' (WITH FAILURES)' : ''}`);

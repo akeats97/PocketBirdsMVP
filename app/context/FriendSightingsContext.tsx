@@ -110,25 +110,18 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
         return map;
       }, {} as Record<string, string>);
       
-      // Query sightings where the user is one of the people we follow
-      const sightingsQuery = query(
-        collection(db, 'sightings'),
-        where('userId', 'in', userIds)
-      );
-      // Bootstrap query: newest 50 only. On a cold cache (first-ever launch /
-      // reinstall) the full query above must download every friend sighting
-      // before its first snapshot delivers, which is the "chunky first open"
-      // from the vc31 soak. This bounded query returns fast and paints the top
-      // of the feed; the full snapshot replaces it when it lands. The full
-      // list stays authoritative because the Friends-tab stats, the 1ST
-      // badges, and Hep all need complete history. Uses the existing
-      // (userId ASC, date DESC) composite index.
-      const bootstrapQuery = query(
-        collection(db, 'sightings'),
-        where('userId', 'in', userIds),
-        orderBy('date', 'desc'),
-        limit(50)
-      );
+      // PL-1 rules budget: the sightings read rule spends up to two document
+      // lookups per `in` value and Firestore rules allow ~20 lookups per query
+      // (probed in tests/rules.test.mjs), so the feed splits the followed uids
+      // into chunks of 10 — safe even if every uid in a chunk needs both
+      // lookups — and merges the snapshots. Side effect: the old hard 30-uid
+      // `in` cap (WORK_QUEUE Wrinkle A) is gone; more follows just means more
+      // chunks.
+      const FEED_RULES_CHUNK = 10;
+      const uidChunks: string[][] = [];
+      for (let i = 0; i < userIds.length; i += FEED_RULES_CHUNK) {
+        uidChunks.push(userIds.slice(i, i + FEED_RULES_CHUNK));
+      }
 
       // Tear down any previous sightings listeners before creating new ones.
       sightingsUnsubRef.current?.();
@@ -181,48 +174,76 @@ function FriendSightingsProvider({ children }: { children: React.ReactNode }) {
         return sightings;
       };
 
-      // Once the full snapshot has delivered, the bootstrap listener is
-      // redundant (and must never overwrite the full list with 50 docs).
-      let fullDelivered = false;
+      // Per-chunk results, merged on every snapshot. Each chunk keeps the old
+      // dual-listener shape: a bounded bootstrap query (newest 50; on a cold
+      // cache the full query must download every friend sighting before its
+      // first snapshot delivers — the "chunky first open" from the vc31 soak)
+      // paints fast, then the full listener replaces it. The full list stays
+      // authoritative because the Friends-tab stats, the 1ST badges, and Hep
+      // all need complete history. Uses the existing (userId ASC, date DESC)
+      // composite index. A chunk's bootstrap list is used only until its full
+      // list delivers, and must never overwrite it.
+      const fullResults = new Map<number, FriendSighting[]>();
+      const bootstrapResults = new Map<number, FriendSighting[]>();
 
-      const bootstrapUnsubscribe = onSnapshot(
-        bootstrapQuery,
-        (snapshot) => {
-          if (fullDelivered) return;
-          console.log(`[friendSightings] bootstrap snapshot size=${snapshot.size} fromCache=${snapshot.metadata.fromCache}`);
-          setFriendSightings(buildSightings(snapshot));
-          // First feed data is in: the Journal can drop its loader now.
-          setFriendsReady(true);
-        },
-        (error) => {
-          // Non-fatal: the full listener below still covers the feed.
-          console.error('Error fetching bootstrap sightings:', error);
+      const publishMerged = () => {
+        const merged: FriendSighting[] = [];
+        for (let i = 0; i < uidChunks.length; i++) {
+          merged.push(...(fullResults.get(i) ?? bootstrapResults.get(i) ?? []));
         }
-      );
-
-      // Set up the real-time listener for the full history
-      const unsubscribe = onSnapshot(
-        sightingsQuery,
-        (snapshot) => {
-          console.log(`[friendSightings] snapshot size=${snapshot.size} fromCache=${snapshot.metadata.fromCache}`);
-          fullDelivered = true;
-          bootstrapUnsubscribe();
-          setFriendSightings(buildSightings(snapshot));
-          // First feed data is in: the Journal can drop its loader now.
-          setFriendsReady(true);
-        },
-        (error) => {
-          console.error('Error fetching sightings:', error);
-          // Keep whatever was last loaded; never inject placeholder data.
-          setFriendsReady(true);
-        }
-      );
-
-      // Remember both so logout / re-fetch / unmount can tear them down.
-      sightingsUnsubRef.current = () => {
-        bootstrapUnsubscribe();
-        unsubscribe();
+        merged.sort((a, b) => b.date.getTime() - a.date.getTime());
+        setFriendSightings(merged);
+        // First feed data is in: the Journal can drop its loader now.
+        setFriendsReady(true);
       };
+
+      const unsubs: (() => void)[] = [];
+      uidChunks.forEach((chunk, idx) => {
+        const fullQuery = query(
+          collection(db, 'sightings'),
+          where('userId', 'in', chunk)
+        );
+        const bootstrapQuery = query(
+          collection(db, 'sightings'),
+          where('userId', 'in', chunk),
+          orderBy('date', 'desc'),
+          limit(50)
+        );
+
+        const bootstrapUnsubscribe = onSnapshot(
+          bootstrapQuery,
+          (snapshot) => {
+            if (fullResults.has(idx)) return;
+            console.log(`[friendSightings] bootstrap chunk ${idx} size=${snapshot.size} fromCache=${snapshot.metadata.fromCache}`);
+            bootstrapResults.set(idx, buildSightings(snapshot));
+            publishMerged();
+          },
+          (error) => {
+            // Non-fatal: the full listener below still covers the feed.
+            console.error('Error fetching bootstrap sightings:', error);
+          }
+        );
+
+        const unsubscribe = onSnapshot(
+          fullQuery,
+          (snapshot) => {
+            console.log(`[friendSightings] chunk ${idx} snapshot size=${snapshot.size} fromCache=${snapshot.metadata.fromCache}`);
+            fullResults.set(idx, buildSightings(snapshot));
+            bootstrapUnsubscribe();
+            publishMerged();
+          },
+          (error) => {
+            console.error('Error fetching sightings:', error);
+            // Keep whatever was last loaded; never inject placeholder data.
+            setFriendsReady(true);
+          }
+        );
+
+        unsubs.push(bootstrapUnsubscribe, unsubscribe);
+      });
+
+      // Remember them all so logout / re-fetch / unmount can tear them down.
+      sightingsUnsubRef.current = () => unsubs.forEach(u => u());
     } catch (error) {
       console.error('Error setting up sightings listener:', error);
       // Listener never got established — don't leave the Journal loader hanging.

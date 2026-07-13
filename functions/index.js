@@ -457,6 +457,138 @@ exports.onSightingWriteGlobalFirst = onDocumentWritten('sightings/{sightingId}',
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+// PL-1: public-by-default visibility
+// ─────────────────────────────────────────────────────────────────────────
+
+// The tightened sightings read rule can't prove an app-wide "has anyone ever
+// logged this species" query for non-admins, so the Add-time global-first
+// check calls this instead (see sightingService.isGlobalFirstSpecies). Same
+// semantics as the old client query: exact-name match, empty = caller would
+// be the app first. Still best-effort and racy — onSightingWriteGlobalFirst
+// stays the authority.
+exports.checkGlobalFirst = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in first.');
+  }
+  const birdName = request.data && request.data.birdName;
+  if (typeof birdName !== 'string' || !birdName.trim()) {
+    throw new HttpsError('invalid-argument', 'birdName is required.');
+  }
+  const snap = await admin.firestore()
+    .collection('sightings')
+    .where('birdName', '==', birdName)
+    .limit(1)
+    .get();
+  return { isFirst: snap.empty };
+});
+
+// communityPhotos/{sightingId}: the public projection behind the Dex Community
+// tab. Holds only public-safe fields (never notes, never GPS coordinates) and
+// only for PUBLIC accounts — the projection, not the rules, is what keeps a
+// private user's photos out of the app-wide gallery query. Maintained here on
+// every sighting write and rebuilt on visibility/username changes below;
+// functions/backfillCommunityPhotos.js seeds it once.
+const COMMUNITY_EXCLUDED_SPECIES = new Set(['Bug Report', 'Feature Request']);
+
+function communityEligible(sighting) {
+  return !!sighting
+    && !!sighting.photoUrl
+    && !!sighting.userId
+    && !!sighting.birdName
+    && !COMMUNITY_EXCLUDED_SPECIES.has(sighting.birdName)
+    && sighting.hidden !== true; // PL-2 soft-hide pulls the photo too
+}
+
+function communityProjection(sighting, username) {
+  return {
+    species: sighting.birdName,
+    photoUrl: sighting.photoUrl,
+    uid: sighting.userId,
+    username: username || '',
+    location: sighting.location || '', // freeform label only — no coordinates
+    date: sighting.date || null,
+    createdAt: sighting.createdAt || null,
+  };
+}
+
+async function deleteCommunityPhotosForUser(db, uid) {
+  const snap = await db.collection('communityPhotos').where('uid', '==', uid).get();
+  if (snap.empty) return 0;
+  const docs = snap.docs;
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = db.batch();
+    docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+  return docs.length;
+}
+
+exports.onSightingWriteCommunityPhoto = onDocumentWritten('sightings/{sightingId}', async (event) => {
+  const after = event.data.after.exists ? event.data.after.data() : null;
+  const db = admin.firestore();
+  const ref = db.collection('communityPhotos').doc(event.params.sightingId);
+  try {
+    if (!communityEligible(after)) {
+      await ref.delete(); // no-op when absent
+      return;
+    }
+    const ownerSnap = await db.collection('users').doc(after.userId).get();
+    const ownerPublic = ownerSnap.exists && ownerSnap.data().isPublic !== false;
+    if (!ownerPublic) {
+      await ref.delete();
+      return;
+    }
+    await ref.set(communityProjection(after, ownerSnap.data().username));
+  } catch (error) {
+    console.error('onSightingWriteCommunityPhoto failed for', event.params.sightingId, error);
+  }
+});
+
+// Visibility / username changes re-shape the whole projection for that user:
+// private (or account deleted) drops every doc; public (re)builds them, which
+// also refreshes the denormalized username. Guarded to those two fields —
+// user docs are written constantly (push tokens, prefs) and must not trigger
+// a rebuild each time.
+exports.onUserWriteCommunityPhotos = onDocumentWritten('users/{uid}', async (event) => {
+  const before = event.data.before.exists ? event.data.before.data() : null;
+  const after = event.data.after.exists ? event.data.after.data() : null;
+  const beforePublic = before ? before.isPublic !== false : null;
+  const afterPublic = after ? after.isPublic !== false : null;
+  if (before && after
+      && beforePublic === afterPublic
+      && before.username === after.username) {
+    return;
+  }
+  const uid = event.params.uid;
+  const db = admin.firestore();
+  try {
+    if (!after || afterPublic === false) {
+      const removed = await deleteCommunityPhotosForUser(db, uid);
+      if (removed) console.log(`communityPhotos: removed ${removed} for ${uid} (private/deleted)`);
+      return;
+    }
+    // Public (newly public, new account, or renamed): rebuild from their
+    // sightings. Set is idempotent; ineligible strays are handled by the
+    // sighting-level trigger above.
+    const snap = await db.collection('sightings').where('userId', '==', uid).get();
+    const eligible = snap.docs.filter((d) => communityEligible(d.data()));
+    for (let i = 0; i < eligible.length; i += 400) {
+      const batch = db.batch();
+      eligible.slice(i, i + 400).forEach((d) => {
+        batch.set(
+          db.collection('communityPhotos').doc(d.id),
+          communityProjection(d.data(), after.username)
+        );
+      });
+      await batch.commit();
+    }
+    if (eligible.length) console.log(`communityPhotos: (re)built ${eligible.length} for ${uid}`);
+  } catch (error) {
+    console.error('onUserWriteCommunityPhotos failed for', uid, error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 // Hoot & Comments — social engagement
 // ─────────────────────────────────────────────────────────────────────────
 

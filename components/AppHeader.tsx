@@ -13,6 +13,7 @@ import { CURRENT_RELEASE_NAME } from '../constants/release';
 import { BottomSheet } from './BottomSheet';
 import { DeleteAccountSheet } from './DeleteAccountSheet';
 import { openEditProfile } from './profile/EditProfileSheet';
+import { openVisibilitySheet } from './profile/VisibilitySheet';
 
 // App-wide top bar for the tab screens.
 //
@@ -119,6 +120,18 @@ export function AppHeader({ youActions }: { youActions?: boolean }) {
                 // modal presented while another is still dismissing, which is why
                 // Edit "did nothing" on iOS at the old 280ms.
                 setTimeout(openEditProfile, 400);
+              }}
+            />
+            <MenuRow
+              icon="eye-outline"
+              label="Account visibility"
+              sub="Public or private flock"
+              onPress={() => {
+                setMenuOpen(false);
+                // Same stagger as Edit profile: the sheet is hosted by the You
+                // tab's ProfileView, and iOS drops a modal presented while
+                // another is still dismissing.
+                setTimeout(openVisibilitySheet, 400);
               }}
             />
             <MenuRow

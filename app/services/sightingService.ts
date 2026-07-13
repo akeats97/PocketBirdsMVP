@@ -1,6 +1,15 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, getDocsFromServer, limit, orderBy, query, setDoc, Timestamp, updateDoc, where } from '@react-native-firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, setDoc, Timestamp, updateDoc, where } from '@react-native-firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 import { Sighting } from '../types';
+import { callCloudFunction } from './functionsClient';
+
+// True when a Firestore error is the rules saying "no" — the expected outcome
+// when reading a PRIVATE, non-followed user's sightings (PL-1). Callers use it
+// to render the private-profile stub instead of an error state.
+export function isPermissionDenied(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code ?? '';
+  return code === 'firestore/permission-denied' || code === 'permission-denied';
+}
 
 // Mint a stable Firestore document id up front, so a sighting carries the SAME
 // id locally and in Firestore from the moment it's created. This is what makes
@@ -130,8 +139,10 @@ export async function getUserSightingsFromFirebase(): Promise<Sighting[]> {
 // Get any user's sightings by uid (for public profiles). Unlike
 // getUserSightingsFromFirebase (which is scoped to the signed-in user via a
 // live cache path), this is a one-shot read of another person's list — used
-// when you navigate into their profile. Firestore rules allow any signed-in
-// user to read the `sightings` collection.
+// when you navigate into their profile. Under the PL-1 rules this succeeds for
+// public owners (the default) and owners you follow; for a PRIVATE non-followed
+// owner it throws permission-denied — check with isPermissionDenied and render
+// the private stub, not an error.
 export async function getSightingsByUid(uid: string): Promise<Sighting[]> {
   try {
     const sightingsRef = collection(db, 'sightings');
@@ -193,48 +204,36 @@ export interface CommunityPhoto {
   date: Date;
 }
 
-// Photos of `birdName` from every birder. Pass `excludeUid` to drop one
+// Photos of `birdName` from every PUBLIC birder. Pass `excludeUid` to drop one
 // contributor (e.g. the signed-in user) — omit it for a full gallery that
-// includes your own photos (WORK_QUEUE Q-13). Uses a single equality filter (no
-// composite index needed — there is no birdName+date index) and sorts
-// client-side. Capped at `max` newest. Best effort: throws on failure so the
-// caller can show an error.
+// includes your own photos (WORK_QUEUE Q-13). Reads the Cloud-Function-
+// maintained `communityPhotos` projection (PL-1), NOT the sightings collection:
+// the tightened rules can't prove an app-wide sightings query, and the
+// projection is what keeps private users' photos out. Username comes
+// denormalized on the projection doc, so no per-contributor reads. Sorts
+// client-side (single equality filter, no composite index). Capped at `max`
+// newest. Best effort: throws on failure so the caller can show an error.
 export async function getCommunityPhotosForSpecies(
   birdName: string,
   excludeUid?: string,
   max = 30,
 ): Promise<CommunityPhoto[]> {
-  const sightingsRef = collection(db, 'sightings');
-  const snap = await getDocs(query(sightingsRef, where('birdName', '==', birdName)));
+  const photosRef = collection(db, 'communityPhotos');
+  const snap = await getDocs(query(photosRef, where('species', '==', birdName)));
 
-  const rows = snap.docs
+  return snap.docs
     .map(d => ({ id: d.id, data: d.data() }))
-    .filter(({ data }) => data.photoUrl && data.userId && data.userId !== excludeUid)
+    .filter(({ data }) => data.photoUrl && data.uid && data.uid !== excludeUid)
     .map(({ id, data }) => ({
       id,
-      uid: data.userId as string,
+      uid: data.uid as string,
+      username: (data.username as string) ?? '',
       photoUrl: data.photoUrl as string,
       location: (data.location as string) ?? '',
-      date: data.date?.toDate?.() ?? new Date(data.date),
+      date: data.date?.toDate?.() ?? new Date(),
     }))
     .sort((a, b) => b.date.getTime() - a.date.getTime())
     .slice(0, max);
-
-  // Resolve each distinct contributor's username once.
-  const uids = [...new Set(rows.map(r => r.uid))];
-  const names = new Map<string, string>();
-  await Promise.all(
-    uids.map(async uid => {
-      try {
-        const u = await getDoc(doc(db, 'users', uid));
-        names.set(uid, u.exists() ? (u.data().username ?? '') : '');
-      } catch {
-        names.set(uid, '');
-      }
-    }),
-  );
-
-  return rows.map(r => ({ ...r, username: names.get(r.uid) ?? '' }));
 }
 
 // Reject a promise if it doesn't settle within `ms`. Used to cap the
@@ -255,16 +254,17 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 // casing is consistent). Best effort: requires connectivity; throws on failure
 // so callers can default to "not first".
 //
-// getDocsFromServer (NOT getDocs) is deliberate: on a flaky connection getDocs
-// can resolve from an empty local cache, which would falsely report a global
-// first for a species that's actually been logged before. A server-only read
-// throws when the server is unreachable, so we only ever CLAIM a global first
-// after definitively confirming zero matches against Firestore.
+// Runs through the checkGlobalFirst callable (PL-1): the app-wide sightings
+// query it needs is no longer provable under the tightened read rules, so the
+// scan happens server-side with Admin privileges. A callable is also
+// inherently a server read — the old getDocsFromServer "never claim a first
+// from an empty local cache" property comes for free.
 export async function isGlobalFirstSpecies(birdName: string): Promise<boolean> {
-  const sightingsRef = collection(db, 'sightings');
-  const q = query(sightingsRef, where('birdName', '==', birdName), limit(1));
-  const snap = await withTimeout(getDocsFromServer(q), 5000);
-  return snap.empty;
+  const res = await withTimeout(
+    callCloudFunction<{ isFirst: boolean }>('checkGlobalFirst', { birdName }),
+    5000
+  );
+  return res.isFirst;
 }
 
 // Update a sighting in Firebase

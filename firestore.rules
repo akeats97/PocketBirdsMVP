@@ -55,8 +55,15 @@ service cloud.firestore {
                || (request.resource.data.bio is string
                    && request.resource.data.bio.size() <= 80);
       }
+      // PL-1 visibility flag: absent (or true) = public, false = private. Only
+      // the type is enforced here — the owner may flip it freely; the sightings
+      // read rule below is what gives it teeth.
+      function isPublicOk() {
+        return !('isPublic' in request.resource.data)
+               || request.resource.data.isPublic is bool;
+      }
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && uid == myUid() && bioOk();
+      allow create, update: if isSignedIn() && uid == myUid() && bioOk() && isPublicOk();
       allow delete: if isSignedIn() && uid == myUid();
 
       // Per-friend notification preferences, owned by the {uid} user.
@@ -98,10 +105,40 @@ service cloud.firestore {
     }
 
     // Sightings (and the bug-report / feature-request entries that ride the
-    // same pipeline). Owner-only writes; any signed-in user may read (the app
-    // shows friends' sightings and filters by the follow graph client-side).
+    // same pipeline). Owner-only writes. Reads are the PL-1 core: a sighting is
+    // readable by its owner, an admin, anyone while the owner is public
+    // (the default: isPublic absent or true), or a follower of the owner.
+    //
+    // Written against resource.data.userId so LIST queries stay provable: every
+    // client query filters on userId (== or in), which binds the owner per
+    // disjunct. App-wide queries (e.g. the old client-side global-first scan by
+    // birdName) are NOT provable for non-admins and get permission-denied —
+    // that path moved into the checkGlobalFirst callable. Admins pass without
+    // any doc lookups, which keeps the verify-time recompute query working.
+    //
+    // ownerIsPublic uses Map.get with a default so accounts that predate the
+    // flag read as public instead of erroring; a missing user doc falls through
+    // to the follow check (error-absorbing ||), so a half-deleted account's
+    // sightings degrade to follower-only rather than leaking.
     match /sightings/{sightingId} {
-      allow read: if isSignedIn();
+      function ownerIsPublic(ownerUid) {
+        return get(/databases/$(database)/documents/users/$(ownerUid))
+                 .data.get('isPublic', true) != false;
+      }
+      function readerFollows(ownerUid) {
+        return exists(/databases/$(database)/documents/following/$(myUid())/following/$(ownerUid));
+      }
+      // Disjunct order matters for the lookup budget: rules allow only ~10
+      // get/exists calls per query, an `in` query is evaluated per uid, and the
+      // friend feed queries `userId in [followed…]` — so the follow check goes
+      // FIRST (1 exists, short-circuiting the get) and the feed must chunk its
+      // `in` width (see FEED_RULES_CHUNK in FriendSightingsContext).
+      allow read: if isSignedIn() && (
+        resource.data.userId == myUid()
+        || isAdmin()
+        || readerFollows(resource.data.userId)
+        || ownerIsPublic(resource.data.userId)
+      );
       allow create: if isSignedIn() && request.resource.data.userId == myUid();
       // Owner may edit their own sighting, but NOT the verification fields —
       // those are admin-only, so a user can't self-confirm a sighting (e.g.
@@ -212,6 +249,17 @@ service cloud.firestore {
           allow delete: if hooterUid == myUid();
         }
       }
+    }
+
+    // Public gallery projection (PL-1). The Dex Community tab needs an app-wide
+    // "photos of this species" query, which the tightened sightings rule can't
+    // prove — so Cloud Functions maintain a projection holding only public-safe
+    // fields (species, photo, contributor, location label, dates — never notes
+    // or GPS coordinates) and only for public accounts. World-(signed-in)-
+    // readable; written exclusively by the Admin SDK, which bypasses rules.
+    match /communityPhotos/{sightingId} {
+      allow read: if isSignedIn();
+      allow write: if false;
     }
 
     // Moderation reports (PL-2). Any signed-in user may file one about a user

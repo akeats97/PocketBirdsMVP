@@ -21,9 +21,10 @@ import { blockUser, unblockUser } from '../../app/services/moderationService';
 import { BottomSheet } from '../BottomSheet';
 import { ReportSheet } from '../ReportSheet';
 import { EditProfileSheet, openEditProfile } from './EditProfileSheet';
+import { VisibilitySheet } from './VisibilitySheet';
 import { DEFAULT_MODE, NotificationMode, setPref, subscribeToPrefs } from '../../app/services/notificationPrefsService';
 import { followUser, getFollowCounts, getPublicProfile, isFollowing, PublicProfile, unfollowUser } from '../../app/services/userService';
-import { getSightingsByUid } from '../../app/services/sightingService';
+import { getSightingsByUid, isPermissionDenied } from '../../app/services/sightingService';
 import { FriendSighting, Sighting } from '../../app/types';
 import { sightingCount, speciesSet } from '../../app/utils/compareLists';
 import { groupSightingsByDay } from '../../app/utils/groupSightingsByDay';
@@ -81,6 +82,10 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
   const [modSheetOpen, setModSheetOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const isBlocked = !!uid && blockedUids.has(uid);
+  // PL-1: true when the sightings read came back permission-denied — a private
+  // account this user doesn't follow. Renders the stub (identity + Follow)
+  // instead of journal/dex/stats.
+  const [locked, setLocked] = useState(false);
 
   // The list this profile renders: my own (live context) when self, else the
   // fetched list.
@@ -102,17 +107,27 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
         } else {
           // Fire all three reads at once — the profile meta no longer waits on
           // the sightings fetch. If the user doc has no join date, fill it from
-          // the earliest fetched sighting afterward.
-          const [fetched, followState, prof] = await Promise.all([
-            getSightingsByUid(uid),
+          // the earliest fetched sighting afterward. A permission-denied on the
+          // sightings read is NOT an error: it's a private account this user
+          // doesn't follow (PL-1) — render the stub, keep the profile meta.
+          const [sightingsResult, followState, prof] = await Promise.all([
+            getSightingsByUid(uid).then(
+              (s) => ({ sightings: s, denied: false }),
+              (err) => {
+                if (isPermissionDenied(err)) return { sightings: [] as Sighting[], denied: true };
+                throw err;
+              },
+            ),
             isFollowing(uid),
             getPublicProfile(uid),
           ]);
+          const fetched = sightingsResult.sightings;
           if (prof && !prof.joinDate && fetched.length) {
             prof.joinDate = fetched.reduce((min, s) => (s.date < min ? s.date : min), fetched[0].date);
           }
           if (!cancelled) {
             setTheirSightings(fetched);
+            setLocked(sightingsResult.denied);
             setFollowing(followState);
             setProfile(prof);
           }
@@ -227,6 +242,23 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
       else await unfollowUser(uid);
       loadFollowCounts(); // their follower count just changed
       refreshFriends(); // rebuild my flock + feed so other tabs update live
+      if (next && locked) {
+        // Following a private account unlocks it (the rules check the follow
+        // edge that just landed) — swap the stub for the real profile.
+        try {
+          const fetched = await getSightingsByUid(uid);
+          setTheirSightings(fetched);
+          setLocked(false);
+        } catch (err) {
+          // Edge not visible to rules yet; leave the stub, it resolves on the
+          // next visit.
+          console.warn('Post-follow sightings fetch failed:', err);
+        }
+      } else if (!next && profile && !profile.isPublic) {
+        // Unfollowing a private account re-locks it immediately.
+        setTheirSightings([]);
+        setLocked(true);
+      }
     } catch (err) {
       console.error('Follow toggle failed:', err);
       setFollowing(!next); // revert
@@ -363,7 +395,9 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
         </View>
       )}
 
-      {/* Stat strip */}
+      {/* Stat strip — hidden on a locked (private, non-followed) profile:
+          zeroes would read as "no sightings", which is exactly wrong. */}
+      {!locked && (
       <View style={styles.statWrap}>
         <HardShadow offset={4} borderRadius={radius.card}>
           <View style={styles.statStrip}>
@@ -382,9 +416,11 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
           </View>
         </HardShadow>
       </View>
+      )}
 
-      {/* Comparison module — non-self only */}
-      {!isSelf && (
+      {/* Comparison module — non-self only, and never on a locked profile
+          (their list is unreadable, so the Venn would be a lie). */}
+      {!isSelf && !locked && (
         <View style={styles.compareWrap}>
           <CompareCard
             me={mySightings}
@@ -396,12 +432,14 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
       )}
 
       {/* Segmented control */}
+      {!locked && (
       <View style={styles.segmentWrap}>
         <View style={styles.segment}>
           <SegmentButton label="Field Journal" active={tab === 'journal'} onPress={() => setTab('journal')} />
           <SegmentButton label="Bird Dex" active={tab === 'dex'} onPress={() => setTab('dex')} />
         </View>
       </View>
+      )}
     </View>
   );
 
@@ -429,6 +467,16 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={palette.leaf} />
         </View>
+      ) : locked ? (
+        // PL-1 private stub: identity + Follow stay, with a quiet explainer
+        // where the journal would be. Following unlocks in place.
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {chrome}
+          <EmptyCard
+            title="This flock is private."
+            subtitle={`Follow ${name ? `@${name}` : 'this birder'} to see their sightings and Bird Dex.`}
+          />
+        </ScrollView>
       ) : tab === 'journal' ? (
         // Journal is virtualized (a user can have hundreds of image cards).
         <SectionList
@@ -546,6 +594,16 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
           bio={profile?.bio ?? ''}
           onSaved={(newBio) =>
             setProfile(p => (p ? { ...p, bio: newBio || undefined } : p))
+          }
+        />
+      )}
+
+      {/* Account visibility (self only, PL-1) — opened by the AppHeader ⋯ menu. */}
+      {isSelf && (
+        <VisibilitySheet
+          isPublic={profile?.isPublic !== false}
+          onSaved={(isPublic) =>
+            setProfile(p => (p ? { ...p, isPublic } : p))
           }
         />
       )}
