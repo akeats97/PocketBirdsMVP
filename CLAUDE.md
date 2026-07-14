@@ -133,6 +133,10 @@ Run from `/Users/alexkeats/Desktop/PocketBirds4/`. The Play Store listing/keysto
 - Kick off builds (see `release-build` skill) once a batch of changes is ready
 - Current git branch: `master` (push_notifs merged Apr 19 2026)
 
+## Development rules (Alex, Jul 14 2026)
+- **The app name is spelled "PocketBirds"** — one word, capital P and capital B — in ALL user-facing copy, docs, release notes, and store text. Never "Pocket Birds", "Pocketbirds", or "pocket birds". (Styled/uppercase display text like a nav label renders it "POCKETBIRDS".)
+- **Alex WRITES the user-facing copy — ask, don't draft.** When a change needs a new or reworded string a user can see (labels, buttons, sheets, empty states, alerts, push notification text, release notes), STOP before writing it: tell Alex where the string appears and what it needs to communicate, and let him write it himself, uninfluenced — do NOT propose wording first (seeing a draft anchors him and crowds out his own voice/character). Placeholder text may be used to keep a build compiling, marked clearly (e.g. `TODO(copy-alex)`), and must be flagged for replacement before commit. Only polish or draft wording if Alex explicitly asks. Code comments and commit messages are exempt.
+
 ---
 
 ## Dev Loop (testing on phone / iOS Simulator)

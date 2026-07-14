@@ -101,7 +101,7 @@ export default function CompareScreen() {
         <View style={styles.loadingWrap}>
           <Ionicons name="lock-closed-outline" size={28} color={palette.inkSoft} />
           <Text style={styles.loadingText}>
-            {`${name || 'This birder'}'s flock is private. Follow them first, then come compare.`}
+            {`${name || 'This birder'}'s sightings are private. Follow them first, then come compare.`}
           </Text>
         </View>
       ) : (

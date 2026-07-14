@@ -233,7 +233,7 @@ export default function SightingDetailScreen() {
   const onShare = async () => {
     try {
       await Share.share({
-        message: `Help me identify this Mystery Bird on Pocket Birds!`,
+        message: `Help me identify this Mystery Bird on PocketBirds!`,
       });
     } catch (e) {
       console.error('Error sharing:', e);

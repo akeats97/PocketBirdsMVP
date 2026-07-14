@@ -452,7 +452,7 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
         <View style={[styles.navRow, { paddingTop: topInset + space.sm }]}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={styles.navLeft}>
             <Ionicons name="chevron-back" size={20} color={palette.ink} />
-            <Text style={styles.navLabel}>{isSelf ? 'POCKET BIRDS' : 'FRIENDS'}</Text>
+            <Text style={styles.navLabel}>{isSelf ? 'POCKETBIRDS' : 'FRIENDS'}</Text>
           </Pressable>
           {isSelf && (
             <Pressable onPress={handleLogout} hitSlop={8} style={styles.logoutPill}>
@@ -473,7 +473,7 @@ export default function ProfileView({ uid, embedded }: ProfileViewProps) {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {chrome}
           <EmptyCard
-            title="This flock is private."
+            title="This account is private."
             subtitle={`Follow ${name ? `@${name}` : 'this birder'} to see their sightings and Bird Dex.`}
           />
         </ScrollView>

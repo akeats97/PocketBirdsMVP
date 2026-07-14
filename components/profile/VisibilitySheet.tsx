@@ -92,12 +92,12 @@ export function VisibilitySheet({ isPublic, onSaved }: {
   return (
     <BottomSheet visible={visible} onClose={close}>
       <View style={[styles.sheet, { paddingBottom: insets.bottom + space.xl }]}>
-        <Text style={styles.title}>Who can see your flock?</Text>
+        <Text style={styles.title}>Who can see your sightings?</Text>
 
         <OptionRow
           icon="earth-outline"
           label="Public"
-          sub="Any birder on Pocket Birds can see your sightings and Bird Dex."
+          sub="Any birder on PocketBirds can see your sightings and Bird Dex. Your photos join each species' community gallery and help other birders ID what they've spotted."
           selected={isPublic}
           disabled={saving}
           onPress={() => pick(true)}
@@ -110,11 +110,6 @@ export function VisibilitySheet({ isPublic, onSaved }: {
           disabled={saving}
           onPress={() => pick(false)}
         />
-
-        <Text style={styles.footnote}>
-          Either way, nothing is visible outside the app. The birds have not
-          consented to the open internet.
-        </Text>
       </View>
     </BottomSheet>
   );
@@ -164,10 +159,5 @@ const styles = StyleSheet.create({
     ...type.bodyS,
     color: palette.inkSoft,
     marginTop: 1,
-  },
-  footnote: {
-    ...type.bodyS,
-    color: palette.muted,
-    marginTop: space.md,
   },
 });

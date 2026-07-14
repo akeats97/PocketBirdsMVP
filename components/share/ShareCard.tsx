@@ -163,7 +163,7 @@ export const ShareCard = React.forwardRef<View, Props>(({ data, onArtReady }, re
               <View style={[styles.statusDot, { backgroundColor: status.bg }]} />
               <Text style={styles.statusLabel}>{data.statusLabel}</Text>
             </View>
-            <Text style={styles.brand}>Pocket Birds</Text>
+            <Text style={styles.brand}>PocketBirds</Text>
           </View>
         </View>
       </View>

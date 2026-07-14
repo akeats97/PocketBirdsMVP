@@ -125,7 +125,7 @@ export function AppHeader({ youActions }: { youActions?: boolean }) {
             <MenuRow
               icon="eye-outline"
               label="Account visibility"
-              sub="Public or private flock"
+              sub="Public or private sightings"
               onPress={() => {
                 setMenuOpen(false);
                 // Same stagger as Edit profile: the sheet is hosted by the You

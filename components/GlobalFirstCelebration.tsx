@@ -60,7 +60,7 @@ export default function GlobalFirstCelebration({ visible, birdName, onDismiss }:
                   <Text style={styles.eyebrow}>GLOBAL FIRST</Text>
                 </View>
                 <Text style={styles.bird}>{birdName}</Text>
-                <Text style={styles.tagline}>You&apos;re the first on Pocket Birds to log it.</Text>
+                <Text style={styles.tagline}>You&apos;re the first on PocketBirds to log it.</Text>
                 <Text style={styles.dismiss}>tap anywhere to keep birding</Text>
               </View>
             </HoloRing>

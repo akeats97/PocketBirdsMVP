@@ -208,7 +208,7 @@ function CommunityZone({ photos, loading, onOpen }: {
             <Ionicons name="camera" size={24} color={palette.inkSoft} />
             <Text style={styles.communityEmptyTitle}>No community photos yet.</Text>
             <Text style={styles.communityEmptyBody}>
-              A rarely-photographed bird. Log it with a photo and you&apos;ll be the first on Pocket Birds.
+              A rarely-photographed bird. Log it with a photo and you&apos;ll be the first on PocketBirds.
             </Text>
           </View>
         </HardShadow>
