@@ -897,7 +897,7 @@ exports.onProposalAdded = onDocumentCreated('sightings/{sightingId}/proposals/{p
     });
     await pushSocial(sighting.userId, {
       title: `${proposal.username} proposed an ID 🦉`,
-      body: `${proposal.species} — for your Mystery Bird`,
+      body: `${proposal.species}, for your Mystery Bird`,
       data: { type: 'proposal', sightingId, species: proposal.species },
     });
   } catch (error) {
@@ -982,7 +982,7 @@ exports.onProposalAccepted = onDocumentUpdated('sightings/{sightingId}/proposals
     });
     await pushSocial(after.uid, {
       title: `${ownerUsername} accepted your ID 🦉`,
-      body: `It's a ${after.species} — added to their Dex.`,
+      body: `It's a ${after.species}, added to their Dex.`,
       data: { type: 'proposal_accepted', sightingId, species: after.species },
     });
   } catch (error) {
